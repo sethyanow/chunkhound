@@ -23,6 +23,9 @@ from tests.utils.windows_compat import (
 
 from .test_utils import get_api_key_for_tests, get_embedding_config_for_tests, build_embedding_config_from_dict, create_embedding_manager_for_tests
 
+# All tests in this file require live API access — skip by default
+pytestmark = pytest.mark.integration
+
 
 class TestMCPIntegration:
     """Test real MCP server integration with realtime indexing."""

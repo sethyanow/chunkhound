@@ -28,6 +28,9 @@ from chunkhound.parsers.parser_factory import create_parser_for_language
 from .provider_configs import get_reranking_providers
 from tests.fixtures.fake_providers import FakeEmbeddingProvider
 
+# All tests in this file require live API access — skip by default
+pytestmark = pytest.mark.integration
+
 # Cache providers at module level to avoid multiple calls during parametrize
 reranking_providers = get_reranking_providers()
 

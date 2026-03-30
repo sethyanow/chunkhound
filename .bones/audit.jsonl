@@ -38,3 +38,4 @@
 {"timestamp":"2026-03-30T10:11:57.591484+00:00","actor":"Seth","event_type":"updated","task_id":"ch-u1s","details":{"status":"active"}}
 {"timestamp":"2026-03-30T10:53:43.887037+00:00","actor":"Seth","event_type":"closed","task_id":"ch-u1s","details":{"notes":null}}
 {"timestamp":"2026-03-30T10:59:40.868767+00:00","actor":"Seth","event_type":"created","task_id":"ch-17t","details":{}}
+{"timestamp":"2026-03-30T11:07:38.010185+00:00","actor":"Seth","event_type":"updated","task_id":"ch-17t","details":{"status":"active"}}

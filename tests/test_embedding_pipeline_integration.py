@@ -13,6 +13,9 @@ from chunkhound.core.config.config import Config
 from chunkhound.services.embedding_service import EmbeddingService
 from .test_utils import get_embedding_config_for_tests, build_embedding_config_from_dict
 
+# All tests in this file require live API access — skip by default
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 async def pipeline_services(tmp_path):
@@ -21,9 +24,6 @@ async def pipeline_services(tmp_path):
 
     # Get embedding config using centralized helper
     config_dict = get_embedding_config_for_tests()
-    if not config_dict:
-        pytest.skip("No embedding API key available for pipeline integration test")
-
     embedding_config = build_embedding_config_from_dict(config_dict)
 
     # Standard config creation

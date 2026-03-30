@@ -479,25 +479,59 @@ class RealtimeIndexingService:
             self.monitoring_ready.set()
             self._debug("watchdog failed; switched to polling")
 
+    # Max directories for recursive watchdog setup. Beyond this, watchdog's
+    # observer.schedule(recursive=True) takes too long because it walks the
+    # entire tree synchronously to set up per-directory kernel watches.
+    _MAX_RECURSIVE_DIRS = 500
+
+    @staticmethod
+    def _count_dirs_bounded(root: Path, limit: int) -> int:
+        """Count directories under root, stopping early once limit is exceeded."""
+        count = 0
+        try:
+            for entry in root.rglob("*"):
+                if entry.is_dir():
+                    count += 1
+                    if count > limit:
+                        return count
+        except (PermissionError, OSError):
+            pass
+        return count
+
     def _start_fs_monitor(
         self, watch_path: Path, loop: asyncio.AbstractEventLoop
     ) -> None:
-        """Start filesystem monitoring with recursive watching for complete coverage."""
+        """Start filesystem monitoring, choosing recursive vs non-recursive."""
         # Deadline covers the entire setup (schedule + start + thread alive check).
         # On Windows, observer thread startup can be noticeably slower.
         deadline = time.time() + (5.0 if IS_WINDOWS else 1.0)
+
+        # Quick bounded directory count to decide recursive mode.
+        # observer.schedule(recursive=True) walks the full tree synchronously
+        # to set up per-directory kernel watches — on deep trees (2500+ dirs)
+        # this takes 5+ seconds, blocking MCP initialization.
+        dir_count = self._count_dirs_bounded(watch_path, self._MAX_RECURSIVE_DIRS)
+        use_recursive = dir_count <= self._MAX_RECURSIVE_DIRS
 
         self.event_handler = SimpleEventHandler(
             self.event_queue, self.config, loop, root_path=watch_path
         )
         self.observer = Observer()
 
-        # Use recursive=True to ensure all directory events are captured
-        # This is necessary for proper real-time monitoring of new directories
+        if not use_recursive:
+            # Too many directories — fall back to polling instead of blocking
+            logger.info(
+                f"Directory tree too deep ({dir_count}+ dirs > {self._MAX_RECURSIVE_DIRS}) "
+                f"for recursive watchdog — falling back to polling"
+            )
+            raise RuntimeError(
+                f"Too many directories ({dir_count}+) for recursive watchdog"
+            )
+
         self.observer.schedule(
             self.event_handler,
             str(watch_path),
-            recursive=True,  # Use recursive for complete event coverage
+            recursive=True,
         )
         self.watched_directories.add(str(watch_path))
         self.observer.start()

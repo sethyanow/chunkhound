@@ -491,7 +491,7 @@ def should_not_appear():
                     shutil.rmtree(temp_base, ignore_errors=True)
 
     @pytest.mark.asyncio
-    @pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
+    @pytest.mark.integration
     async def test_mcp_server_semantic_search_isolation(self, clean_environment):
         """Test semantic search also respects directory isolation."""
         temp_base = Path(tempfile.mkdtemp())

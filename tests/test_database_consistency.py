@@ -36,7 +36,7 @@ async def consistency_services(tmp_path):
     yield services
 
 
-@pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_database_embedding_chunk_consistency(consistency_services, tmp_path):
     """Test that database maintains consistency between chunks and embeddings."""
@@ -80,7 +80,7 @@ class Class_{i}:
             f"Embedding count ({stats.get('embeddings', 0)}) should match chunk count ({stats['chunks']})"
 
 
-@pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
+@pytest.mark.integration
 @pytest.mark.asyncio 
 async def test_orphaned_embeddings_cleanup(consistency_services, tmp_path):
     """Test that no orphaned embeddings exist in the database."""
@@ -173,7 +173,7 @@ def orphan_test():
         pytest.fail(f"Could not verify embedding consistency: {e}")
 
 
-@pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_file_deletion_cleanup(consistency_services, tmp_path):
     """Test that file deletion properly cleans up chunks and embeddings."""
@@ -222,7 +222,7 @@ class DeletionClass:
             f"Should remove {chunks_created} embeddings, removed {embeddings_removed}"
 
 
-@pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_database_state_after_processing(consistency_services, tmp_path):
     """Test database state verification after file processing."""
@@ -264,7 +264,7 @@ def state_function_{i}():
             "Embeddings should not exceed chunks"
 
 
-@pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
+@pytest.mark.integration
 @pytest.mark.asyncio
 async def test_concurrent_processing_consistency(consistency_services, tmp_path):
     """Test that concurrent file processing maintains database consistency."""
