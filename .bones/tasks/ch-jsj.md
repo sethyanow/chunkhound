@@ -41,12 +41,24 @@ Prefix match by default, substring opt-in via parameter. User confirmed — fuzz
 2. Write test: semantic search with `path="src/auth"` must return zero results from `src/authorization/` (prefix overlap edge case)
 3. Write test: regex search with `path="src/auth"` must return zero results from `src/payments/`
 4. Write test: semantic search with `path="auth"` AND `fuzzy_path=True` DOES return results containing "auth" anywhere in path (backward compat)
-5. Add `fuzzy_path: bool = False` parameter to `search_semantic()` and `search_regex()` signatures (both `DuckDBProvider` and `SerialDatabaseProvider` base class at `chunkhound/providers/database/serial_database_provider.py:229,254`)
-6. Fix `_executor_search_semantic()` at `chunkhound/providers/database/duckdb_provider.py:2049` — default to prefix `f"{escaped_path}%"`, use `f"%{escaped_path}%"` only when `fuzzy_path=True`
+5. Add `fuzzy_path: bool = False` parameter to provider layer — both sync and async:
+   - `SerialDatabaseProvider.search_semantic()` at `serial_database_provider.py:229`
+   - `SerialDatabaseProvider.search_regex()` at `serial_database_provider.py:254`
+   - `SerialDatabaseProvider.search_regex_async()` at `serial_database_provider.py:269`
+   - `DuckDBProvider.search_semantic()` at `duckdb_provider.py:1965`
+   - `DuckDBProvider.search_regex()` at `duckdb_provider.py:2127`
+6. Fix `_executor_search_semantic()` at `duckdb_provider.py:2049` — default to prefix `f"{escaped_path}%"`, use `f"%{escaped_path}%"` only when `fuzzy_path=True`
 7. Fix `_executor_search_regex()` at same file line 2172 — same logic
-8. Thread `fuzzy_path` through MCP tool: add optional `fuzzy_path` param to `search_impl()` at `chunkhound/mcp_server/tools.py:420`, pass through to search service calls at lines 474-481 and 484-489
-9. Update `_validate_and_normalize_path_filter()` (line 1920) if needed to ensure trailing slash on directory paths (already does this for extensionless segments — verify edge cases)
-10. Run existing semantic search tests to verify no regression
+8. Thread `fuzzy_path` through intermediate layers (MCP tool → SearchService → strategies → provider):
+   - `search_impl()` at `chunkhound/mcp_server/tools.py:420` — add optional `fuzzy_path` param
+   - `SearchService.search_semantic()` at `chunkhound/services/search_service.py:56`
+   - `SearchService.search_regex_async()` at `chunkhound/services/search_service.py:216`
+   - `SingleHopStrategy.search()` at `chunkhound/services/search/single_hop_strategy.py:39`
+   - `MultiHopStrategy.search()` at `chunkhound/services/search/multi_hop_strategy.py:60`
+   Pass `fuzzy_path` at each call site: tools.py:474-481 and 484-489, search_service.py:135-145 and 149-157 and 242-247, single_hop_strategy.py:71-79
+9. Update existing test `tests/test_path_filter_monorepo_mismatch.py` to pass `fuzzy_path=True` — it explicitly tests the substring matching use case which is now opt-in, not default
+10. Update `_validate_and_normalize_path_filter()` (line 1920) if needed to ensure trailing slash on directory paths (already does this for extensionless segments — verify edge cases)
+11. Run existing semantic search tests to verify no regression
 
 ### Git-Aware Indexing
 1. Write test: file that is `git rm`'d but still on filesystem should not be indexed
@@ -62,8 +74,8 @@ Prefix match by default, substring opt-in via parameter. User confirmed — fuzz
 11. Graceful fallback: if pygit2 raises on `Repository()` (not a git repo), set `self._git_repo = None`, log once, and skip git filtering for all subsequent calls
 
 ## Success Criteria
-- [ ] Test proves semantic search path scoping no longer leaks across directories
-- [ ] Test proves regex search path scoping no longer leaks across directories
+- [ ] Test proves semantic search path scoping no longer leaks across directories (tested through SearchService, not just provider)
+- [ ] Test proves regex search path scoping no longer leaks across directories (tested through SearchService, not just provider)
 - [ ] Test proves prefix overlap handled correctly (e.g., `src/auth` vs `src/authorization`)
 - [ ] Test proves `fuzzy_path=True` restores substring matching for backward compat
 - [ ] Test proves git-rm'd files are excluded from realtime indexing
@@ -71,6 +83,7 @@ Prefix match by default, substring opt-in via parameter. User confirmed — fuzz
 - [ ] Test proves non-git-repo projects still work (graceful fallback)
 - [ ] Test proves staged new file (INDEX_NEW) IS included in indexing
 - [ ] Test proves git index lock (rebase in progress) falls back gracefully, not crash
+- [ ] Existing `test_path_filter_monorepo_mismatch.py` updated to use `fuzzy_path=True` and still passes
 - [ ] All existing tests still pass (`uv run pytest tests/test_smoke.py -v -n auto`)
 
 ## Anti-Patterns
