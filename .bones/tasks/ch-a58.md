@@ -1,11 +1,13 @@
 ---
 id: ch-a58
 title: DuckDB symbols + symbol_edges schema
-status: active
+status: closed
 type: task
 priority: 1
 parent: ch-7j0
 ---
+
+
 
 
 
@@ -82,13 +84,13 @@ Command: `uv run pytest tests/test_smoke.py -v -n auto`
 ### Step 12: Commit and push
 
 ## Success Criteria
-- [ ] `symbols` table created with all R2 columns, correct types, file_id FK to files
-- [ ] `symbol_edges` table created with all R2 columns, from/to symbol FKs
-- [ ] Indexes on symbols(fqn, file_id, file_path, kind) and symbol_edges(from_symbol_id, to_symbol_id, edge_kind, from_fqn, to_fqn)
-- [ ] Schema version = 2 on fresh DB
-- [ ] Existing v1 DBs gain new tables on reconnect + version bumped to 2
-- [ ] All existing tests pass (zero regression)
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [x] `symbols` table created with all R2 columns, correct types, file_id FK to files
+- [x] `symbol_edges` table created with all R2 columns, from/to symbol FKs
+- [x] Indexes on symbols(fqn, file_id, file_path, kind) and symbol_edges(from_symbol_id, to_symbol_id, edge_kind, from_fqn, to_fqn)
+- [x] Schema version = 2 on fresh DB
+- [x] Existing v1 DBs gain new tables on reconnect + version bumped to 2
+- [x] All existing tests pass (zero regression)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
 
 ## Anti-Patterns
 - NO changes to existing tables (files, chunks, embeddings) — additive only
@@ -110,3 +112,4 @@ Command: `uv run pytest tests/test_smoke.py -v -n auto`
 ## Log
 
 - [2026-03-30T12:35:38Z] [Seth] Task scoped from hot context after ch-u1s closure. Covers ch-7j0 criteria 6-8 (symbols table, symbol_edges table, schema migration). Codebase verified: _executor_create_schema at L416, _executor_create_indexes at L661, schema version currently 1. Purely additive — no existing table changes.
+- [2026-03-30T13:39:43Z] [Seth] Debrief: DDL was clean additive work. SRE caught version guard ambiguity (== 1 vs < 2), fixed before implementation. execute_query returns dicts not tuples — alias aggregates. Discovered test suite is 2307 tests mixed unit/integration/e2e, 6+ min runtime. Created ch-52s P0 to fix. User correction: stop deferring discovered issues as 'separate concern.' Phase 1 criteria all checked — acceptance task pending after ch-52s resolved.

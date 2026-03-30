@@ -33,9 +33,9 @@ Scoped to parent epic R1, R2, R10:
 - [x] documentSymbol, definition, references, implementation, incomingCalls, outgoingCalls, hover, diagnostics all return valid results via pyright
 - [x] Server state tracking works (not_started → initializing → ready, and degraded with structured reason)
 - [x] Capability gating: calls against unadvertised capabilities return graceful error, not crash
-- [ ] `symbols` table created with correct schema and indexes
-- [ ] `symbol_edges` table created with correct schema and indexes
-- [ ] Schema migration integrates with existing `_executor_migrate_schema` pattern
+- [x] `symbols` table created with correct schema and indexes
+- [x] `symbol_edges` table created with correct schema and indexes
+- [x] Schema migration integrates with existing `_executor_migrate_schema` pattern
 - [x] Semantic search with path filter returns ONLY results within that path prefix (no leakage)
 - [x] RealtimeIndexingService reflects committed + staged state
 - [x] All existing tests still pass (zero regression)
