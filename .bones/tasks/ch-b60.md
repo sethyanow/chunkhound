@@ -1,10 +1,13 @@
 ---
 id: ch-b60
 title: Acceptance tests require live API keys — convert to VCR cassettes
-status: open
+status: active
 type: bug
 priority: 0
+owner: Seth
 ---
+
+
 
 
 ## Context

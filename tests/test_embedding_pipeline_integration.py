@@ -11,20 +11,20 @@ from pathlib import Path
 from chunkhound.database_factory import create_services
 from chunkhound.core.config.config import Config
 from chunkhound.services.embedding_service import EmbeddingService
-from .test_utils import get_embedding_config_for_tests, build_embedding_config_from_dict
+from .test_utils import build_embedding_config_from_dict
 
-# Acceptance tests — require VCR cassettes or live API access
-pytestmark = pytest.mark.acceptance
+# Acceptance tests — replay from VCR cassettes, or record with live API keys.
+# Re-record: CHUNKHOUND_EMBEDDING__API_KEY=sk-... uv run pytest -m acceptance --record-mode=once -v
+pytestmark = [pytest.mark.acceptance, pytest.mark.vcr]
 
 
 @pytest.fixture
-async def pipeline_services(tmp_path):
+async def pipeline_services(tmp_path, acceptance_embedding_config):
     """Create database services for pipeline testing."""
     db_path = tmp_path / "pipeline_test.duckdb"
 
-    # Get embedding config using centralized helper
-    config_dict = get_embedding_config_for_tests()
-    embedding_config = build_embedding_config_from_dict(config_dict)
+    # Use acceptance config (real URLs for VCR cassette matching)
+    embedding_config = build_embedding_config_from_dict(acceptance_embedding_config)
 
     # Standard config creation
     config = Config(

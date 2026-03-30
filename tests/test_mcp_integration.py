@@ -21,20 +21,21 @@ from tests.utils.windows_compat import (
     should_use_polling,
 )
 
-from .test_utils import get_api_key_for_tests, get_embedding_config_for_tests, build_embedding_config_from_dict, create_embedding_manager_for_tests
+from .test_utils import build_embedding_config_from_dict, create_embedding_manager_for_tests
 
-# Acceptance tests — require VCR cassettes or live API access
-pytestmark = pytest.mark.acceptance
+# Acceptance tests — replay from VCR cassettes, or record with live API keys.
+# Re-record: CHUNKHOUND_EMBEDDING__API_KEY=sk-... uv run pytest -m acceptance --record-mode=once -v
+pytestmark = [pytest.mark.acceptance, pytest.mark.vcr]
 
 
 class TestMCPIntegration:
     """Test real MCP server integration with realtime indexing."""
 
     @pytest.fixture
-    async def mcp_setup(self):
+    async def mcp_setup(self, acceptance_embedding_config):
         """Setup MCP server with real services and temp directory."""
-        # Get embedding config using centralized helper
-        config_dict = get_embedding_config_for_tests()
+        # Use acceptance config (real URLs for VCR cassette matching)
+        config_dict = acceptance_embedding_config
         embedding_config = build_embedding_config_from_dict(config_dict)
 
         temp_dir = Path(tempfile.mkdtemp())
@@ -85,7 +86,6 @@ class TestMCPIntegration:
 
         shutil.rmtree(temp_dir, ignore_errors=True)
 
-    @pytest.mark.skipif(get_api_key_for_tests()[0] is None, reason="No API key available")
     @pytest.mark.asyncio
     async def test_mcp_semantic_search_finds_new_files(self, mcp_setup):
         """Test that MCP semantic search finds newly created files."""
@@ -106,6 +106,7 @@ class TestMCPIntegration:
                 "offset": 0
             }
         )
+        assert isinstance(initial_results, dict), f"Expected dict, got {type(initial_results)}"
         initial_count = len(initial_results.get('results', []))
 
         # Create new file with unique content
@@ -131,6 +132,7 @@ def unique_mcp_test_function():
                 "offset": 0
             }
         )
+        assert isinstance(new_results, dict), f"Expected dict, got {type(new_results)}"
         new_count = len(new_results.get('results', []))
 
         assert new_count > initial_count, \
@@ -239,6 +241,7 @@ def delete_test_unique_function():
                 "offset": 0
             }
         )
+        assert isinstance(before_delete, dict), f"Expected dict, got {type(before_delete)}"
         assert len(before_delete.get('results', [])) > 0, "Content should be found before deletion"
 
         # Delete the file
@@ -261,6 +264,7 @@ def delete_test_unique_function():
                 "offset": 0
             }
         )
+        assert isinstance(after_delete, dict), f"Expected dict, got {type(after_delete)}"
         assert len(after_delete.get('results', [])) == 0, "Content should not be found after deletion"
 
     @pytest.mark.asyncio

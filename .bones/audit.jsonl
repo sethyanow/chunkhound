@@ -64,3 +64,5 @@
 {"timestamp":"2026-03-30T19:21:56.387321+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-52s","details":{"kind":"blocks","to":"ch-b60"}}
 {"timestamp":"2026-03-30T19:47:22.551392+00:00","actor":"Seth","event_type":"closed","task_id":"ch-52s","details":{"notes":null}}
 {"timestamp":"2026-03-30T19:48:59.624199+00:00","actor":"Seth","event_type":"logged","task_id":"ch-52s","details":{"message":"Debrief: 269 files categorized into 4 tiers (unit/integration/e2e/acceptance). Mass script broke 29 files — fixed manually. Conftest env-var removal exposed 11 hidden-failing acceptance tests → created ch-b60. CLI subprocess tests reclassified integration→e2e. Reflections: test on 2-3 files before scaling, don't run expensive suites when user asks 'what is slow', answer from context."}}
+{"timestamp":"2026-03-30T20:06:24.532802+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-b60","details":{"actor":"Seth"}}
+{"timestamp":"2026-03-30T20:06:24.582003+00:00","actor":"Seth","event_type":"updated","task_id":"ch-b60","details":{"status":"active"}}
