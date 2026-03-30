@@ -1,11 +1,12 @@
 ---
 id: ch-jsj
 title: Fix semantic search path scoping + git-aware indexing
-status: active
+status: closed
 type: task
 priority: 0
 parent: ch-7j0
 ---
+
 
 
 
