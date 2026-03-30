@@ -67,6 +67,19 @@ R10. Infrastructure fixes — semantic search path scoping tightened to strict p
 - NO LLM calls inside MCP tools — fusion tools are deterministic. LLM synthesis belongs in skill scripts or agent context
 - NO symbol-to-chunk FK — resolution via file_id + line range overlap (symbols span chunk boundaries)
 
+## Agent Tooling
+
+ChunkHound MCP is running and indexed on this repo. Use it:
+- `code_research` — preferred for cross-cutting questions. Results are worth saving to memory for future sessions.
+- `search_semantic` — conceptual queries LSP can't answer ("error propagation patterns", "retry logic").
+
+**Skills to invoke when relevant:**
+- `async-python-patterns` — Phase 1-2 (thread/async boundaries, LSP client, background population)
+- `python-error-handling` — Phase 1 (pygit2 fallback chains)
+- `python-design-patterns` — Phase 3-4 (tool composition)
+- `python-performance-optimization` — Phase 2, 5 (bulk insertion, graph walk profiling)
+- `python-project-structure` — Phase 6 (script library layout)
+
 ## Approach
 
 Tree-sitter continues driving cAST chunking (proven, fast, in-process). LSP is an additive layer providing: (1) a persistent symbol index with type signatures, (2) a pre-computed dependency edge graph, (3) live navigation via MCP tools, (4) structural expansion in the search pipeline, and (5) a skill script library for higher-level analysis.
