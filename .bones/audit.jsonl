@@ -53,3 +53,8 @@
 {"timestamp":"2026-03-30T13:52:37.877635+00:00","actor":"Seth","event_type":"created","task_id":"ch-1j2","details":{}}
 {"timestamp":"2026-03-30T13:52:41.288407+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-7j0","details":{"kind":"parent-child","to":"ch-1j2"}}
 {"timestamp":"2026-03-30T13:52:41.289959+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-7j0","details":{"kind":"blocks","to":"ch-1j2"}}
+{"timestamp":"2026-03-30T15:21:12.635131+00:00","actor":"Seth","event_type":"logged","task_id":"ch-52s","details":{"message":"P0 — MUST be first task next session. Was wrongly deprioritized in favor of acceptance task. User directive: this is the next thing, no exceptions."}}
+{"timestamp":"2026-03-30T15:21:14.210570+00:00","actor":"Seth","event_type":"logged","task_id":"ch-1j2","details":{"message":"BLOCKED: Created prematurely — agent followed skill mechanics instead of addressing P0 ch-52s. User rejected. Do not execute until ch-52s is closed."}}
+{"timestamp":"2026-03-30T15:21:18.609188+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-52s","details":{"kind":"blocks","to":"ch-1j2"}}
+{"timestamp":"2026-03-30T15:24:42.626823+00:00","actor":"Seth","event_type":"dep_removed","task_id":"ch-52s","details":{"to":"ch-1j2"}}
+{"timestamp":"2026-03-30T15:24:44.020782+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-1j2","details":{"kind":"blocks","to":"ch-52s"}}
