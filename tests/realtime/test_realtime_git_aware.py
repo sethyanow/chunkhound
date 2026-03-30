@@ -124,3 +124,33 @@ def test_non_ascii_path_in_git_repo(tmp_path: Path) -> None:
     assert handler._should_index(py_file) is True, (
         "Staged file with non-ASCII path should be indexed"
     )
+
+
+def test_git_index_lock_falls_back_gracefully(tmp_path: Path) -> None:
+    """When .git/index.lock exists (rebase in progress), should not crash.
+
+    pygit2 may raise GitError when the index is locked. _check_git_state
+    should catch this and fall back to allowing the file (return True).
+    """
+    root = tmp_path
+    repo = _init_repo(root)
+
+    py_file = root / "module.py"
+    py_file.write_text("def hello(): pass\n")
+    repo.index.add("module.py")
+    repo.index.write()
+    tree = repo.index.write_tree()
+    sig = pygit2.Signature("test", "test@test.com")
+    parent = repo.head.target
+    repo.create_commit("HEAD", sig, sig, "add module", tree, [parent])
+
+    # Simulate a locked index (rebase in progress)
+    lock_file = root / ".git" / "index.lock"
+    lock_file.write_text("")
+
+    handler = _handler(root)
+    # Should not crash — falls back to allowing the file
+    result = handler._should_index(py_file)
+    assert result is True, (
+        "Git index lock should not crash _should_index — should fall back to True"
+    )

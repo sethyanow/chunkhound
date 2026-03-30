@@ -76,17 +76,17 @@ Prefix match by default, substring opt-in via parameter. User confirmed — fuzz
 11. Graceful fallback: if pygit2 raises on `Repository()` (not a git repo), set `self._git_repo = None`, log once, and skip git filtering for all subsequent calls
 
 ## Success Criteria
-- [ ] Test proves semantic search path scoping no longer leaks across directories (tested through SearchService, not just provider)
-- [ ] Test proves regex search path scoping no longer leaks across directories (tested through SearchService, not just provider)
-- [ ] Test proves prefix overlap handled correctly (e.g., `src/auth` vs `src/authorization`)
-- [ ] Test proves `fuzzy_path=True` restores substring matching for backward compat
-- [ ] Test proves git-rm'd files are excluded from realtime indexing
-- [ ] Test proves untracked files are excluded from realtime indexing
-- [ ] Test proves non-git-repo projects still work (graceful fallback)
-- [ ] Test proves staged new file (INDEX_NEW) IS included in indexing
-- [ ] Test proves git index lock (rebase in progress) falls back gracefully, not crash
-- [ ] Existing `test_path_filter_monorepo_mismatch.py` updated to use `fuzzy_path=True` and still passes
-- [ ] All existing tests still pass (`uv run pytest tests/test_smoke.py -v -n auto`)
+- [x] Test proves semantic search path scoping no longer leaks across directories (tested through SearchService, not just provider)
+- [x] Test proves regex search path scoping no longer leaks across directories (tested through SearchService, not just provider)
+- [x] Test proves prefix overlap handled correctly (e.g., `src/auth` vs `src/authorization`)
+- [x] Test proves `fuzzy_path=True` restores substring matching for backward compat
+- [x] Test proves git-rm'd files are excluded from realtime indexing
+- [x] Test proves untracked files are excluded from realtime indexing
+- [x] Test proves non-git-repo projects still work (graceful fallback)
+- [x] Test proves staged new file (INDEX_NEW) IS included in indexing
+- [x] Test proves git index lock (rebase in progress) falls back gracefully, not crash
+- [x] Existing `test_path_filter_monorepo_mismatch.py` updated to use `fuzzy_path=True` and still passes
+- [x] All existing tests still pass (`uv run pytest tests/test_smoke.py -v -n auto`)
 
 ## Anti-Patterns
 - NO changes to existing DuckDB schema
