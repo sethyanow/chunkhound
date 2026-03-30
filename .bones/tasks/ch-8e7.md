@@ -4,8 +4,9 @@ title: LSP + Graph Intelligence Layer
 status: open
 type: epic
 priority: 1
-depends_on: [ch-7j0, ch-0um, ch-zyz, ch-dar, ch-z2o, ch-bf0, ch-52s]
+depends_on: [ch-7j0, ch-0um, ch-zyz, ch-dar, ch-z2o, ch-bf0, ch-52s, ch-u62]
 ---
+
 
 
 
