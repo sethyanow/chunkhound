@@ -1,12 +1,15 @@
 ---
 id: ch-u1s
 title: 'LSP Client Manager: Transport, Operations, State, Capability Gating'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 depends_on: [ch-jsj]
 parent: ch-7j0
 ---
+
+
 
 
 ## Context
