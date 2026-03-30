@@ -13,7 +13,7 @@ Purpose: Transform codebases into searchable knowledge bases for AI assistants
 
 **ALWAYS:**
 - ALWAYS Run smoke tests before committing: `uv run pytest tests/test_smoke.py -v -n auto`
-- ALWAYS Run full test suite before pushing to a PR: `uv run pytest tests/ -v`
+- ALWAYS Run full test suite before pushing to a PR: `uv run pytest -m "unit or integration or e2e or acceptance" tests/ -v`
 - ALWAYS Batch embeddings (min: 100, max: provider_limit)
 - ALWAYS Use uv for all Python operations
 - ALWAYS Update version via: `uv run scripts/update_version.py`
