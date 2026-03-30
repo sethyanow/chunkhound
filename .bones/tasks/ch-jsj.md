@@ -11,6 +11,7 @@ parent: ch-7j0
 
 
 
+
 ## Context
 First task in Phase 1. Fixes broken behavior before building new features. Parent epic R10.
 
@@ -175,3 +176,4 @@ Clean foundation for all subsequent Phase 1 work (LSP client, schema additions).
 
 - [2026-03-30T03:40:44Z] [Seth] SRE review complete. Key corrections: (1) file path was wrong (chunkhound/providers/database/ not chunkhound/db/), (2) _should_index is on SimpleEventHandler not RealtimeIndexingService, (3) regex search has same substring bug, (4) user decided: prefix default + fuzzy_path=True opt-in for substring. Failure catalog added with 8 entries. Success criteria expanded 3→10.
 - [2026-03-30T04:09:53Z] [Seth] Fresh-session SRE review (13-cat). Two critical findings: (1) fuzzy_path threading plan missed 5 intermediate method signatures (SearchService.search_semantic, SearchService.search_regex_async, SingleHopStrategy.search, MultiHopStrategy.search, SerialDatabaseProvider.search_regex_async) — updated impl steps 5+8. (2) Existing test test_path_filter_monorepo_mismatch.py explicitly validates substring matching — will break on prefix default, must be updated with fuzzy_path=True — added to success criteria. Also strengthened criteria 1+2 to require SearchService-level testing, not just provider. All architecture claims and line numbers verified via LSP. Failure catalog validated — 8 entries sound, no new runtime failure modes. APPROVED with amendments applied to skeleton.
+- [2026-03-30T07:00:23Z] [Seth] Debrief: (1) Subrepo boundary regression caught by existing test — discover_repository per-dir fixed it. (2) GIT_STATUS_IGNORED removed from check because ignore engine already handles .gitignore. (3) KeyError from status_file returns True (allow) for files unknown to git. (4) fuzzy_path NOT threaded through find_similar_chunks or code_research — both use path as scope limiter where prefix default is correct. Reflections: skeleton's one-repo-cache was wrong for subrepos, 5 missing intermediate layers caught by SRE. Memory: git check design decisions saved.

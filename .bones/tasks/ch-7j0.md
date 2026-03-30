@@ -32,11 +32,11 @@ Scoped to parent epic R1, R2, R10:
 - [ ] `symbols` table created with correct schema and indexes
 - [ ] `symbol_edges` table created with correct schema and indexes
 - [ ] Schema migration integrates with existing `_executor_migrate_schema` pattern
-- [ ] Semantic search with path filter returns ONLY results within that path prefix (no leakage)
-- [ ] RealtimeIndexingService reflects committed + staged state
-- [ ] All existing tests still pass (zero regression)
+- [x] Semantic search with path filter returns ONLY results within that path prefix (no leakage)
+- [x] RealtimeIndexingService reflects committed + staged state
+- [x] All existing tests still pass (zero regression)
 - [ ] `uv run pytest tests/test_lsp_client.py -v` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
 
 ## Anti-Patterns
 Inherited from parent epic, plus:
