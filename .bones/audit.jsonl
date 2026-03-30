@@ -71,3 +71,4 @@
 {"timestamp":"2026-03-30T21:02:07.482022+00:00","actor":"Seth","event_type":"logged","task_id":"ch-b60","details":{"message":"Debrief: vcr_config record_mode fixture-overrides-CLI gotcha was the main surprise. VoyageAI SDK uses requests not httpx. SRE caught config restoration gap. User corrections: use VoyageAI not OpenAI, check git history before speculating, use deepwiki not web search. Memories saved: reference_vcr_cassettes, feedback_check_before_guessing, updated project_test_tiers."}}
 {"timestamp":"2026-03-30T21:37:45.089758+00:00","actor":"Seth","event_type":"created","task_id":"ch-u62","details":{}}
 {"timestamp":"2026-03-30T21:38:10.061206+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-8e7","details":{"kind":"blocks","to":"ch-u62"}}
+{"timestamp":"2026-03-30T22:32:56.169842+00:00","actor":"Seth","event_type":"updated","task_id":"ch-1j2","details":{"status":"active"}}
