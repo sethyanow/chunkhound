@@ -62,3 +62,4 @@
 {"timestamp":"2026-03-30T15:48:17.103073+00:00","actor":"Seth","event_type":"updated","task_id":"ch-52s","details":{"status":"active"}}
 {"timestamp":"2026-03-30T19:21:23.928926+00:00","actor":"Seth","event_type":"created","task_id":"ch-b60","details":{}}
 {"timestamp":"2026-03-30T19:21:56.387321+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-52s","details":{"kind":"blocks","to":"ch-b60"}}
+{"timestamp":"2026-03-30T19:47:22.551392+00:00","actor":"Seth","event_type":"closed","task_id":"ch-52s","details":{"notes":null}}
