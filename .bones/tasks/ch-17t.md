@@ -8,6 +8,7 @@ priority: 1
 
 
 
+
 ## Context
 
 8 test files load real user config (`.chunkhound.json`) and make live API calls to VoyageAI/OpenAI during `uv run pytest tests/`. This causes hangs (no timeout on live calls), burns API credits, and makes tests non-deterministic.
@@ -92,3 +93,7 @@ Affected test files:
 
 **Source-level fix, not runtime patching:**
 - Module-level `reranking_providers = get_reranking_providers()` executes at import/collection time. The fix must be source code changes to the function bodies, not monkeypatching or conftest overrides. Monkeypatching would race with collection.
+
+## Log
+
+- [2026-03-30T12:04:37Z] [Seth] Fixed: 4 credential entry points gutted (fake config), provider_configs rewritten with FakeEmbeddingProvider, 9 test files gated via @pytest.mark.integration, regression suite added. Also fixed: watchdog recursive blocking on deep trees via bounded dir count (500 threshold → polling fallback). Full suite green: 2178 passed, 124 skipped, 0 failed.

@@ -40,3 +40,4 @@
 {"timestamp":"2026-03-30T10:59:40.868767+00:00","actor":"Seth","event_type":"created","task_id":"ch-17t","details":{}}
 {"timestamp":"2026-03-30T11:07:38.010185+00:00","actor":"Seth","event_type":"updated","task_id":"ch-17t","details":{"status":"active"}}
 {"timestamp":"2026-03-30T12:03:31.235551+00:00","actor":"Seth","event_type":"closed","task_id":"ch-17t","details":{"notes":null}}
+{"timestamp":"2026-03-30T12:04:37.217250+00:00","actor":"Seth","event_type":"logged","task_id":"ch-17t","details":{"message":"Fixed: 4 credential entry points gutted (fake config), provider_configs rewritten with FakeEmbeddingProvider, 9 test files gated via @pytest.mark.integration, regression suite added. Also fixed: watchdog recursive blocking on deep trees via bounded dir count (500 threshold → polling fallback). Full suite green: 2178 passed, 124 skipped, 0 failed."}}
