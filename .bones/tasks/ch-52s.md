@@ -17,6 +17,7 @@ depends_on: [ch-b60]
 
 
 
+
 ## Context
 Full test suite (`uv run pytest tests/ -v`) takes 6+ minutes and 2307 tests. It mixes true unit tests with file I/O heavy tests, daemon process tests, parser loading tests, and integration/e2e tests. Pre-commit full suite runs are unusable at this speed.
 
@@ -99,3 +100,4 @@ Update KEY_COMMANDS to reflect new test tiers.
 ## Log
 
 - [2026-03-30T15:21:12Z] [Seth] P0 — MUST be first task next session. Was wrongly deprioritized in favor of acceptance task. User directive: this is the next thing, no exceptions.
+- [2026-03-30T19:48:59Z] [Seth] Debrief: 269 files categorized into 4 tiers (unit/integration/e2e/acceptance). Mass script broke 29 files — fixed manually. Conftest env-var removal exposed 11 hidden-failing acceptance tests → created ch-b60. CLI subprocess tests reclassified integration→e2e. Reflections: test on 2-3 files before scaling, don't run expensive suites when user asks 'what is slow', answer from context.
