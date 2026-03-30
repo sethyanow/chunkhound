@@ -75,16 +75,19 @@ async def test_semantic_search_respects_repo_relative_path_filter(tmp_path: Path
     )
     assert unscoped_results, "Unscoped semantic search should return results"
 
-    # Now use a repo-relative path_filter that omits the leading 'orion-suite/' prefix
+    # Now use a repo-relative path_filter that omits the leading 'orion-suite/' prefix.
+    # This requires fuzzy_path=True because the stored path starts with 'orion-suite/'
+    # and 'services/engine' is a substring, not a prefix.
     scoped_results, _ = await search_service.search_semantic(
         query="orion_engine_flag",
         page_size=10,
         offset=0,
         path_filter="services/engine",
         force_strategy="single_hop",
+        fuzzy_path=True,
     )
 
-    assert scoped_results, "Scoped semantic search with repo-relative path_filter should return results"
+    assert scoped_results, "Scoped semantic search with fuzzy_path=True and repo-relative path_filter should return results"
     for result in scoped_results:
         file_path = result.get("file_path", "")
         assert "services/engine" in file_path, f"Result {file_path} should be under services/engine"

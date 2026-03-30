@@ -1971,6 +1971,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         offset: int = 0,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform semantic vector search using HNSW index with multi-dimension support.
 
@@ -1987,6 +1988,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             offset,
             threshold,
             path_filter,
+            fuzzy_path,
         )
 
     def _executor_search_semantic(
@@ -2000,6 +2002,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         offset: int,
         threshold: float | None,
         path_filter: str | None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Executor method for search_semantic - runs in DB thread."""
         try:
@@ -2046,7 +2049,10 @@ class DuckDBProvider(SerialDatabaseProvider):
             path_like: str | None = None
             if normalized_path is not None:
                 escaped_path = escape_like_pattern(normalized_path)
-                path_like = f"%{escaped_path}%"
+                if fuzzy_path:
+                    path_like = f"%{escaped_path}%"
+                else:
+                    path_like = f"{escaped_path}%"
 
             if threshold is not None:
                 query += f" AND array_cosine_similarity(e.embedding, ?::FLOAT[{query_dims}]) >= ?"
@@ -2055,8 +2061,6 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             if path_like is not None:
                 query += " AND f.path LIKE ? ESCAPE '\\'"
-                # Use substring match so callers can pass repo-relative paths
-                # even when the database base_directory is higher (e.g., monorepo root).
                 params.append(path_like)
 
             # Get total count for pagination
@@ -2130,10 +2134,11 @@ class DuckDBProvider(SerialDatabaseProvider):
         page_size: int = 10,
         offset: int = 0,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform regex search on code content."""
         return self._execute_in_db_thread_sync(
-            "search_regex", pattern, page_size, offset, path_filter
+            "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
         )
 
     def search_chunks_regex(
@@ -2155,6 +2160,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         page_size: int,
         offset: int,
         path_filter: str | None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Executor method for search_regex - runs in DB thread."""
         try:
@@ -2168,8 +2174,10 @@ class DuckDBProvider(SerialDatabaseProvider):
             if normalized_path is not None:
                 escaped_path = escape_like_pattern(normalized_path)
                 where_conditions.append("f.path LIKE ? ESCAPE '\\'")
-                # Allow matching repo-relative segments inside stored paths
-                params.append(f"%{escaped_path}%")
+                if fuzzy_path:
+                    params.append(f"%{escaped_path}%")
+                else:
+                    params.append(f"{escaped_path}%")
 
             where_clause = " AND ".join(where_conditions)
 

@@ -45,6 +45,7 @@ class SingleHopStrategy:
         provider: str,
         model: str,
         path_filter: str | None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform standard single-hop semantic search.
 
@@ -56,6 +57,7 @@ class SingleHopStrategy:
             provider: Embedding provider name
             model: Embedding model name
             path_filter: Optional relative path to limit search scope
+            fuzzy_path: If True, use substring matching instead of prefix
 
         Returns:
             Tuple of (results, pagination_metadata)
@@ -76,6 +78,7 @@ class SingleHopStrategy:
             offset=offset,
             threshold=threshold,
             path_filter=path_filter,
+            fuzzy_path=fuzzy_path,
         )
 
         logger.info(f"Standard semantic search completed: {len(results)} results found")

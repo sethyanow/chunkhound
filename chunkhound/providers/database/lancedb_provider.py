@@ -1673,6 +1673,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         offset: int = 0,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Executor method for search_semantic - runs in DB thread."""
         if self._chunks_table is None:
@@ -1949,6 +1950,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         page_size: int,
         offset: int,
         path_filter: str | None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Executor method for search_regex - runs in DB thread."""
         if not self._chunks_table or not self._files_table:

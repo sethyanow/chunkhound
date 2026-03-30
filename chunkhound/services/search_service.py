@@ -65,6 +65,7 @@ class SearchService(BaseService):
         force_strategy: str | None = None,
         time_limit: float | None = None,
         result_limit: int | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform semantic search using vector similarity.
 
@@ -142,6 +143,7 @@ class SearchService(BaseService):
                     path_filter=path_filter,
                     time_limit=time_limit,
                     result_limit=result_limit,
+                    fuzzy_path=fuzzy_path,
                 )
             else:
                 logger.debug(f"Using standard semantic search for: '{query}'")
@@ -154,6 +156,7 @@ class SearchService(BaseService):
                     provider=search_provider,
                     model=search_model,
                     path_filter=path_filter,
+                    fuzzy_path=fuzzy_path,
                 )
 
             # Enhance results with additional metadata
@@ -219,6 +222,7 @@ class SearchService(BaseService):
         page_size: int = 10,
         offset: int = 0,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform regex search on code content (asynchronous).
 
@@ -231,6 +235,7 @@ class SearchService(BaseService):
             offset: Starting position for pagination
             path_filter: Optional relative path to limit search scope
                 (e.g., 'src/', 'tests/')
+            fuzzy_path: If True, use substring matching instead of prefix
 
         Returns:
             Tuple of (results, pagination_metadata)
@@ -244,6 +249,7 @@ class SearchService(BaseService):
                 page_size=page_size,
                 offset=offset,
                 path_filter=path_filter,
+                fuzzy_path=fuzzy_path,
             )
 
             # Enhance results with additional metadata

@@ -235,6 +235,7 @@ class SerialDatabaseProvider(ABC):
         offset: int = 0,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform semantic vector search if supported."""
         if not hasattr(self, "_executor_search_semantic"):
@@ -249,6 +250,7 @@ class SerialDatabaseProvider(ABC):
             offset,
             threshold,
             path_filter,
+            fuzzy_path,
         )
 
     def search_regex(
@@ -257,13 +259,14 @@ class SerialDatabaseProvider(ABC):
         page_size: int = 10,
         offset: int = 0,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform regex search if supported (synchronous)."""
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
         return self._execute_in_db_thread_sync(
-            "search_regex", pattern, page_size, offset, path_filter
+            "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
         )
 
     async def search_regex_async(
@@ -272,13 +275,14 @@ class SerialDatabaseProvider(ABC):
         page_size: int = 10,
         offset: int = 0,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Async variant of search_regex."""
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
         return await self._execute_in_db_thread(
-            "search_regex", pattern, page_size, offset, path_filter
+            "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
         )
 
     async def get_stats_async(self) -> dict[str, int]:

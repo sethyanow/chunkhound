@@ -425,6 +425,7 @@ async def search_impl(
     path: str | None = None,
     page_size: int = 10,
     offset: int = 0,
+    fuzzy_path: bool = False,
 ) -> SearchResponse:
     """Unified search dispatching to regex or semantic based on type.
 
@@ -478,6 +479,7 @@ async def search_impl(
             provider=provider_name,
             model=model_name,
             path_filter=path,
+            fuzzy_path=fuzzy_path,
         )
     else:  # regex
         # Perform regex search
@@ -486,6 +488,7 @@ async def search_impl(
             page_size=page_size,
             offset=offset,
             path_filter=path,
+            fuzzy_path=fuzzy_path,
         )
 
     # Convert file paths to native platform format

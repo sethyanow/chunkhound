@@ -68,6 +68,7 @@ class MultiHopStrategy:
         path_filter: str | None,
         time_limit: float | None = None,
         result_limit: int | None = None,
+        fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform dynamic multi-hop semantic search with reranking.
 
@@ -81,6 +82,7 @@ class MultiHopStrategy:
             path_filter: Optional relative path to limit search scope
             time_limit: Optional time limit in seconds (default: 5.0)
             result_limit: Optional result limit (default: 500, None = unlimited)
+            fuzzy_path: If True, use substring matching instead of prefix
 
         Returns:
             Tuple of (results, pagination_metadata)
@@ -118,6 +120,7 @@ class MultiHopStrategy:
             provider=provider,
             model=model,
             path_filter=path_filter,
+            fuzzy_path=fuzzy_path,
         )
 
         # Rerank initial results

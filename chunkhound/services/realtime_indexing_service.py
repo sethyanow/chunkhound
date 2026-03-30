@@ -48,6 +48,9 @@ class SimpleEventHandler(FileSystemEventHandler):
         self._engine = None
         self._include_patterns: list[str] | None = None
         self._pattern_cache: dict[str, Any] = {}
+        self._git_repo: Any | None = None
+        self._git_repo_checked = False
+        self._git_repo_cache: dict[str, Any] = {}
         if root_path is not None:
             self._root = root_path.resolve()
         else:
@@ -99,26 +102,86 @@ class SimpleEventHandler(FileSystemEventHandler):
             logger.warning(f"Failed to queue event for {file_path}: {e}")
 
     def _should_index(self, file_path: Path) -> bool:
-        """Check if file should be indexed based on config patterns.
+        """Check if file should be indexed based on config patterns and git state.
 
-        Uses config-based filtering if available, otherwise falls back to
-        Language enum which derives all patterns from parser_factory.
-        This ensures realtime indexing supports all languages without
-        requiring manual updates.
+        Pattern check runs first (cheap), then git state check filters
+        untracked files so the index reflects committed + staged state.
         """
+        if not self._matches_file_patterns(file_path):
+            return False
+        return self._check_git_state(file_path)
+
+    def _check_git_state(self, file_path: Path) -> bool:
+        """Check if file is tracked or staged in git. Returns True if indexable.
+
+        Discovers the nearest git repo for each file (handles subrepos correctly).
+        Excludes untracked (WT_NEW) files. Allows tracked, staged, and modified.
+        Gracefully falls back to True for non-git projects.
+        """
+        try:
+            import pygit2
+        except ImportError:
+            return True
+
+        # Only check git state for files within the handler's root
+        resolved = file_path.resolve()
+        try:
+            resolved.relative_to(self._root)
+        except ValueError:
+            return True
+
+        # Discover the nearest repo for this file (handles subrepos)
+        repo = self._discover_repo(resolved.parent)
+        if repo is None:
+            return True
+
+        try:
+            rel_path = str(resolved.relative_to(Path(repo.workdir).resolve()))
+            status = repo.status_file(rel_path)
+            if status & pygit2.GIT_STATUS_WT_NEW:
+                return False
+            return True
+        except (ValueError, KeyError):
+            # ValueError: file outside repo root. KeyError: path unknown to git
+            # (not tracked, not on disk). Allow — pattern check already passed.
+            return True
+        except Exception:
+            return True
+
+    def _discover_repo(self, directory: Path) -> Any:
+        """Find the nearest git repo for a directory. Cached per repo root."""
+        dir_str = str(directory)
+        if dir_str in self._git_repo_cache:
+            return self._git_repo_cache[dir_str]
+
+        try:
+            import pygit2
+
+            repo_path = pygit2.discover_repository(dir_str)
+            if repo_path is None:
+                self._git_repo_cache[dir_str] = None
+                return None
+            # Cache by discovered repo path so multiple dirs in the same repo share it
+            if repo_path in self._git_repo_cache:
+                repo = self._git_repo_cache[repo_path]
+            else:
+                repo = pygit2.Repository(repo_path)
+                self._git_repo_cache[repo_path] = repo
+            self._git_repo_cache[dir_str] = repo
+            return repo
+        except Exception:
+            self._git_repo_cache[dir_str] = None
+            return None
+
+    def _matches_file_patterns(self, file_path: Path) -> bool:
+        """Check if file matches indexable patterns (config or Language-based)."""
         if not self.config:
-            # Fallback: derive from Language enum (which derives from parser_factory)
-            # Uses lazy import to avoid heavyweight startup cost
             from chunkhound.core.types.common import Language
 
-            # Check extension-based patterns
             if file_path.suffix.lower() in Language.get_all_extensions():
                 return True
-
-            # Check filename-based patterns (Makefile, Dockerfile, etc.)
             if file_path.name.lower() in Language.get_all_filename_patterns():
                 return True
-
             return False
 
         # Repo-aware ignore engine (lazy init)
@@ -167,7 +230,6 @@ class SimpleEventHandler(FileSystemEventHandler):
                 file_path, self._root, self._include_patterns, self._pattern_cache
             )
         except Exception:
-            # Fallback to Language-based detection if include matching fails
             from chunkhound.core.types.common import Language
 
             if file_path.suffix.lower() in Language.get_all_extensions():

@@ -171,6 +171,7 @@ async def test_search_strategy_selection_verification(simple_test_database):
                 path_filter=None,
                 time_limit=None,
                 result_limit=None,
+                fuzzy_path=False,
             )
 
             # OpenAI provider should use standard search
@@ -183,6 +184,7 @@ async def test_search_strategy_selection_verification(simple_test_database):
                 provider="mock_openai",
                 model="mock-model",
                 path_filter=None,
+                fuzzy_path=False,
             )
 
 

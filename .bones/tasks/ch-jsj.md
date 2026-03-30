@@ -1,11 +1,13 @@
 ---
 id: ch-jsj
 title: Fix semantic search path scoping + git-aware indexing
-status: open
+status: active
 type: task
 priority: 0
 parent: ch-7j0
 ---
+
+
 
 
 ## Context
@@ -171,3 +173,4 @@ Clean foundation for all subsequent Phase 1 work (LSP client, schema additions).
 ## Log
 
 - [2026-03-30T03:40:44Z] [Seth] SRE review complete. Key corrections: (1) file path was wrong (chunkhound/providers/database/ not chunkhound/db/), (2) _should_index is on SimpleEventHandler not RealtimeIndexingService, (3) regex search has same substring bug, (4) user decided: prefix default + fuzzy_path=True opt-in for substring. Failure catalog added with 8 entries. Success criteria expanded 3→10.
+- [2026-03-30T04:09:53Z] [Seth] Fresh-session SRE review (13-cat). Two critical findings: (1) fuzzy_path threading plan missed 5 intermediate method signatures (SearchService.search_semantic, SearchService.search_regex_async, SingleHopStrategy.search, MultiHopStrategy.search, SerialDatabaseProvider.search_regex_async) — updated impl steps 5+8. (2) Existing test test_path_filter_monorepo_mismatch.py explicitly validates substring matching — will break on prefix default, must be updated with fuzzy_path=True — added to success criteria. Also strengthened criteria 1+2 to require SearchService-level testing, not just provider. All architecture claims and line numbers verified via LSP. Failure catalog validated — 8 entries sound, no new runtime failure modes. APPROVED with amendments applied to skeleton.
