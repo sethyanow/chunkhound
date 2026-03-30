@@ -150,13 +150,21 @@ WHERE c.file_id = :symbol_file_id
   AND c.end_line >= :symbol_range_start
 ```
 
+## Acceptance Walkthrough Pattern
+
+Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dogfoods deliverables against the live codebase. Scripts are the acceptance walkthrough — not pytest commands. They:
+- Use ChunkHound's own APIs to demo the deliverables
+- Compare results with existing tools (e.g., editor LSP vs ChunkHound LSP client)
+- Print a PASS/FAIL summary the user can run themselves
+- Extend across phases (Phase 2 adds symbol counts to the Phase 1 script)
+
 ## Phases
 
 ### Phase 1: Foundation
 **Scope:** R1, R2, R10
 **Gate:**
+- `uv run scripts/demo_lsp.py` → all sections PASS
 - `uv run pytest tests/test_lsp_client.py -v` → all pass
-- `uv run chunkhound index /path/to/project && python -c "import duckdb; conn = duckdb.connect('.chunkhound/db/chunks.db'); print(conn.execute('SELECT COUNT(*) FROM symbols').fetchone())"` → non-zero count
 - Semantic search with path filter returns ONLY results within that path (no leakage)
 
 ### Phase 2: Index Population

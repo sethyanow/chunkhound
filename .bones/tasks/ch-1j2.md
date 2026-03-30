@@ -42,66 +42,42 @@ Update CLAUDE.md and AGENTS.md with Phase 1 deliverables:
 - `uv run pytest tests/test_schema_symbols.py -v` — schema v2 tests
 
 ### User Walkthrough
-CLI commands with observable outcomes (see below).
+Reusable demo script (`scripts/demo_lsp.py`) that dogfoods Phase 1 deliverables against the live codebase.
 
 ## Success Criteria
 - [ ] CLAUDE.md updated: LSP client module location, config format, new DuckDB tables documented
 - [ ] AGENTS.md updated: new tables, new module, key commands for LSP
-- [ ] User has run walkthrough commands and confirmed observable outcomes
+- [ ] `scripts/demo_lsp.py` exists and runs successfully against this repo
+- [ ] User has run the demo script and confirmed observable outcomes
 - [ ] No information in CLAUDE.md/AGENTS.md contradicts actual code state
 
 ## Walkthrough
 
-### 1. LSP client connects to pyright and returns documentSymbol for a Python file
-
+Single command:
 ```bash
-# Run the LSP client integration test that verifies pyright connection + documentSymbol
-uv run pytest tests/test_lsp_client.py::test_document_symbols -v
+uv run scripts/demo_lsp.py [FILE]
 ```
-**Expected:** Test passes — pyright spawns, initializes, returns symbols for fixture file.
 
-### 2. LSP client connects to at least one non-Python language server
+The script demos all Phase 1 deliverables against this codebase:
 
-```bash
-# Check the registry covers all tree-sitter languages
-uv run pytest tests/test_lsp_client.py::test_registry_covers_all_tree_sitter_languages -v
-```
-**Expected:** Test passes — registry has entries for all 32 languages with tree-sitter grammars.
+1. **LSP Client** — spawns pyright, connects, gets documentSymbol for the target file (default: `chunkhound/lsp/client.py`), prints symbols with kind/name/line-range in the same format as editor LSP
+2. **Registry** — lists all 32 language configs, checks which servers are available on PATH
+3. **Schema v2** — connects to the project's DuckDB, shows tables + row counts + schema version, confirms `symbols` and `symbol_edges` exist
+4. **Path scoping** — runs a scoped regex search via the ChunkHound library and verifies no results leak outside the prefix
 
-Note: Live connection tests beyond pyright require those language servers installed. The registry CONFIGS are verified; live connection requires the binaries on PATH.
+Reusable for future phases: Phase 2 extends to show populated symbol/edge counts, Phase 3 adds MCP tool comparison.
 
-### 3. DuckDB tables exist after fresh index
+## Dogfooding Lessons
 
-```bash
-# Index a small directory, then verify tables
-uv run chunkhound index chunkhound/lsp/ --db /tmp/ch-acceptance-test
-python3 -c "
-import duckdb
-conn = duckdb.connect('/tmp/ch-acceptance-test/chunks.db')
-for table in ['files', 'chunks', 'symbols', 'symbol_edges', 'schema_version']:
-    count = conn.execute(f'SELECT COUNT(*) FROM {table}').fetchone()[0]
-    print(f'{table}: {count} rows')
-version = conn.execute('SELECT MAX(version) as v FROM schema_version').fetchone()[0]
-print(f'Schema version: {version}')
-conn.close()
-"
-rm -rf /tmp/ch-acceptance-test
-```
-**Expected:** `symbols` and `symbol_edges` tables exist (0 rows — Phase 2 populates them). Schema version = 2.
+**Re-index required after schema changes.** The v2 migration (ch-a58) adds `symbols` and `symbol_edges` tables, but existing databases don't gain them until re-indexed. The demo script caught this — the live DB had no Phase 1 tables because it predates the migration. Users upgrading ChunkHound need to re-index to get v2 schema. Document this in AGENTS.md.
 
-### 4. Semantic search path scoping returns no cross-directory leakage
+**DuckDB lock when MCP is running.** The demo script can't open the DB read-only while the MCP server holds a write lock. Solved by snapshotting to a temp file. This is a known concurrency limitation (see memory 55566).
 
-```bash
-# Run the path scoping tests
-uv run pytest tests/test_path_scoping.py -v 2>/dev/null || \
-uv run pytest tests/ -k "path_scop" -v
-```
-**Expected:** Tests pass — prefix matching prevents cross-directory leakage.
+**Semantic search path scoping leaks through MCP layer.** Discovered during demo — `search_semantic(path="chunkhound/lsp/")` returns results from `tests/test_lsp_client.py`. SQL LIKE prefix at DB level is clean; the leak is in the MCP tool routing. Tracked as ch-u62.
 
 ## Anti-Patterns
-- NO code changes in this task — documentation only
-- NO checking off walkthrough criteria without actually running the commands
 - NO inventing documentation claims — verify against actual code first
+- NO checking off walkthrough criteria without actually running the script
 
 ## Log
 
