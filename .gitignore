@@ -298,3 +298,7 @@ cluster_eval.json
 
 # Kiro IDE
 .kiro/
+
+.chunkhound.json
+.chunkhound/
+
