@@ -68,7 +68,6 @@ def vcr_config():
     return {
         "filter_headers": ["authorization", "x-api-key"],
         "cassette_library_dir": os.path.join(os.path.dirname(__file__), "cassettes"),
-        "record_mode": "none",
     }
 
 
