@@ -79,3 +79,4 @@ mypy.ini export-ignore
 # Linguist overrides
 *.lock linguist-generated=true
 uv.lock linguist-generated=true
+.bones/audit.jsonl merge=bones-audit
