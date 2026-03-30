@@ -2,6 +2,11 @@
 
 from chunkhound.providers.database.like_utils import escape_like_pattern
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_escape_like_pattern_parameterized_keeps_quotes() -> None:
     escaped = escape_like_pattern("scope_%[path]'\\name", escape_quotes=False)

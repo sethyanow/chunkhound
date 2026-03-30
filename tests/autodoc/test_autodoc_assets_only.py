@@ -5,6 +5,11 @@ from pathlib import Path
 from chunkhound.api.cli.parsers.autodoc_parser import add_autodoc_subparser
 from chunkhound.autodoc.site_writer import write_astro_assets_only
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_autodoc_parser_accepts_assets_only_flag() -> None:
     parser = argparse.ArgumentParser()

@@ -26,10 +26,10 @@ from chunkhound.providers.llm.anthropic_llm_provider import (
 )
 
 # Skip all tests in this file if no API key is available
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.skipif(
     not os.getenv("ANTHROPIC_API_KEY"),
     reason="ANTHROPIC_API_KEY not set - manual integration tests require real API key"
-)
+), pytest.mark.integration]
 
 
 async def test_basic_completion():

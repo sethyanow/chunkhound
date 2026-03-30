@@ -3,6 +3,11 @@ from chunkhound.code_mapper import render as code_mapper_render
 from chunkhound.code_mapper.models import CodeMapperPOI
 from chunkhound.code_mapper.models import AgentDocMetadata
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def _meta() -> AgentDocMetadata:
     return AgentDocMetadata(

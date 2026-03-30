@@ -1,5 +1,10 @@
 from chunkhound.code_mapper.pipeline import _operational_poi_budget
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_operational_poi_budget_scales_with_comprehensiveness() -> None:
     assert _operational_poi_budget("minimal") == 1

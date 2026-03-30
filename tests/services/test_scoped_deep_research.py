@@ -23,6 +23,9 @@ from chunkhound.services.indexing_coordinator import IndexingCoordinator
 from chunkhound.services.search_service import SearchService
 from tests.fixtures.fake_providers import FakeEmbeddingProvider, FakeLLMProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_scoped_deep_research_uses_path_filter(tmp_path: Path) -> None:

@@ -7,6 +7,9 @@ import pytest
 from chunkhound.api.cli.utils.database import verify_database_exists
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 def test_verify_database_exists_returns_transformed_duckdb_path(tmp_path: Path) -> None:
     db_dir = tmp_path / ".chunkhound" / "db"

@@ -3,6 +3,9 @@ from chunkhound.code_mapper.public_utils import (
     derive_heading_from_point,
     slugify_heading,
 )
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 def test_extract_points_of_interest_parses_numbered_and_bullets() -> None:

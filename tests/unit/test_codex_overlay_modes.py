@@ -9,6 +9,9 @@ try:
 except ImportError:
     import tomli as tomllib
 
+pytestmark = pytest.mark.integration
+
+
 
 class _DummyProc:
     def __init__(self, rc: int = 0, out: bytes = b"OK", err: bytes = b"") -> None:

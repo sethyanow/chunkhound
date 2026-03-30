@@ -17,6 +17,9 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.services.directory_indexing_service import DirectoryIndexingService
 from chunkhound.services.indexing_coordinator import IndexingCoordinator
 
+pytestmark = pytest.mark.integration
+
+
 
 class _DummyConfig:
     def __init__(self) -> None:

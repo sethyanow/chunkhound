@@ -8,6 +8,9 @@ import pytest
 
 from chunkhound.providers.llm.codex_cli_provider import CodexCLIProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.integration
 def test_codex_exec_help_available():

@@ -9,6 +9,9 @@ from chunkhound.services.indexing_coordinator import IndexingCoordinator
 from chunkhound.core.types.common import Language
 from chunkhound.parsers.parser_factory import create_parser_for_language
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 def real_components(tmp_path):

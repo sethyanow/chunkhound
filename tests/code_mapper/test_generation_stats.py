@@ -3,6 +3,9 @@ import pytest
 from chunkhound.code_mapper import metadata as code_mapper_metadata
 from chunkhound.code_mapper.metadata import build_generation_stats_with_coverage
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_build_generation_stats_with_coverage_scoped_totals() -> None:
     stats, coverage = build_generation_stats_with_coverage(

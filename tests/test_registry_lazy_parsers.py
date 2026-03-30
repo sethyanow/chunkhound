@@ -5,6 +5,11 @@ from collections import defaultdict
 from chunkhound.core.types.common import Language
 from chunkhound.registry import ProviderRegistry
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_registry_lazily_instantiates_language_parsers(monkeypatch):
     """Ensure parser factories are only invoked when a language is requested."""

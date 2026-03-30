@@ -2,6 +2,11 @@ from typing import Any
 
 from chunkhound.code_mapper.coverage import compute_unreferenced_scope_files
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 class _Provider:
     def __init__(self) -> None:

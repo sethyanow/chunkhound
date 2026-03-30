@@ -5,6 +5,11 @@ from pathlib import Path
 
 from chunkhound.api.cli.parsers.research_parser import add_research_subparser
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()

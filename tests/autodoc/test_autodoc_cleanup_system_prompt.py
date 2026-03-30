@@ -5,6 +5,11 @@ from hashlib import sha256
 from chunkhound.autodoc.cleanup import _build_cleanup_system_prompt
 from chunkhound.autodoc.models import CleanupConfig
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def _prompt_digest(prompt: str) -> str:
     return sha256(prompt.encode("utf-8")).hexdigest()

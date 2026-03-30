@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 class _DummyProc:
     def __init__(self, rc: int = 1, out: bytes = b"", err: bytes = b"") -> None:

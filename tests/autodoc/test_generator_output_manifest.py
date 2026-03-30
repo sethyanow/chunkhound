@@ -10,6 +10,9 @@ from chunkhound.autodoc.models import CleanupConfig
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 from tests.autodoc.site_tree_manifest import build_tree_manifest
 
+pytestmark = pytest.mark.integration
+
+
 
 class _FrozenDatetime:
     @classmethod

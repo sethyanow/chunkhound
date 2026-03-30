@@ -15,6 +15,9 @@ from chunkhound.autodoc.models import (
 from chunkhound.autodoc.site_writer import write_astro_site
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 
+pytestmark = pytest.mark.integration
+
+
 
 class _FakeLLMProvider(LLMProvider):
     def __init__(self) -> None:

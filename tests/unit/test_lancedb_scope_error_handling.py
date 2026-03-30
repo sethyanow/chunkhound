@@ -2,6 +2,11 @@
 
 from chunkhound.providers.database.lancedb_provider import LanceDBProvider
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 class _ExplodingFilesTable:
     def search(self):  # noqa: ANN001 - test stub

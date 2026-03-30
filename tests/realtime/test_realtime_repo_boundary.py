@@ -8,6 +8,9 @@ import pytest
 from chunkhound.core.config.config import Config
 from chunkhound.services.realtime_indexing_service import SimpleEventHandler
 
+pytestmark = pytest.mark.integration
+
+
 
 def _handler(tmp_path: Path) -> SimpleEventHandler:
     cfg = Config(target_dir=tmp_path)

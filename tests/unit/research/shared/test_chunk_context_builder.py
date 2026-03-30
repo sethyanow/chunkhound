@@ -19,6 +19,8 @@ from chunkhound.services.research.shared.chunk_context_builder import (
     get_chunk_text,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestGetChunkText:
     """Tests for get_chunk_text function."""

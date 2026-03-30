@@ -2,6 +2,11 @@ from pathlib import Path
 
 from chunkhound.services import batch_processor as bp
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_process_file_batch_timeout(monkeypatch, tmp_path: Path):
     # Create a small file

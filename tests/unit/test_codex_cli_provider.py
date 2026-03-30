@@ -1,5 +1,8 @@
 import pytest
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_codex_cli_provider_import_and_name():
     # Red test: module does not exist yet

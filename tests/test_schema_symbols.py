@@ -10,6 +10,11 @@ import duckdb
 
 from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 # --- Helpers ---
 

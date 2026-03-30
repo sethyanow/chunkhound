@@ -10,6 +10,9 @@ import pytest
 from chunkhound.interfaces.llm_provider import LLMResponse
 from chunkhound.providers.llm.claude_code_cli_provider import ClaudeCodeCLIProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 def provider():

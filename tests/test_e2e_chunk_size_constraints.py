@@ -24,6 +24,9 @@ from chunkhound.embeddings import EmbeddingManager
 from chunkhound.parsers.chunk_splitter import CASTConfig
 from tests.fixtures.fake_providers import ValidatingEmbeddingProvider
 
+pytestmark = pytest.mark.integration
+
+
 logger = logging.getLogger(__name__)
 
 # Derive constraints from CASTConfig to avoid drift

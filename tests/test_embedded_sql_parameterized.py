@@ -5,6 +5,9 @@ import pytest
 from chunkhound.core.types.common import Language
 from chunkhound.parsers.parser_factory import ParserFactory
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestParameterizedQueries:
     """Test detection of parameterized queries across different database frameworks."""

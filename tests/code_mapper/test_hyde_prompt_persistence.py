@@ -5,6 +5,9 @@ import pytest
 
 from chunkhound.code_mapper import pipeline as code_mapper_pipeline
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_hyde_prompt_persistence_is_opt_in(

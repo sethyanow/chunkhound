@@ -10,6 +10,9 @@ from chunkhound.core.types.common import FileId, Language
 from chunkhound.parsers.parser_factory import ParserFactory
 from chunkhound.parsers.universal_engine import UniversalConcept
 
+pytestmark = pytest.mark.integration
+
+
 
 # =============================================================================
 # Fixtures

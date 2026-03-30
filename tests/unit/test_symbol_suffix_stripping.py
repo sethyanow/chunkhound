@@ -9,6 +9,9 @@ import pytest
 
 from chunkhound.services.search.result_enhancer import _strip_chunk_part_suffix
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestStripChunkPartSuffix:
     """Tests for _strip_chunk_part_suffix utility function."""

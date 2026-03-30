@@ -4,6 +4,11 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def _run_simulate(root: Path, include: list[str]) -> list[str]:
     env = os.environ.copy()

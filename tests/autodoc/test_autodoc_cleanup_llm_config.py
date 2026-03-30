@@ -1,6 +1,11 @@
 from chunkhound.api.cli.commands import autodoc_cleanup as autodoc_cleanup
 from chunkhound.core.config.llm_config import LLMConfig
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_cleanup_uses_autodoc_cleanup_overrides() -> None:
     llm_config = LLMConfig(

@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 def _w(p: Path, s: str = "x\n"):
     p.parent.mkdir(parents=True, exist_ok=True)

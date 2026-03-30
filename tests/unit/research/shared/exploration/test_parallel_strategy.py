@@ -18,6 +18,8 @@ from chunkhound.services.research.shared.exploration import (
     get_unified_score,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestParallelExplorationStrategyProtocol:
     """Test that ParallelExplorationStrategy conforms to ExplorationStrategy."""

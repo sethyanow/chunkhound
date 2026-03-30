@@ -3,10 +3,13 @@
 from pathlib import Path
 
 from chunkhound.core.types.common import Language
+import pytest
 from chunkhound.parsers.parser_factory import (
     create_parser_for_language,
     get_parser_factory,
 )
+
+pytestmark = pytest.mark.unit
 
 
 class TestSvelteLanguageDetection:

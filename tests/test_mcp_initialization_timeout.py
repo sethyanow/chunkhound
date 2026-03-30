@@ -25,6 +25,9 @@ import pytest
 from tests.utils import JsonRpcTimeoutError, SubprocessJsonRpcClient
 from tests.utils.windows_compat import database_cleanup_context, windows_safe_tempdir
 
+pytestmark = pytest.mark.e2e
+
+
 
 class TestMCPInitializationTimeout:
     """Test MCP server initialization timeout scenarios."""

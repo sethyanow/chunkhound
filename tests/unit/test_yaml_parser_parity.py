@@ -12,6 +12,9 @@ from chunkhound.parsers.parser_factory import ParserFactory
 from chunkhound.parsers.rapid_yaml_parser import RapidYamlParser
 from chunkhound.parsers.universal_parser import CASTConfig, UniversalParser
 
+pytestmark = pytest.mark.unit
+
+
 
 FIXTURE_DIR = Path(__file__).resolve().parents[1] / "fixtures" / "yaml"
 EXPECTED_SYMBOLS: dict[str, set[str]] = {

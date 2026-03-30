@@ -10,6 +10,9 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.services.indexing_coordinator import IndexingCoordinator
 from chunkhound.services.search_service import SearchService
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 def makefile_workflow(tmp_path):

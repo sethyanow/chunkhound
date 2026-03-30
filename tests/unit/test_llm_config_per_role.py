@@ -8,6 +8,9 @@ from pydantic import SecretStr
 from chunkhound.core.config.llm_config import LLMConfig
 from chunkhound.llm_manager import LLMManager
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_llm_config_per_role_provider_overrides():
     # Red test: fields not yet present, or not applied

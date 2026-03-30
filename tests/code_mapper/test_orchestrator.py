@@ -5,6 +5,11 @@ import chunkhound.code_mapper.orchestrator as orchestrator_mod
 from chunkhound.code_mapper.orchestrator import CodeMapperOrchestrator
 from chunkhound.core.config.config import Config
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_orchestrator_run_context_max_points(tmp_path: Path, clean_environment) -> None:
     class Args:

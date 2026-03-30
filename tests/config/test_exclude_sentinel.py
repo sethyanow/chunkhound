@@ -12,6 +12,11 @@ from pathlib import Path
 
 from chunkhound.core.config.config import Config
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_exclude_sentinel_gitignore_maps_to_source_gitignore(tmp_path: Path) -> None:
     cfg = Config(target_dir=tmp_path, **{"indexing": {"exclude": ".gitignore"}})

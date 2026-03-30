@@ -25,6 +25,8 @@ from chunkhound.services.research.shared.evidence_ledger import (
     FactExtractor,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # =============================================================================
 # Fixtures

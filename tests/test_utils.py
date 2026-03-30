@@ -4,6 +4,11 @@ from chunkhound.core.config import EmbeddingConfig
 from chunkhound.core.config.embedding_factory import EmbeddingProviderFactory
 from chunkhound.embeddings import EmbeddingManager
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 # Hardcoded fake config for all tests — never reads real credentials.
 # Uses "openai" as provider to pass EmbeddingConfig Pydantic validation

@@ -2,6 +2,11 @@
 
 from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 class _ExplodingConn:
     def execute(self, *args, **kwargs):  # noqa: ANN001 - test stub

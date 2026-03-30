@@ -1,5 +1,6 @@
 """Tests for token estimation utilities."""
 
+import pytest
 from chunkhound.core.utils.token_utils import (
     EMBEDDING_CHARS_PER_TOKEN,
     LLM_CHARS_PER_TOKEN,
@@ -7,6 +8,8 @@ from chunkhound.core.utils.token_utils import (
     estimate_tokens_chunking,
     estimate_tokens_llm,
 )
+
+pytestmark = pytest.mark.unit
 
 
 class TestEstimateTokensLLM:

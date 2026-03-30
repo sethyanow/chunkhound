@@ -9,6 +9,11 @@ import subprocess
 from pathlib import Path
 from unittest.mock import MagicMock, patch
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 class TestGetGlobalExcludesFile:
     """Tests for get_global_excludes_file() in git_safe.py."""

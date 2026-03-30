@@ -8,6 +8,9 @@ from chunkhound.code_mapper import service as code_mapper_service
 from chunkhound.code_mapper.models import CodeMapperPOI
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 class DummyProvider:
     """Minimal provider stub exposing chunks for coverage stats."""

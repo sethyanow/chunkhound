@@ -1,9 +1,12 @@
 from textwrap import dedent
 
+import pytest
 from chunkhound.parsers.yaml_template_sanitizer import (
     SanitizedYaml,
     sanitize_helm_templates,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def _prepare(content: str) -> tuple[SanitizedYaml, str]:

@@ -19,6 +19,8 @@ from chunkhound.services.research.shared.elbow_detection import (
     find_elbow_kneedle,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestElbowDetection:
     """Test cases for elbow-based chunk filtering using Kneedle algorithm."""

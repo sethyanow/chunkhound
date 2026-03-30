@@ -4,6 +4,9 @@ import pytest
 
 from chunkhound.parsers.mappings.python import PythonMapping
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestPythonImportResolution:
     """Test Python import path resolution via resolve_import_paths()."""

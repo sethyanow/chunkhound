@@ -3,6 +3,9 @@ import pytest
 from chunkhound.core.types.common import FileId, Language, ChunkType
 from chunkhound.parsers.parser_factory import get_parser_factory
 
+pytestmark = pytest.mark.unit
+
+
 
 def parse_haskell(content: str):
     factory = get_parser_factory()

@@ -21,6 +21,9 @@ from chunkhound.services.search_service import SearchService
 from tests.fixtures.fake_providers import FakeEmbeddingProvider, FakeLLMProvider
 from tests.integration.code_mapper_scope_helpers import write_scope_repo_layout
 
+pytestmark = pytest.mark.integration
+
+
 
 def _retryable_llm_error(message: str = "boom") -> RuntimeError:
     exc = RuntimeError(f"LLM completion failed: {message}")

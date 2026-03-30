@@ -6,6 +6,9 @@ import pytest
 
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 def test_config_does_not_treat_code_mapper_scope_as_target_dir(
     tmp_path: Path, monkeypatch: pytest.MonkeyPatch

@@ -2,6 +2,11 @@ from typing import Any
 
 from chunkhound.code_mapper.coverage import compute_db_scope_stats
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 class _ProviderWithScopeStats:
     def get_scope_stats(self, scope_prefix: str | None) -> tuple[int, int]:

@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_extract_include_prefixes_gets_anchors():
     from chunkhound.utils.file_patterns import _extract_include_prefixes

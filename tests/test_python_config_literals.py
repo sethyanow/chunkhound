@@ -9,6 +9,11 @@ from pathlib import Path
 from chunkhound.core.types.common import Language
 from chunkhound.parsers.parser_factory import ParserFactory
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def _parse(code: str, filename: str):
     factory = ParserFactory()

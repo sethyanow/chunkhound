@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 class _DummyPipe:
     def __init__(self) -> None:  # pragma: no cover - trivial

@@ -4,10 +4,10 @@ from pathlib import Path
 
 import pytest
 
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.skipif(
     shutil.which("git") is None,
     reason="git required",
-)
+), pytest.mark.integration]
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:

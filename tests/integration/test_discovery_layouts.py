@@ -6,7 +6,7 @@ from pathlib import Path
 import pytest
 
 
-pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git required for discovery backend integration tests")
+pytestmark = [pytest.mark.skipif(shutil.which("git") is None, reason="git required for discovery backend integration tests"), pytest.mark.integration]
 
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:

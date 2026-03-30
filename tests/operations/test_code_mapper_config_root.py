@@ -7,6 +7,9 @@ import chunkhound.api.cli.commands.code_mapper as code_mapper_mod
 from chunkhound.code_mapper import pipeline as code_mapper_pipeline
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_code_mapper_overview_only_uses_config_dir_as_root_and_sets_default_db(

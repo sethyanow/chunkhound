@@ -13,6 +13,9 @@ from chunkhound.core.diagnostics.perf_analyzer import (
     PerformanceDiagnostics,
     RegressionResult,
 )
+import pytest
+
+pytestmark = pytest.mark.unit
 
 
 class TestBatchTiming:

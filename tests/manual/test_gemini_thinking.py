@@ -21,10 +21,10 @@ import pytest
 from chunkhound.providers.llm.gemini_llm_provider import GeminiLLMProvider
 
 # Skip all tests in this file if no API key is available
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.skipif(
     not os.getenv("GOOGLE_API_KEY"),
     reason="GOOGLE_API_KEY not set - manual integration tests require real API key",
-)
+), pytest.mark.integration]
 
 
 async def test_basic_completion_gemini_3():

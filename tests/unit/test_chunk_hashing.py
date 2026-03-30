@@ -8,6 +8,9 @@ from chunkhound.core.types.common import ChunkType, Language
 from chunkhound.providers.database.lancedb_provider import LanceDBProvider
 from chunkhound.utils.chunk_hashing import generate_chunk_id
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestChunkHashing:
     """Tests for deterministic chunk ID generation."""

@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestConfigMissingBehavior:
     """Test behavior when config file is missing or incomplete."""

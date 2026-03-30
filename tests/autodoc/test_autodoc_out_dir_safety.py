@@ -12,6 +12,9 @@ from chunkhound.api.cli.commands import autodoc_generate
 from chunkhound.api.cli.commands import autodoc_prompts
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_autodoc_prompts_before_deleting_existing_topics_dir(

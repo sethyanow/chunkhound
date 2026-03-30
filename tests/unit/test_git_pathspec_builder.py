@@ -1,5 +1,8 @@
 import pytest
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_build_git_pathspecs_ext_and_exact_names():
     from chunkhound.utils import git_discovery as gd

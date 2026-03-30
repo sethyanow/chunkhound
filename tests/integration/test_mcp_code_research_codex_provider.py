@@ -8,6 +8,9 @@ from chunkhound.embeddings import EmbeddingManager
 from chunkhound.llm_manager import LLMManager
 from chunkhound.mcp_server.tools import execute_tool
 
+pytestmark = pytest.mark.integration
+
+
 
 class _DummyEmbeddingProvider:
     name = "dummy"

@@ -20,6 +20,9 @@ from chunkhound.database_factory import create_database_with_dependencies
 
 import os
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.skipif(
     os.environ.get("CHUNKHOUND_ALLOW_PROCESSPOOL", "0") != "1",

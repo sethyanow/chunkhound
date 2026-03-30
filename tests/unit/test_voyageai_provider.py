@@ -26,6 +26,8 @@ from chunkhound.providers.embeddings.voyageai_provider import (
     VoyageAIEmbeddingProvider,
 )
 
+pytestmark = pytest.mark.unit
+
 
 # ---------------------------------------------------------------------------
 # Helpers

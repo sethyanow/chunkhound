@@ -11,6 +11,9 @@ from chunkhound.parsers.parser_factory import ParserFactory
 from chunkhound.parsers.universal_parser import CASTConfig, UniversalParser
 from chunkhound.parsers.rapid_yaml_parser import RapidYamlParser
 
+pytestmark = pytest.mark.integration
+
+
 
 def _build_fallback_parser() -> UniversalParser:
     factory = ParserFactory(CASTConfig())

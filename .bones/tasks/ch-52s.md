@@ -1,10 +1,15 @@
 ---
 id: ch-52s
 title: Test suite mixes unit/integration/e2e — 6+ min full run blocks pre-commit
-status: open
+status: active
 type: bug
 priority: 0
+owner: Seth
+depends_on: [ch-b60]
 ---
+
+
+
 
 
 

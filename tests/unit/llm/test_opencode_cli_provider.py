@@ -9,6 +9,9 @@ import pytest
 from chunkhound.interfaces.llm_provider import LLMResponse
 from chunkhound.providers.llm.opencode_cli_provider import OpenCodeCLIProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestOpenCodeCLIProvider:
     """Test cases for OpenCode CLI provider."""

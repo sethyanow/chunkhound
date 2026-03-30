@@ -11,6 +11,9 @@ import inspect
 
 import pytest
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestNoRealConfigDiscovery:
     """Verify test utilities never load real user configuration."""

@@ -3,6 +3,11 @@ from __future__ import annotations
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.e2e
+
+
 
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 25) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["uv", "run", *cmd], cwd=str(cwd) if cwd else None, text=True, capture_output=True, timeout=timeout)

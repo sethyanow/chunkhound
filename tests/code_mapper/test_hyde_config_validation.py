@@ -2,6 +2,9 @@ import pytest
 
 from chunkhound.code_mapper.models import HydeConfig
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_hyde_config_allows_zero_caps_for_snippets() -> None:
     cfg = HydeConfig(

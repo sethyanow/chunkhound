@@ -7,6 +7,9 @@ import pytest
 
 from chunkhound.services.realtime_indexing_service import normalize_file_path
 
+pytestmark = pytest.mark.integration
+
+
 
 IS_WINDOWS = os.name == "nt"
 

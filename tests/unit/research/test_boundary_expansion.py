@@ -2,6 +2,11 @@
 
 from chunkhound.services.deep_research_service import DeepResearchService
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def _service() -> DeepResearchService:
     return DeepResearchService.__new__(DeepResearchService)

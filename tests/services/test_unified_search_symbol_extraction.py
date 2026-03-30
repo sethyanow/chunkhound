@@ -6,6 +6,9 @@ import pytest
 
 from chunkhound.services.research.shared.unified_search import UnifiedSearch
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_build_symbol_regex_supports_nonword_prefix() -> None:
     pattern = UnifiedSearch._build_symbol_regex("$request")

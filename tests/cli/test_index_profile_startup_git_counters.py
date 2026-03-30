@@ -5,6 +5,11 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.e2e
+
+
 
 def _run(cmd: list[str], cwd: Path | None = None, timeout: int = 30, env: dict[str,str] | None = None) -> subprocess.CompletedProcess[str]:
     e = os.environ.copy()

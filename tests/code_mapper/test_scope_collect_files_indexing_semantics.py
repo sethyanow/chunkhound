@@ -3,6 +3,11 @@ from pathlib import Path
 from chunkhound.code_mapper.models import HydeConfig
 from chunkhound.code_mapper.scope import collect_scope_files
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_collect_scope_files_respects_include_and_exclude(tmp_path: Path) -> None:
     project_root = tmp_path / "workspace"

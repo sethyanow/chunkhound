@@ -3,11 +3,14 @@ from __future__ import annotations
 from pathlib import Path
 
 from chunkhound.core.types.common import Language
+import pytest
 from chunkhound.tools.eval.language_samples import (
     QueryDefinition,
     create_corpus,
     parse_languages_arg,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_parse_languages_arg_single_language() -> None:

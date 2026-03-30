@@ -5,6 +5,11 @@ import os
 import subprocess
 from pathlib import Path
 
+import pytest
+
+pytestmark = pytest.mark.e2e
+
+
 
 def _run_simulate(path: Path) -> list[str]:
     env = os.environ.copy()

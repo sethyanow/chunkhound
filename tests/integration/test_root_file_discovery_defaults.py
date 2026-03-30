@@ -14,6 +14,9 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.services.indexing_coordinator import IndexingCoordinator
 from chunkhound.core.config.indexing_config import IndexingConfig
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_root_file_discovered_with_default_patterns(tmp_path):

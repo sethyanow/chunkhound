@@ -16,6 +16,9 @@ from chunkhound.core.types.common import ChunkType, Language
 from chunkhound.embeddings import EmbeddingManager
 from chunkhound.providers.database.lancedb_provider import LanceDBProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 def test_schema_created_with_fixed_dimensions_when_provider_available(tmp_path):
     """Verify table created with fixed-size schema when embedding provider available.

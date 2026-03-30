@@ -14,6 +14,8 @@ from chunkhound.services.research.v1.pluggable_research_service import (
     PluggableResearchService,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestResearchServiceProtocolConformance:
     """Verify implementations conform to ResearchServiceProtocol."""

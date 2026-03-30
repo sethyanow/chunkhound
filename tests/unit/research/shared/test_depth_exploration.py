@@ -17,6 +17,9 @@ from chunkhound.core.config.research_config import ResearchConfig
 from chunkhound.services.research.shared.depth_exploration import DepthExplorationService
 from tests.fixtures.fake_providers import FakeLLMProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 # -----------------------------------------------------------------------------
 # Fixtures

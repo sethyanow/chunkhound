@@ -3,6 +3,9 @@ from pathlib import Path
 
 from chunkhound.utils.file_patterns import should_exclude_path
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.unit
 def test_exclude_pattern_with_double_star_prefix_matches_anywhere_in_tree():

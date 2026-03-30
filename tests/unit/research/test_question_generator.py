@@ -17,6 +17,9 @@ from chunkhound.services.research.models import (
 from chunkhound.services.research.question_generator import QuestionGenerator
 from tests.fixtures.fake_providers import FakeLLMProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.fixture
 def fake_llm_provider():

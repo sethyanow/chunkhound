@@ -5,6 +5,11 @@ from pathlib import Path
 from chunkhound.autodoc.site_writer import write_astro_assets_only
 from chunkhound.autodoc.template_loader import load_bytes, load_text
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_template_loader_reads_packaged_assets() -> None:
     layout = load_text("src/layouts/DocLayout.astro")

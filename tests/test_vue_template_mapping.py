@@ -9,6 +9,9 @@ from chunkhound.parsers.mappings.vue_template import VueTemplateMapping
 from chunkhound.parsers.universal_engine import UniversalConcept
 from chunkhound.parsers.vue_parser import VueParser
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestVueTemplateMapping:
     """Test VueTemplateMapping directive query and extraction."""

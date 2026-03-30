@@ -7,7 +7,7 @@ import pytest
 from chunkhound.utils.git_discovery import list_repo_files_via_git
 
 
-pytestmark = pytest.mark.skipif(shutil.which("git") is None, reason="git binary required for git discovery tests")
+pytestmark = [pytest.mark.skipif(shutil.which("git") is None, reason="git binary required for git discovery tests"), pytest.mark.integration]
 
 
 def _init_repo(repo: Path) -> None:

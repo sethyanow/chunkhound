@@ -4,6 +4,11 @@ from pathlib import Path
 from chunkhound.code_mapper.models import HydeConfig
 from chunkhound.code_mapper.scope import collect_scope_files
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_collect_scope_files_skips_gitignored_binaries(tmp_path: Path) -> None:
     """HyDE scope file collection should respect .gitignore rules."""

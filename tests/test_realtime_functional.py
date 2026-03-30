@@ -16,6 +16,9 @@ from chunkhound.database_factory import create_services
 from chunkhound.services.realtime_indexing_service import RealtimeIndexingService
 from tests.utils.windows_compat import should_use_polling
 
+pytestmark = pytest.mark.e2e
+
+
 
 class TestRealtimeFunctional:
     """Functional tests for real-time indexing - test what really matters."""

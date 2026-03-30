@@ -7,7 +7,10 @@ import os
 import tempfile
 from pathlib import Path
 
+import pytest
 from tests.utils import SubprocessJsonRpcClient
+
+pytestmark = pytest.mark.e2e
 
 # Try to use the official MCP client SDK
 try:

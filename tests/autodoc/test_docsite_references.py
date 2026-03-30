@@ -12,6 +12,9 @@ from chunkhound.autodoc.references import (
 )
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 
+pytestmark = pytest.mark.unit
+
+
 
 class _FixedCleanupProvider(LLMProvider):
     def __init__(self, cleaned_body: str) -> None:

@@ -3,6 +3,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 def test_lancedb_checksums_saved_on_first_index(lancedb_provider, tmp_path):
     """Verify checksums are computed and saved during first indexing pass with LanceDB."""

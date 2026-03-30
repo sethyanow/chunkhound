@@ -3,6 +3,11 @@ from pathlib import Path
 from chunkhound.autodoc.models import DocsitePage
 from chunkhound.autodoc.site_writer import _render_topic_page
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_render_topic_page_emits_v2_frontmatter_when_present() -> None:
     page = DocsitePage(

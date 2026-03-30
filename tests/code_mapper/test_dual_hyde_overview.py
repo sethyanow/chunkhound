@@ -5,6 +5,9 @@ import pytest
 
 from chunkhound.code_mapper import pipeline as code_mapper_pipeline
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_dual_hyde_overview_returns_both_maps_and_injects_quickstart(

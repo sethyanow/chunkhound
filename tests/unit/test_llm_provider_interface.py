@@ -4,6 +4,9 @@ import pytest
 
 from chunkhound.interfaces.llm_provider import _normalize_schema_for_structured_outputs
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestNormalizeSchemaForStructuredOutputs:
     """Tests for the schema normalization helper function."""

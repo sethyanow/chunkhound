@@ -8,6 +8,8 @@ from scripts.update_version import (
     bump_version,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestValidateVersion:
     """Test PEP 440 version validation."""

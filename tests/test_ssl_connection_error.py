@@ -24,6 +24,9 @@ import pytest
 
 from chunkhound.providers.embeddings.openai_provider import OpenAIEmbeddingProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 def create_self_signed_cert() -> Tuple[Path, Path]:
     """

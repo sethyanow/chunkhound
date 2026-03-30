@@ -9,6 +9,8 @@ from chunkhound.utils.file_patterns import (
     walk_directory_tree,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_exclude_double_star_segment_wildcard_venv():
     base = Path("/workspaces/project")

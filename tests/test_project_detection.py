@@ -9,6 +9,9 @@ import pytest
 
 from chunkhound.utils.project_detection import find_project_root
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestProjectRootDetection:
     """Test find_project_root() tree-walking behavior."""

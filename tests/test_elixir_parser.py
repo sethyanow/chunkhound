@@ -8,6 +8,9 @@ from chunkhound.core.types.common import ChunkType, FileId, Language
 from chunkhound.parsers.mappings.elixir import ElixirMapping
 from chunkhound.parsers.parser_factory import get_parser_factory
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestElixirFileDetection:
     """Property 1: File Extension Recognition."""

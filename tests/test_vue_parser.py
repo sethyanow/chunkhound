@@ -7,6 +7,9 @@ from chunkhound.core.types.common import FileId, Language
 from chunkhound.parsers.vue_parser import VueParser
 from chunkhound.parsers.mappings.vue import VueMapping
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestVueMapping:
     """Test VueMapping section extraction."""

@@ -10,6 +10,9 @@ import pytest
 
 from chunkhound.mcp_server.base import MCPServerBase
 
+pytestmark = pytest.mark.unit
+
+
 
 class ConcreteMCPServer(MCPServerBase):
     """Minimal concrete implementation for testing base class behavior."""

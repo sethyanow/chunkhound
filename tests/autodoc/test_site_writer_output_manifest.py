@@ -6,6 +6,11 @@ from chunkhound.autodoc.models import CodeMapperIndex, DocsitePage, DocsiteSite
 from chunkhound.autodoc.site_writer import write_astro_assets_only, write_astro_site
 from tests.autodoc.site_tree_manifest import build_tree_manifest
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 _FULL_SITE_EXPECTED_MANIFEST: dict[str, str] = {
     "README.md": "0aaed6dd0601528919f86524ec9fed4f730f193aed8e445035b88472fbd6d203",
     "astro.config.mjs": (

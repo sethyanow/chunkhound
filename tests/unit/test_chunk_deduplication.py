@@ -6,6 +6,9 @@ from chunkhound.core.models.chunk import Chunk
 from chunkhound.core.types.common import ChunkType, FileId, Language, LineNumber
 from chunkhound.utils.chunk_deduplication import deduplicate_chunks
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_exact_content_deduplication():
     """Chunks with identical content should be deduplicated by specificity."""

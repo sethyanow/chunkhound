@@ -21,6 +21,8 @@ from chunkhound.autodoc.site_writer import (
     write_astro_site,
 )
 
+pytestmark = pytest.mark.integration
+
 
 def test_write_astro_site_removes_stale_topics(tmp_path: Path) -> None:
     output_dir = tmp_path / "site"

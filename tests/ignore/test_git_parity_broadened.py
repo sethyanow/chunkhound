@@ -4,6 +4,11 @@ import subprocess
 from pathlib import Path
 from typing import Iterable
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def run_git(args: list[str], cwd: Path) -> subprocess.CompletedProcess[str]:
     return subprocess.run([

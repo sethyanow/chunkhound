@@ -1,7 +1,10 @@
+import pytest
 from chunkhound.code_mapper.public_utils import (
     is_empty_research_result,
     merge_sources_metadata,
 )
+
+pytestmark = pytest.mark.unit
 
 
 def test_merge_sources_metadata_deduplicates_files_and_chunks() -> None:

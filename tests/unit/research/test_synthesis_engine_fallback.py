@@ -7,6 +7,9 @@ from chunkhound.llm_manager import LLMManager
 from chunkhound.services.research import SynthesisEngine
 from tests.fixtures.fake_providers import FakeEmbeddingProvider, FakeLLMProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 class _OutOfBoundsEmbeddingProvider(FakeEmbeddingProvider):
     async def rerank(self, query: str, documents: list[str], top_k=None):  # noqa: ANN001

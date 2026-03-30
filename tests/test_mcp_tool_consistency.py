@@ -8,6 +8,9 @@ import pytest
 
 from chunkhound.mcp_server.tools import TOOL_REGISTRY
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_tool_registry_populated():
     """Verify that TOOL_REGISTRY is populated by decorators."""

@@ -2,6 +2,11 @@ from __future__ import annotations
 
 import subprocess
 
+import pytest
+
+pytestmark = pytest.mark.e2e
+
+
 
 def _run(cmd: list[str], timeout: int = 20) -> subprocess.CompletedProcess[str]:
     return subprocess.run(["uv", "run", *cmd], text=True, capture_output=True, timeout=timeout)

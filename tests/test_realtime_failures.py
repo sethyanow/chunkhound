@@ -19,6 +19,8 @@ from tests.utils.windows_compat import (
     stabilize_polling_monitor,
 )
 
+pytestmark = pytest.mark.e2e
+
 
 class TestRealtimeFailures:
     """Tests that expose actual implementation failures."""

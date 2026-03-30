@@ -12,6 +12,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 # Skip these tests if lancedb is not available
 class TestChunkDeduplication:
     """Test suite for chunk deduplication via merge_insert."""

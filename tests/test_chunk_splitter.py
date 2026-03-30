@@ -13,6 +13,10 @@ from chunkhound.parsers.chunk_splitter import (
 )
 from chunkhound.parsers.makefile_parser import MakefileChunkSplitter
 from chunkhound.parsers.universal_engine import UniversalChunk, UniversalConcept
+import pytest
+
+pytestmark = pytest.mark.unit
+
 
 
 def _make_chunk(

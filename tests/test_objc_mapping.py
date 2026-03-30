@@ -5,6 +5,9 @@ import pytest
 from chunkhound.core.types.common import ChunkType, FileId, Language
 from chunkhound.parsers.parser_factory import get_parser_factory
 
+pytestmark = pytest.mark.unit
+
+
 
 def parse_objc(content: str):
     """Helper function to parse Objective-C content."""

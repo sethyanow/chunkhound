@@ -6,6 +6,11 @@ from pathlib import Path
 
 from tests.utils import get_safe_subprocess_env
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_eval_search_regex_smoke(tmp_path: Path) -> None:
     """End-to-end smoke test for eval.search in regex mode.

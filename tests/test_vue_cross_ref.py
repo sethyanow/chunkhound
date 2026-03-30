@@ -18,6 +18,9 @@ from chunkhound.parsers.vue_cross_ref import (
 )
 from chunkhound.parsers.vue_parser import VueParser
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestVueSymbolTable:
     """Tests for VueSymbolTable data structure."""

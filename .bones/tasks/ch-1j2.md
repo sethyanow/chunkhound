@@ -4,8 +4,13 @@ title: 'Phase 1 Acceptance: Foundation — LSP Client + Schema + Fixes'
 status: open
 type: task
 priority: 1
+depends_on: [ch-52s]
 parent: ch-7j0
 ---
+
+
+
+
 
 
 
@@ -97,3 +102,7 @@ uv run pytest tests/ -k "path_scop" -v
 - NO code changes in this task — documentation only
 - NO checking off walkthrough criteria without actually running the commands
 - NO inventing documentation claims — verify against actual code first
+
+## Log
+
+- [2026-03-30T15:21:14Z] [Seth] BLOCKED: Created prematurely — agent followed skill mechanics instead of addressing P0 ch-52s. User rejected. Do not execute until ch-52s is closed.

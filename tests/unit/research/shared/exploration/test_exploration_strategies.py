@@ -16,6 +16,8 @@ from chunkhound.services.research.shared.exploration import (
     BFSExplorationStrategy,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestExplorationStrategyProtocol:
     """Test that implementations conform to the ExplorationStrategy protocol."""

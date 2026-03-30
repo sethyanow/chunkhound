@@ -7,6 +7,9 @@ from chunkhound.autodoc.generator import generate_docsite
 from chunkhound.autodoc.models import CleanupConfig
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 
+pytestmark = pytest.mark.integration
+
+
 
 class _CapturingProvider(LLMProvider):
     def __init__(self) -> None:

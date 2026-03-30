@@ -18,6 +18,9 @@ from chunkhound.core.types.common import Language
 from chunkhound.parsers.parser_factory import EXTENSION_TO_LANGUAGE
 from chunkhound.services.realtime_indexing_service import SimpleEventHandler
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestExtensionConsistency:
     """Test suite for extension list synchronization."""

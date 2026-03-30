@@ -4,6 +4,11 @@ import argparse
 
 from chunkhound.api.cli.parsers.autodoc_parser import add_autodoc_subparser
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_autodoc_parser_allows_omitting_map_in() -> None:
     parser = argparse.ArgumentParser()

@@ -5,6 +5,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_timeout_prompt_adds_exclusions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):

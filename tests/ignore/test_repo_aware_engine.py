@@ -4,6 +4,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_repo_aware_engine_parent_child_rules(tmp_path: Path) -> None:

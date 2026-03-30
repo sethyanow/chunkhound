@@ -12,6 +12,8 @@ from chunkhound.providers.llm.anthropic_llm_provider import (
     AnthropicLLMProvider,
 )
 
+pytestmark = pytest.mark.unit
+
 
 @pytest.mark.skipif(not ANTHROPIC_AVAILABLE, reason="Anthropic SDK not installed")
 class TestAnthropicProviderBasics:

@@ -4,6 +4,9 @@ from chunkhound.core.types.common import ChunkType, Language
 from chunkhound.parsers.parser_factory import ParserFactory
 from chunkhound.parsers.universal_engine import UniversalConcept
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.fixture()
 def universal_parser():

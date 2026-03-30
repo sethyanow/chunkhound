@@ -3,6 +3,11 @@ from pathlib import Path
 from chunkhound.code_mapper.hyde import build_hyde_scope_prompt
 from chunkhound.code_mapper.models import AgentDocMetadata, HydeConfig
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_hyde_scope_prompt_includes_snippets_when_project_root_diff_cwd(
     tmp_path: Path,

@@ -8,10 +8,10 @@ import pytest
 from chunkhound.utils.git_discovery import list_repo_files_via_git
 
 
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.skipif(
     shutil.which("git") is None,
     reason="git required",
-)
+), pytest.mark.integration]
 
 
 def _git(repo: Path, *args: str, check: bool = True) -> subprocess.CompletedProcess:

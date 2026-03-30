@@ -15,6 +15,8 @@ from chunkhound.daemon.discovery import (
     _write_json_atomically,
 )
 
+pytestmark = pytest.mark.integration
+
 _RUNTIME_DIR_ENV = "CHUNKHOUND_DAEMON_RUNTIME_DIR"
 
 

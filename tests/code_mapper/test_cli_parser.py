@@ -5,6 +5,9 @@ import pytest
 
 from chunkhound.api.cli.parsers.code_mapper_parser import add_map_subparser
 
+pytestmark = pytest.mark.unit
+
+
 
 def _build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser()

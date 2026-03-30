@@ -3,6 +3,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 class _FakeDB:
     def __init__(self, records):

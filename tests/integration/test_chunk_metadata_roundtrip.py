@@ -11,6 +11,9 @@ import pytest
 from chunkhound.core.models import Chunk, File
 from chunkhound.core.types.common import ChunkType, Language
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestLanceDBMetadataRoundtrip:
     """Test metadata persistence through LanceDB operations."""

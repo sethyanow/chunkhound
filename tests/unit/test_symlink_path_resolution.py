@@ -16,6 +16,8 @@ from chunkhound.core.utils.path_utils import (
     resolve_path_for_relative,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.fixture
 def temp_dirs():

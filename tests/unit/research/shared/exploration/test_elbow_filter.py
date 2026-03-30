@@ -10,6 +10,8 @@ from chunkhound.services.research.shared.exploration.elbow_filter import (
     filter_chunks_by_elbow,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestFilterChunksByElbow:
     """Tests for filter_chunks_by_elbow core functionality."""

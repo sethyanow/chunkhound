@@ -8,6 +8,9 @@ and integrates properly with the test infrastructure.
 import pytest
 import httpx
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_mock_rerank_server_health():

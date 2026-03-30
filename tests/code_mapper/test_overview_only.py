@@ -5,6 +5,9 @@ import pytest
 from chunkhound.code_mapper import service as code_mapper_service
 from chunkhound.code_mapper.models import CodeMapperPOI
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_run_code_mapper_overview_only_raises_when_no_points(

@@ -29,6 +29,9 @@ from tests.utils import (
 )
 from tests.utils.windows_compat import path_contains, windows_safe_tempdir, database_cleanup_context
 
+pytestmark = pytest.mark.e2e
+
+
 
 class TestMCPServerDirectoryIsolationWithRealCommunication:
     """Test MCP server serving different directory with real indexing and MCP communication."""

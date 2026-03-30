@@ -6,6 +6,9 @@ from unittest.mock import MagicMock, PropertyMock
 from chunkhound.providers.database.lancedb_provider import LanceDBProvider
 from chunkhound.embeddings import EmbeddingManager
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestLanceDBDimensionDetection:
     """Test dimension detection from embedding manager."""

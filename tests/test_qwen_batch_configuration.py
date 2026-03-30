@@ -7,6 +7,8 @@ from chunkhound.providers.embeddings.openai_provider import (
     OpenAIEmbeddingProvider,
 )
 
+pytestmark = pytest.mark.unit
+
 
 class TestQwenModelDetection:
     """Test automatic detection and configuration of Qwen models."""

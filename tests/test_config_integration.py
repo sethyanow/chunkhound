@@ -19,6 +19,9 @@ from chunkhound.utils.windows_constants import IS_WINDOWS, WINDOWS_FILE_HANDLE_D
 from chunkhound.registry import configure_registry, get_registry
 from tests.utils.windows_compat import database_cleanup_context, cleanup_database_resources, windows_safe_tempdir
 
+pytestmark = pytest.mark.integration
+
+
 
 def _cleanup_registry_and_connections():
     """Clean up registry and database connections for Windows compatibility."""

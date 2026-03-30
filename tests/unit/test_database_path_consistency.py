@@ -10,6 +10,9 @@ import pytest
 
 from chunkhound.core.config.database_config import DatabaseConfig
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_get_db_path_duckdb_no_suffix(tmp_path):
     """Verify DuckDB path is just chunks.db file."""

@@ -23,10 +23,10 @@ from chunkhound.lsp.types import (
 )
 
 # Skip entire module if pyright not available
-pytestmark = pytest.mark.skipif(
+pytestmark = [pytest.mark.skipif(
     not shutil.which("pyright-langserver"),
     reason="pyright-langserver not installed",
-)
+), pytest.mark.integration]
 
 FIXTURES_DIR = Path(__file__).parent / "fixtures"
 

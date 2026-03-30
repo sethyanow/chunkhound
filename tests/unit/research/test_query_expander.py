@@ -11,6 +11,9 @@ from chunkhound.services.research.models import ResearchContext
 from chunkhound.services.research.query_expander import QueryExpander
 from tests.fixtures.fake_providers import FakeLLMProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.fixture
 def fake_llm_provider():

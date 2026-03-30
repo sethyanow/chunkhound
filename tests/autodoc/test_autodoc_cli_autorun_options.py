@@ -5,6 +5,11 @@ from types import SimpleNamespace
 
 from chunkhound.api.cli.commands.autodoc_autorun import resolve_auto_map_options
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_resolve_auto_map_options_defaults_noninteractive(
     tmp_path: Path, monkeypatch

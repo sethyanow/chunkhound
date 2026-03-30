@@ -4,6 +4,11 @@ import argparse
 
 from chunkhound.core.config.llm_config import LLMConfig
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_cli_accepts_xhigh_reasoning_effort() -> None:
     parser = argparse.ArgumentParser()

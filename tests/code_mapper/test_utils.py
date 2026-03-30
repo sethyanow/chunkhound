@@ -1,6 +1,11 @@
 from chunkhound.code_mapper.utils import compute_scope_prefix
 from chunkhound.utils.text import safe_scope_label
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_safe_scope_label_normalizes() -> None:
     assert safe_scope_label("scope") == "scope"

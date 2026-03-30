@@ -14,6 +14,9 @@ import pytest
 from chunkhound.core.types.common import ChunkId
 from chunkhound.services.embedding_service import EmbeddingService
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestUpdateProgressWithSpeedHelper:
     """Tests for the _update_progress_with_speed helper method.

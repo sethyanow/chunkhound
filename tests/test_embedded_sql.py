@@ -5,6 +5,9 @@ import pytest
 from chunkhound.core.types.common import ChunkType, Language
 from chunkhound.parsers.parser_factory import ParserFactory
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestEmbeddedSqlDetection:
     """Test embedded SQL detection across different languages."""

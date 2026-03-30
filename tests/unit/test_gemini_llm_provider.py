@@ -4,6 +4,9 @@ import pytest
 
 from chunkhound.providers.llm.gemini_llm_provider import GeminiLLMProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.fixture
 def provider():

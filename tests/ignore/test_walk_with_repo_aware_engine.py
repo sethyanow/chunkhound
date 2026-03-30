@@ -4,6 +4,11 @@ from pathlib import Path
 
 from chunkhound.utils.file_patterns import walk_directory_tree
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_walk_directory_tree_with_repo_boundaries(tmp_path: Path) -> None:
     root = tmp_path

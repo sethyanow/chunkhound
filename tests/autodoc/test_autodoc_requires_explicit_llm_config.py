@@ -11,6 +11,9 @@ from chunkhound.api.cli.commands.autodoc_cleanup import (
 from chunkhound.api.cli.commands.autodoc_errors import AutoDocCLIExitError
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.unit
+
+
 
 class _CaptureFormatter:
     def __init__(self) -> None:

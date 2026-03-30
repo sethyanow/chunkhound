@@ -19,6 +19,9 @@ from chunkhound.parsers.parser_factory import create_parser_for_language
 from chunkhound.parsers.mappings.pdf import PDFMapping, PYMUPDF_AVAILABLE
 from chunkhound.parsers.universal_parser import UniversalParser
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestPDFLanguageDetection:
     """Test that PDF files are correctly identified."""

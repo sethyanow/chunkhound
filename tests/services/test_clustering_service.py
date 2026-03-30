@@ -9,6 +9,9 @@ import pytest
 from chunkhound.services.clustering_service import ClusteringService, ClusterGroup
 from tests.fixtures.fake_providers import FakeLLMProvider, FakeEmbeddingProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestKMeansClustering:
     """Test k-means clustering."""

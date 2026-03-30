@@ -24,7 +24,7 @@ try:
 except ImportError:
     PYMUPDF_AVAILABLE = False
 
-pytestmark = pytest.mark.skipif(not PYMUPDF_AVAILABLE, reason="PyMuPDF not available")
+pytestmark = [pytest.mark.skipif(not PYMUPDF_AVAILABLE, reason="PyMuPDF not available"), pytest.mark.integration]
 
 
 @pytest.fixture

@@ -1,9 +1,12 @@
 """Unit tests for LanceDB provider helpers."""
 
+import pytest
 from chunkhound.providers.database.lancedb_provider import (
     LanceDBProvider,
     _escape_like_pattern,
 )
+
+pytestmark = pytest.mark.unit
 
 
 class _FakeSearch:

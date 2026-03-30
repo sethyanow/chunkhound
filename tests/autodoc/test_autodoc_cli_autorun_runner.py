@@ -7,6 +7,9 @@ import pytest
 
 from chunkhound.api.cli.commands import autodoc_autorun as autorun
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_autorun_code_mapper_for_autodoc_returns_plan_out_dir(

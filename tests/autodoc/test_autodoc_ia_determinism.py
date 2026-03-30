@@ -14,6 +14,9 @@ from chunkhound.autodoc.ia import (
 from chunkhound.autodoc.models import DocsitePage
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 
+pytestmark = pytest.mark.unit
+
+
 
 def _digest_text(text: str) -> str:
     return sha256(text.encode("utf-8")).hexdigest()

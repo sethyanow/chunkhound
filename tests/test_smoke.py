@@ -28,6 +28,9 @@ from tests.utils import SubprocessJsonRpcClient
 sys.path.insert(0, str(Path(__file__).parent.parent))
 import chunkhound
 
+pytestmark = pytest.mark.e2e
+
+
 
 class TestModuleImports:
     """Test that all modules can be imported without errors."""

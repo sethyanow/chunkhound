@@ -8,6 +8,11 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.core.models import File, Chunk
 from chunkhound.core.types.common import FilePath, Language, ChunkType, LineNumber
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_duckdb_chunk_metrics_emitted(tmp_path: Path, monkeypatch):
     # Ensure CHUNKHOUND_MCP_MODE is not set (prevents optimize_tables from returning early)

@@ -13,8 +13,8 @@ from chunkhound.core.config.config import Config
 from chunkhound.services.embedding_service import EmbeddingService
 from .test_utils import get_embedding_config_for_tests, build_embedding_config_from_dict
 
-# All tests in this file require live API access — skip by default
-pytestmark = pytest.mark.integration
+# Acceptance tests — require VCR cassettes or live API access
+pytestmark = pytest.mark.acceptance
 
 
 @pytest.fixture

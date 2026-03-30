@@ -18,6 +18,9 @@ from chunkhound.core.types.common import Language
 from chunkhound.parsers.parser_factory import create_parser_for_language
 from tests.fixtures.fake_providers import FakeEmbeddingProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 async def _setup_path_scoping_fixture(
     tmp_path: Path,

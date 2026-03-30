@@ -15,6 +15,9 @@ import pytest
 from tests.utils import SubprocessJsonRpcClient
 from tests.utils.windows_compat import is_ci
 
+pytestmark = pytest.mark.e2e
+
+
 
 @pytest.mark.asyncio
 async def test_mcp_server_uses_positional_directory_argument():

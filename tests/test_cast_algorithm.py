@@ -16,6 +16,9 @@ from chunkhound.core.types.common import ChunkType, Language, FileId
 from chunkhound.parsers.parser_factory import get_parser_factory, create_parser_for_language
 from chunkhound.interfaces.language_parser import ParseResult
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestCASTAlgorithmCore:
     """Test core cAST algorithm split-then-merge behavior."""

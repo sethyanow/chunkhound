@@ -13,6 +13,9 @@ from chunkhound.core.types.common import FileId, Language
 from chunkhound.parsers.parser_factory import get_parser_factory
 from chunkhound.services.batch_processor import process_file_batch
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestObjectiveCDetection:
     """Test Objective-C language detection."""

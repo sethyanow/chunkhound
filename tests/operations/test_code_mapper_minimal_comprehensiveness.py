@@ -7,6 +7,9 @@ import chunkhound.api.cli.commands.code_mapper as code_mapper_mod
 from chunkhound.code_mapper.models import CodeMapperPOI
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_code_mapper_comprehensiveness_minimal_maps_to_one_poi(

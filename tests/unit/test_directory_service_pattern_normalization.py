@@ -12,6 +12,9 @@ from pathlib import Path
 from chunkhound.core.config.indexing_config import IndexingConfig
 from chunkhound.services.directory_indexing_service import DirectoryIndexingService
 
+pytestmark = pytest.mark.unit
+
+
 
 class _CaptureCoordinator:
     def __init__(self) -> None:

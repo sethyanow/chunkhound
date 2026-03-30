@@ -17,6 +17,9 @@ from chunkhound.services.embedding_service import EmbeddingService
 from chunkhound.providers.embeddings.openai_provider import OpenAIEmbeddingProvider
 from .test_utils import get_api_key_for_tests
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestOversizedChunkReproduction:
     """Reproduce the 325k+ token error in controlled environment."""

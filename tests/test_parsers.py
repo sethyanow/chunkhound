@@ -9,6 +9,9 @@ from chunkhound.core.types.common import FileId, Language
 from chunkhound.parsers.parser_factory import get_parser_factory
 from chunkhound.parsers.universal_engine import SetupError
 
+pytestmark = pytest.mark.unit
+
+
 # Minimal valid code snippets for each language
 LANGUAGE_SAMPLES = {
     Language.PYTHON: "def hello(): pass",

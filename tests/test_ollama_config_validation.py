@@ -9,6 +9,9 @@ import pytest
 from chunkhound.core.config.embedding_config import EmbeddingConfig
 from chunkhound.core.config.embedding_factory import EmbeddingProviderFactory
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestOllamaConfigValidation:
     """Test configuration validation for Ollama and other OpenAI-compatible endpoints."""

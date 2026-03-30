@@ -7,6 +7,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 def test_git_wrapper_sets_sanitized_env(monkeypatch: pytest.MonkeyPatch, tmp_path: Path) -> None:
     from chunkhound.utils import git_safe

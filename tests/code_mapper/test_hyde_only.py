@@ -7,6 +7,9 @@ import pytest
 from chunkhound.code_mapper.hyde import run_hyde_only_query
 from chunkhound.code_mapper.models import HydeConfig
 
+pytestmark = pytest.mark.unit
+
+
 
 @dataclass
 class _FakeResponse:

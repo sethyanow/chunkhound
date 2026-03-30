@@ -7,6 +7,9 @@ from chunkhound.parsers.parser_factory import get_parser_factory, ParserFactory
 from chunkhound.parsers.universal_engine import UniversalConcept
 from chunkhound.parsers.mappings.java import JavaMapping
 
+pytestmark = pytest.mark.unit
+
+
 
 def parse_java(content: str):
     """Helper function to parse Java content."""

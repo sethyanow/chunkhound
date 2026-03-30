@@ -8,6 +8,9 @@ import pytest
 from chunkhound.core.models.file import File
 from chunkhound.core.types.common import Language
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestMFileDetection:
     """Test suite for disambiguating .m files between Objective-C and MATLAB."""

@@ -13,6 +13,9 @@ from chunkhound.api.cli.commands import autodoc_generate as generate
 from chunkhound.api.cli.commands import autodoc_prompts as prompts
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_autodoc_offers_auto_map_when_map_dir_missing_index(

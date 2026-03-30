@@ -9,6 +9,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 def test_hash_performance_10mb_file(tmp_path: Path):
     """Verify xxHash3-64 completes in <50ms for 10MB file.

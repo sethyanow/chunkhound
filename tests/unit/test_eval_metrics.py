@@ -11,6 +11,8 @@ from chunkhound.tools.eval.metrics import (
     build_json_payload,
 )
 
+pytestmark = pytest.mark.unit
+
 
 def _make_query_metrics(
     query_id: str,

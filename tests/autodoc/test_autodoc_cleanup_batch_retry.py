@@ -9,6 +9,9 @@ from chunkhound.autodoc.cleanup import _cleanup_with_llm
 from chunkhound.autodoc.models import CleanupConfig, CodeMapperTopic
 from chunkhound.interfaces.llm_provider import LLMResponse
 
+pytestmark = pytest.mark.unit
+
+
 
 class _MismatchProvider:
     def __init__(self) -> None:

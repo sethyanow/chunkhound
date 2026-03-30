@@ -13,6 +13,9 @@ from chunkhound.database_factory import create_services
 from chunkhound.core.config.config import Config
 from .test_utils import get_api_key_for_tests, get_embedding_config_for_tests, build_embedding_config_from_dict
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 async def consistency_services(tmp_path):

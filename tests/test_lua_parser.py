@@ -7,6 +7,9 @@ from chunkhound.core.types.common import FileId, Language
 from chunkhound.parsers.parser_factory import get_parser_factory
 from chunkhound.parsers.mappings.lua import LuaMapping
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestLuaMapping:
     """Test LuaMapping extraction logic."""

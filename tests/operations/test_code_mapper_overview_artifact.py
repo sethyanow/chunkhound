@@ -6,6 +6,9 @@ import pytest
 import chunkhound.api.cli.commands.code_mapper as code_mapper_mod
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.integration
+
+
 
 class DummyLLMManager:
     """Placeholder LLM manager for overview-only code_mapper tests."""

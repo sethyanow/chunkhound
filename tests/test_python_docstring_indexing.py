@@ -13,6 +13,9 @@ from chunkhound.database_factory import create_services
 from chunkhound.core.config.config import Config
 from types import SimpleNamespace
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 def temp_db_dir():

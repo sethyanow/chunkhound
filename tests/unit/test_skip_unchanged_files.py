@@ -6,6 +6,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 
 def _install_parser_stubs():
     """Install lightweight stubs to avoid importing heavy tree-sitter modules in tests."""

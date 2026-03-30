@@ -6,6 +6,9 @@ from pathlib import Path
 from chunkhound.core.types.common import Language, ChunkType
 from chunkhound.parsers.parser_factory import ParserFactory
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.fixture
 def php_parser():

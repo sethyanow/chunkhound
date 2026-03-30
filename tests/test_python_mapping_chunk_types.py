@@ -3,6 +3,9 @@ import pytest
 from chunkhound.core.types.common import ChunkType, FileId, Language
 from chunkhound.parsers.parser_factory import ParserFactory
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.skipif(
     not ParserFactory().is_language_available(Language.PYTHON),

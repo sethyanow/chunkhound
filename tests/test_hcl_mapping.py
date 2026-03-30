@@ -11,6 +11,9 @@ from chunkhound.parsers.parser_factory import ParserFactory
 from chunkhound.core.types.common import Language, FileId, ChunkType
 from chunkhound.parsers.universal_engine import UniversalConcept
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.skipif(
     os.environ.get("CH_SKIP_HCL_TESTS") == "1",

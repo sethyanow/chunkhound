@@ -8,6 +8,9 @@ from pathlib import Path
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 def test_regex_basic(lancedb_provider, tmp_path):
     """Basic regex pattern finds matching content."""
     from chunkhound.core.models import Chunk, File

@@ -14,6 +14,8 @@ from tests.integration.code_mapper_scope_helpers import (
     write_scope_repo_layout,
 )
 
+pytestmark = pytest.mark.integration
+
 
 @pytest.mark.asyncio
 async def test_code_mapper_lancedb_scope_real_db(

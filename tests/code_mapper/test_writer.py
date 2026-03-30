@@ -4,6 +4,11 @@ from chunkhound.code_mapper.models import AgentDocMetadata
 from chunkhound.code_mapper.models import CodeMapperPOI
 from chunkhound.code_mapper.writer import write_code_mapper_outputs
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def _meta() -> AgentDocMetadata:
     return AgentDocMetadata(

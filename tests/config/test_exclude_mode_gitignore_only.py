@@ -2,6 +2,11 @@ from __future__ import annotations
 
 from chunkhound.core.config.config import Config
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_exclude_list_gitignore_only_mode() -> None:
     cfg = Config(**{"indexing": {"exclude": ["**/dist/**"], "exclude_mode": "gitignore_only"}})

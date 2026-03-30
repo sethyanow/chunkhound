@@ -4,6 +4,11 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.core.models import File, Chunk
 from chunkhound.core.types.common import FilePath, Language, ChunkType, LineNumber
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_delete_chunks_batch_removes_only_selected(tmp_path: Path):
     provider = DuckDBProvider(db_path=tmp_path / "db", base_directory=tmp_path)

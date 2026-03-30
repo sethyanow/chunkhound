@@ -1,6 +1,11 @@
 from chunkhound.autodoc import cleanup
 from chunkhound.autodoc.cleanup import _build_cleanup_prompt
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_build_cleanup_prompt_v2_includes_schema_and_injects_inputs() -> None:
     prompt = _build_cleanup_prompt(

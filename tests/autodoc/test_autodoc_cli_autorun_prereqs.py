@@ -8,6 +8,9 @@ import pytest
 from chunkhound.api.cli.commands import autodoc_autorun as autorun
 from chunkhound.api.cli.commands.autodoc_errors import AutoDocCLIExitError
 
+pytestmark = pytest.mark.unit
+
+
 
 def test_confirm_autorun_exits_on_decline(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(

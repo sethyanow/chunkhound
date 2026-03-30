@@ -1,5 +1,10 @@
 from chunkhound.autodoc.markdown_utils import _extract_description
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_extract_description_strips_ordered_list_marker() -> None:
     markdown = "\n".join(

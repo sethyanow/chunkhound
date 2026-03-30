@@ -3,6 +3,9 @@ from __future__ import annotations
 import pytest
 from pathlib import Path
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_discover_files_repo_boundary(tmp_path: Path) -> None:

@@ -11,6 +11,9 @@ from unittest.mock import AsyncMock, MagicMock
 
 import pytest
 
+pytestmark = pytest.mark.integration
+
+
 def test_lancedb_embeddings_stored_during_indexing(lancedb_provider, tmp_path):
     """Verify embeddings are stored in LanceDB during indexing with mock provider."""
     from chunkhound.core.models import Chunk

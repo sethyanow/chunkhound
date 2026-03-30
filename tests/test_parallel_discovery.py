@@ -11,6 +11,9 @@ from chunkhound.parsers.parser_factory import create_parser_for_language
 from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.services.indexing_coordinator import IndexingCoordinator
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.fixture
 async def coordinator(tmp_path):

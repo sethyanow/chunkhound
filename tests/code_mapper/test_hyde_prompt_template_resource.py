@@ -1,6 +1,11 @@
 from chunkhound.code_mapper.hyde import build_hyde_scope_prompt
 from chunkhound.code_mapper.models import AgentDocMetadata, HydeConfig
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_build_hyde_scope_prompt_loads_packaged_template() -> None:
     meta = AgentDocMetadata(

@@ -8,6 +8,9 @@ import pytest
 from chunkhound.code_mapper.llm import build_llm_metadata_and_map_hyde
 from chunkhound.core.config.config import Config
 
+pytestmark = pytest.mark.unit
+
+
 
 class _FakeProvider:
     name = "fake-provider"

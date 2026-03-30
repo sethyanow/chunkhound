@@ -16,6 +16,9 @@ import pytest
 from chunkhound.core.types.common import ChunkType, FileId, Language
 from chunkhound.parsers.vue_parser import VueParser
 
+pytestmark = pytest.mark.integration
+
+
 
 class TestCompleteSFCParsing:
     """Test complete Vue SFC parsing pipeline."""

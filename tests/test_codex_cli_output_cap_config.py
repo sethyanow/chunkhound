@@ -9,6 +9,9 @@ import pytest
 
 from chunkhound.providers.llm.codex_cli_provider import CodexCLIProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 @dataclass
 class _DummyStdin:

@@ -5,6 +5,11 @@ from pathlib import Path
 
 from chunkhound.core.config.config import Config
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def test_local_config_exclude_list_enables_overlay(tmp_path: Path) -> None:
     cfg_path = tmp_path / ".chunkhound.json"

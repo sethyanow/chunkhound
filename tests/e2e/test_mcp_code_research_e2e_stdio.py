@@ -8,6 +8,9 @@ import pytest
 from tests.utils import SubprocessJsonRpcClient, create_subprocess_exec_safe, get_safe_subprocess_env
 from tests.utils.windows_compat import windows_safe_tempdir
 
+pytestmark = pytest.mark.e2e
+
+
 
 @pytest.mark.asyncio
 async def test_mcp_code_research_uses_codex_cli_via_stdio():

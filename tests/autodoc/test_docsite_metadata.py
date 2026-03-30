@@ -1,6 +1,11 @@
 from chunkhound.autodoc.models import CodeMapperIndex
 from chunkhound.autodoc.site_writer import _render_index_metadata
 
+import pytest
+
+pytestmark = pytest.mark.unit
+
+
 
 def test_render_index_metadata_includes_nested_details() -> None:
     metadata_block = """agent_doc_metadata:

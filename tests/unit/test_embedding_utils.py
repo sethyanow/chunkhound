@@ -4,6 +4,9 @@ import pytest
 
 from chunkhound.core.utils.embedding_utils import format_chunk_for_embedding
 
+pytestmark = pytest.mark.unit
+
+
 
 class TestFormatChunkForEmbedding:
     """Tests for format_chunk_for_embedding function."""

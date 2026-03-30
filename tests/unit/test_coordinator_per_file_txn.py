@@ -5,6 +5,11 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.core.types.common import Language
 from chunkhound.services.batch_processor import ParsedFileResult
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def _pfr(path: Path, chunks: list[dict], ok: bool = True) -> ParsedFileResult:
     return ParsedFileResult(

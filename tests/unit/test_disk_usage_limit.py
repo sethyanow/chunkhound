@@ -17,6 +17,9 @@ from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 from chunkhound.core.types.common import Language
 from chunkhound.services.batch_processor import ParsedFileResult
 
+pytestmark = pytest.mark.integration
+
+
 
 def _create_parsed_file_result(
     file_path: Path,

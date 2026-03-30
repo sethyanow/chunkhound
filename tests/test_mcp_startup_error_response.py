@@ -9,6 +9,11 @@ from unittest.mock import patch
 
 from chunkhound.mcp_server.stdio import _respond_with_startup_error
 
+import pytest
+
+pytestmark = pytest.mark.integration
+
+
 
 def _patch_select(ready_list):
     """Patch select.select to return the given ready list."""

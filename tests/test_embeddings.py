@@ -15,6 +15,9 @@ import pytest
 from chunkhound.embeddings import EmbeddingManager
 from chunkhound.providers.embeddings.openai_provider import OpenAIEmbeddingProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 async def test_official_openai_validation():
     """Test official OpenAI API key validation logic."""

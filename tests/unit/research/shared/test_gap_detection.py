@@ -13,6 +13,9 @@ from chunkhound.services.research.shared.gap_detection import GapDetectionServic
 from chunkhound.services.research.shared.gap_models import UnifiedGap
 from tests.fixtures.fake_providers import FakeLLMProvider
 
+pytestmark = pytest.mark.unit
+
+
 
 # -----------------------------------------------------------------------------
 # Fixtures

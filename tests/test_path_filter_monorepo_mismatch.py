@@ -24,6 +24,9 @@ from chunkhound.core.types.common import Language
 from chunkhound.parsers.parser_factory import create_parser_for_language
 from tests.fixtures.fake_providers import FakeEmbeddingProvider
 
+pytestmark = pytest.mark.integration
+
+
 
 @pytest.mark.asyncio
 async def test_semantic_search_respects_repo_relative_path_filter(tmp_path: Path) -> None:

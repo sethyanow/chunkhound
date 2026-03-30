@@ -6,6 +6,9 @@ from unittest.mock import AsyncMock, patch
 from chunkhound.providers.llm.openai_llm_provider import OpenAILLMProvider
 from chunkhound.interfaces.llm_provider import LLMResponse
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.fixture
 def mock_openai_client():

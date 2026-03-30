@@ -10,6 +10,9 @@ import pytest
 from chunkhound.core.config.config import Config
 from chunkhound.services.realtime_indexing_service import SimpleEventHandler
 
+pytestmark = pytest.mark.integration
+
+
 
 def _git(repo: Path, *args: str) -> subprocess.CompletedProcess:
     return subprocess.run(["git", "-C", str(repo), *args], stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)

@@ -10,6 +10,9 @@ from chunkhound.mcp_server.tools import search_impl
 from chunkhound.database_factory import DatabaseServices
 from chunkhound.embeddings import EmbeddingManager
 
+pytestmark = pytest.mark.unit
+
+
 
 @pytest.mark.asyncio
 async def test_semantic_search_uses_configured_provider():
