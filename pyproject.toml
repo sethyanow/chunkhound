@@ -188,6 +188,7 @@ addopts = [
     "--verbose",
     "--tb=short",
     "--strict-markers",
+    "-m", "unit",
 ]
 filterwarnings = [
     # Suppress SWIG-related warnings from tree-sitter bindings
@@ -205,6 +206,8 @@ markers = [
     "slow: marks tests as slow (deselect with '-m \"not slow\"')",
     "integration: marks tests as integration tests",
     "unit: marks tests as unit tests",
+    "e2e: marks tests as end-to-end tests (daemon, MCP server, full pipeline)",
+    "acceptance: marks acceptance tests requiring VCR cassettes or live API access",
 ]
 
 [dependency-groups]

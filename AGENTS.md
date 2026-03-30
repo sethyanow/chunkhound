@@ -23,9 +23,12 @@ Purpose: Transform codebases into searchable knowledge bases for AI assistants
 # Development
 lint:      uv run ruff check chunkhound
 typecheck: uv run mypy chunkhound
-test:      uv run pytest
+test:      uv run pytest                                # unit tests only (default)
+test-intg: uv run pytest -m integration                 # integration tests
+test-e2e:  uv run pytest -m e2e                         # e2e tests
+test-all:  uv run pytest -m "unit or integration or e2e"  # everything (minus acceptance)
+test-acc:  uv run pytest -m acceptance                    # acceptance tests (need VCR cassettes)
 smoke:     uv run pytest tests/test_smoke.py -v -n auto  # MANDATORY before commits
-full:      uv run pytest tests/ -v                     # MANDATORY before pushing to a PR
 format:    uv run ruff format chunkhound
 
 # Running
