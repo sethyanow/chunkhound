@@ -4,9 +4,10 @@ title: 'LSP Client Manager: Transport, Operations, State, Capability Gating'
 status: open
 type: task
 priority: 1
-parent: ch-7j0
 depends_on: [ch-jsj]
+parent: ch-7j0
 ---
+
 
 ## Context
 Phase 1 of ch-8e7 (LSP + Graph Intelligence Layer). First implementation task after ch-jsj (path scoping + git-aware indexing). Delivers the standalone LSP client module that all subsequent phases depend on — Phase 2 (index population) calls this client to extract symbols/edges, Phase 3 (MCP tools) exposes it for live queries.
@@ -39,7 +40,7 @@ Capability gating: Parse initialize response capabilities → set[LSPCapability]
 
 Connection pool: Keyed by (language_id, workspace_root). Lazy spawn. stop/stop_all for cleanup.
 
-Registry: Entry for every Language enum member with a tree-sitter grammar (35 languages). Languages without well-known servers get command=None.
+Registry: Entry for every Language enum member with a tree-sitter grammar (32 languages — 35 enum members minus TEXT, PDF, UNKNOWN). Languages without well-known servers get command=None.
 
 Pyright available locally: `/Users/seth/.local/share/mise/installs/npm-pyright/1.1.408/bin/pyright`
 Note: pyright LSP mode is `pyright-langserver --stdio` (separate binary from the CLI checker).
@@ -59,8 +60,13 @@ File: `tests/test_lsp_client.py::test_spawn_and_initialize_pyright`
 - Run: `uv run pytest tests/test_lsp_client.py::test_spawn_and_initialize_pyright -v` → FAIL (no implementation)
 
 ### Step 3: GREEN — JSON-RPC transport + spawn + initialize
-- `protocol.py`: `JsonRpcTransport` — `create(command, args, env, cwd)` class method, `send_request(method, params) → dict`, `send_notification(method, params)`, `close()`. Content-Length header parsing. Request ID auto-increment. Async read loop.
-- `client.py`: `LSPClient.start(config, workspace_root)` — spawn via transport, send `initialize` request (processId, rootUri, capabilities), await response, send `initialized` notification, cache server capabilities, set state READY.
+- `protocol.py`: `JsonRpcTransport` — `create(command, args, env, cwd)` class method, `send_request(method, params, timeout) → dict`, `send_notification(method, params)`, `close()`. Content-Length header framing. Request ID auto-increment. Async read loop.
+- **Content-Length MUST use byte length** (`len(payload.encode('utf-8'))`), not character count — non-ASCII in paths/symbols breaks stream otherwise.
+- **Concurrent request support:** `_pending: dict[int, asyncio.Future]` keyed by request ID. Read loop routes responses by ID to correct Future. Messages without `id` but with `method` are notifications → route to notification handler (default: discard-with-log, pluggable for Phase 3 diagnostics).
+- **Malformed JSON in read loop:** catch JSONDecodeError → log + skip, don't kill transport.
+- **Per-request timeout:** `send_request` accepts optional `timeout` (default from config). On timeout, remove Future from pending dict, raise TimeoutError.
+- `client.py`: `LSPClient.start(config, workspace_root)` — guard against double-call (raise if state != NOT_STARTED). Spawn via transport, send `initialize` request with timeout (processId, rootUri, capabilities), await response, send `initialized` notification, cache server capabilities, set state READY. Catch FileNotFoundError/PermissionError on spawn → DEGRADED with structured reason.
+- **URI construction:** use `pathlib.Path(...).as_uri()` — never f-string construction. Handles spaces, unicode, special chars.
 - Run test → PASS
 
 ### Step 4: RED — Test state tracking
@@ -88,8 +94,8 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 - `test_go_to_definition` → position on function call resolves to function def location
 - `test_find_references` → function name position returns ≥1 reference
 - `test_hover` → variable position returns type info in markup
-- `test_incoming_calls` → function returns callers as CallHierarchyItems
-- `test_outgoing_calls` → function returns callees
+- `test_incoming_calls` → function returns callers as CallHierarchyItems (two-step: prepareCallHierarchy first, then callHierarchy/incomingCalls)
+- `test_outgoing_calls` → function returns callees (two-step: prepareCallHierarchy first, then callHierarchy/outgoingCalls)
 - `test_go_to_implementation` → class method returns implementation location(s)
 - `test_get_diagnostics` → returns list (may be empty for valid code; include a deliberate error in fixture to test non-empty)
 - Run → FAIL (operations not implemented)
@@ -97,7 +103,8 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 ### Step 9: GREEN — Implement 8 operations
 - `client.py` methods: `document_symbols(uri)`, `go_to_definition(uri, line, char)`, `find_references(uri, line, char)`, `hover(uri, line, char)`, `incoming_calls(uri, line, char)`, `outgoing_calls(uri, line, char)`, `go_to_implementation(uri, line, char)`, `get_diagnostics(uri)`.
 - Each: capability gate → build LSP-spec params (TextDocumentIdentifier, Position) → transport.send_request → parse response into typed dataclass.
-- For diagnostics: two strategies — (a) pull via `textDocument/diagnostic` if server supports, (b) collect from `textDocument/publishDiagnostics` notifications. Check pyright's capabilities to determine which.
+- For diagnostics: use pull model (`textDocument/diagnostic`, LSP 3.17+) — pyright supports it. Push notifications (`publishDiagnostics`) arrive via transport's notification handler but are not the primary API. Each operation must catch transport errors and transition client to DEGRADED.
+- For incoming/outgoing calls: two-step — `textDocument/prepareCallHierarchy` returns CallHierarchyItem, then `callHierarchy/incomingCalls` or `callHierarchy/outgoingCalls` uses that item.
 - Run tests → PASS
 
 ### Step 10: RED — Test connection pooling
@@ -108,6 +115,8 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 
 ### Step 11: GREEN — Connection pool
 - `client.py` or `pool.py`: `LSPClientPool` — `_clients: dict[tuple[str, str], LSPClient]`, `async get(language_id, workspace_root) → LSPClient` (lazy spawn from registry config), `async stop(language_id, workspace_root)`, `async stop_all()`
+- **State check on get():** before returning cached client, verify state is READY. If DEGRADED/STOPPED, remove and spawn fresh.
+- **Concurrency guard:** asyncio.Lock per key to prevent double-spawn when concurrent coroutines call `get()` for same (language, workspace).
 - Run tests → PASS
 
 ### Step 12: RED — Test language configs
@@ -116,7 +125,7 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 - Run → FAIL
 
 ### Step 13: GREEN — Registry
-- `registry.py`: `LANGUAGE_SERVER_REGISTRY: dict[str, ServerConfig]`. Key entries: pyright (python), typescript-language-server (ts/js/tsx/jsx), gopls (go), rust-analyzer (rust), clangd (c/cpp/objc), zls (zig), bash-language-server (bash), kotlin-language-server (kotlin), lua-language-server (lua), phpactor (php), svelte-language-server (svelte), vue-language-server (vue), sourcekit-lsp (swift), dart language-server (dart), elixir-ls (elixir), haskell-language-server (haskell), terraform-ls (hcl), jdtls (java), groovy-language-server (groovy), taplo (toml), yaml-language-server (yaml), vscode-json-languageserver (json), marksman (markdown), sqls (sql). Languages without viable server: command=None (makefile, matlab).
+- `registry.py`: `LANGUAGE_SERVER_REGISTRY: dict[str, ServerConfig]`. 32 entries (all Language enum members with tree-sitter grammars). Key entries: pyright (python), typescript-language-server (ts/js/tsx/jsx), gopls (go), rust-analyzer (rust), clangd (c/cpp/objc), zls (zig), bash-language-server (bash), kotlin-language-server (kotlin), lua-language-server (lua), phpactor (php), svelte-language-server (svelte), vue-language-server (vue), sourcekit-lsp (swift), dart language-server (dart), elixir-ls (elixir), haskell-language-server (haskell), terraform-ls (hcl), jdtls (java), groovy-language-server (groovy), taplo (toml), yaml-language-server (yaml), vscode-json-languageserver (json), marksman (markdown), sqls (sql), csharp-ls or omnisharp (csharp). Languages without viable server: command=None (makefile, matlab).
 - Run tests → PASS
 
 ### Step 14: Final verification
@@ -130,9 +139,35 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 - [ ] documentSymbol, definition, references, implementation, incomingCalls, outgoingCalls, hover, diagnostics all return valid results via pyright
 - [ ] Server state tracking works (not_started → initializing → ready, and degraded with structured reason)
 - [ ] Capability gating: calls against unadvertised capabilities return graceful error, not crash
+- [ ] Connection pool reuses existing clients and respawns after stop
+- [ ] Per-operation timeout: operations exceeding timeout raise TimeoutError, don't hang
 - [ ] `uv run pytest tests/test_lsp_client.py -v` → all pass
 - [ ] Zero `chunkhound.*` imports in `chunkhound/lsp/` module
 - [ ] All existing tests still pass (zero regression)
+
+## Key Considerations
+
+**Test strategy:** All integration tests require `pyright-langserver` on PATH. Use `pytest.mark.skipif(not shutil.which("pyright-langserver"), reason="pyright not installed")` on test class/module. Fixture: temp dir with `tests/fixtures/lsp_test_sample.py` containing class + function + call + type-annotated variable + deliberate error (for diagnostics).
+
+**JsonRpcTransport failure modes:**
+- Content-Length must be byte-counted, not char-counted (non-ASCII breaks stream)
+- Server can send hundreds of notifications during init (pyright sends $/progress, publishDiagnostics per file). Default handler must discard — no unbounded queue
+- Malformed JSON in read loop: log + skip, don't crash transport
+- Pending request with no response: per-request timeout cleans up Future, raises TimeoutError
+- Response with unknown ID: discard with warning
+
+**LSPClient failure modes:**
+- Binary not found on spawn: FileNotFoundError → DEGRADED with `{"code": "spawn_failed", "detail": "..."}`
+- Server crashes during initialize: process monitor detects exit → DEGRADED. Initialize Future must have timeout (10-15s)
+- Double `start()` call: guard with state check, raise if not NOT_STARTED
+- Operation on crashed server: transport write fails → catch, transition to DEGRADED, raise LSPTransportError
+
+**LSPClientPool failure modes:**
+- Stale READY: client in pool shows READY but subprocess exited (race between exit and monitor). `get()` must re-check state
+- Double-spawn: concurrent `get()` calls for same key. asyncio.Lock per key prevents this
+- Resource exhaustion: each LSP server uses 200-500MB. Pool is lazy (spawn on use), but Phase 2 population across many languages could be expensive. Future consideration: max concurrent server limit
+
+**Diagnostics strategy:** Pull model (`textDocument/diagnostic`, LSP 3.17+). Pyright supports it. Push notifications (`publishDiagnostics`) arrive via notification handler but are supplementary, not the primary query path.
 
 ## Anti-Patterns
 - NO blocking I/O — all operations async
@@ -140,3 +175,10 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 - NO `chunkhound.*` imports — standalone module
 - NO hardcoded server paths — registry-driven with command=None for unavailable servers
 - NO print() in any module code (inherited from project rules)
+- NO f-string URI construction — use pathlib.Path.as_uri() for file:// URIs
+- NO character-count Content-Length — always byte-count with encode('utf-8')
+- NO single pending request slot — must support concurrent in-flight requests via ID-keyed dict
+
+## Log
+
+- [2026-03-30T10:11:38Z] [Seth] SRE review (fresh session): Fixed 35→32 language count, added CSHARP to registry, specified concurrent request support in transport (ID-keyed Future dict), documented two-step call hierarchy protocol, resolved diagnostics to pull model, added pool state-check and asyncio.Lock for concurrent access, added two new success criteria (pool reuse/respawn, per-operation timeout), added full failure catalog to Key Considerations, added 3 new anti-patterns (URI construction, byte-count Content-Length, concurrent request support). APPROVE — all gaps addressed in skeleton.
