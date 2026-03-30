@@ -12,6 +12,7 @@ owner: Seth
 
 
 
+
 ## Context
 Discovered during ch-52s test categorization. Two test files were hidden behind a conftest.py env-var skip (`CHUNKHOUND_RUN_INTEGRATION_TESTS`). When that mechanism was removed (replaced by `-m unit` default in addopts), these tests started running and failing because they need live API keys (OpenAI, VoyageAI).
 
@@ -90,3 +91,4 @@ R8. Fix ty lint errors in `test_mcp_integration.py` (4 unresolved-attribute erro
 ## Log
 
 - [2026-03-30T21:00:52Z] [Seth] VCR cassettes recorded and verified. 12 cassettes against VoyageAI voyage-4. Replay passes without API keys (25s). Auth headers filtered clean. vcr_config record_mode bug found and fixed mid-task (fixture overrode CLI flag). VoyageAI SDK uses requests not httpx — VCR patches both.
+- [2026-03-30T21:02:07Z] [Seth] Debrief: vcr_config record_mode fixture-overrides-CLI gotcha was the main surprise. VoyageAI SDK uses requests not httpx. SRE caught config restoration gap. User corrections: use VoyageAI not OpenAI, check git history before speculating, use deepwiki not web search. Memories saved: reference_vcr_cassettes, feedback_check_before_guessing, updated project_test_tiers.
