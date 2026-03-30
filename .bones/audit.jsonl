@@ -45,3 +45,6 @@
 {"timestamp":"2026-03-30T12:34:23.693017+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-7j0","details":{"kind":"parent-child","to":"ch-a58"}}
 {"timestamp":"2026-03-30T12:34:23.693500+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-7j0","details":{"kind":"blocks","to":"ch-a58"}}
 {"timestamp":"2026-03-30T12:35:38.565533+00:00","actor":"Seth","event_type":"logged","task_id":"ch-a58","details":{"message":"Task scoped from hot context after ch-u1s closure. Covers ch-7j0 criteria 6-8 (symbols table, symbol_edges table, schema migration). Codebase verified: _executor_create_schema at L416, _executor_create_indexes at L661, schema version currently 1. Purely additive — no existing table changes."}}
+{"timestamp":"2026-03-30T13:10:57.785238+00:00","actor":"Seth","event_type":"updated","task_id":"ch-a58","details":{"status":"active"}}
+{"timestamp":"2026-03-30T13:30:13.550407+00:00","actor":"Seth","event_type":"created","task_id":"ch-52s","details":{}}
+{"timestamp":"2026-03-30T13:30:17.488217+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-8e7","details":{"kind":"blocks","to":"ch-52s"}}

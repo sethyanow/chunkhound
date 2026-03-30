@@ -507,6 +507,46 @@ class DuckDBProvider(SerialDatabaseProvider):
                 CREATE INDEX IF NOT EXISTS idx_embeddings_1536_chunk_id ON embeddings_1536(chunk_id)
             """)
 
+            # Create sequence and table for symbols (LSP + Graph Intelligence)
+            conn.execute("CREATE SEQUENCE IF NOT EXISTS symbols_id_seq")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS symbols (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('symbols_id_seq'),
+                    fqn TEXT NOT NULL,
+                    name TEXT NOT NULL,
+                    kind TEXT NOT NULL,
+                    language TEXT,
+                    file_id INTEGER REFERENCES files(id),
+                    file_path TEXT,
+                    range_start INTEGER,
+                    range_end INTEGER,
+                    type_signature TEXT,
+                    parent_fqn TEXT,
+                    confidence FLOAT DEFAULT 1.0,
+                    lsp_server TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+                    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
+            # Create sequence and table for symbol edges
+            conn.execute("CREATE SEQUENCE IF NOT EXISTS symbol_edges_id_seq")
+            conn.execute("""
+                CREATE TABLE IF NOT EXISTS symbol_edges (
+                    id INTEGER PRIMARY KEY DEFAULT nextval('symbol_edges_id_seq'),
+                    from_symbol_id INTEGER NOT NULL REFERENCES symbols(id),
+                    from_fqn TEXT,
+                    from_file TEXT,
+                    to_symbol_id INTEGER NOT NULL REFERENCES symbols(id),
+                    to_fqn TEXT,
+                    to_file TEXT,
+                    edge_kind TEXT NOT NULL,
+                    confidence FLOAT DEFAULT 1.0,
+                    lsp_server TEXT,
+                    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+                )
+            """)
+
             # Handle schema migrations for existing databases
             self._executor_migrate_schema(conn, state)
 
@@ -515,9 +555,9 @@ class DuckDBProvider(SerialDatabaseProvider):
             if current_version == 0:
                 conn.execute("""
                     INSERT INTO schema_version (version, description)
-                    VALUES (1, 'Initial schema')
+                    VALUES (2, 'Initial schema with symbols')
                 """)
-                logger.info("Schema version initialized to 1")
+                logger.info("Schema version initialized to 2")
 
             logger.info(
                 "DuckDB schema created successfully with multi-dimension support"
@@ -614,6 +654,16 @@ class DuckDBProvider(SerialDatabaseProvider):
             # Add metadata column if it doesn't exist (for databases without size/signature migration)
             conn.execute("ALTER TABLE chunks ADD COLUMN IF NOT EXISTS metadata TEXT")
 
+            # v1 → v2: symbols + symbol_edges tables (added by CREATE IF NOT EXISTS
+            # in _executor_create_schema; this migration just bumps the version)
+            current_version = self._get_schema_version(conn)
+            if current_version == 1:
+                conn.execute("""
+                    INSERT INTO schema_version (version, description)
+                    VALUES (2, 'Add symbols and symbol_edges tables')
+                """)
+                logger.info("Schema migrated from v1 to v2 (symbols + symbol_edges)")
+
         except Exception as e:
             logger.error(f"Failed to migrate schema: {e}")
             raise
@@ -681,6 +731,37 @@ class DuckDBProvider(SerialDatabaseProvider):
             )
 
             # Embedding indexes are created per-table in _executor_ensure_embedding_table_exists()
+
+            # Symbol indexes
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbols_fqn ON symbols(fqn)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbols_file_id ON symbols(file_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbols_file_path ON symbols(file_path)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind)"
+            )
+
+            # Symbol edge indexes
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_from_symbol_id ON symbol_edges(from_symbol_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_to_symbol_id ON symbol_edges(to_symbol_id)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_edge_kind ON symbol_edges(edge_kind)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_from_fqn ON symbol_edges(from_fqn)"
+            )
+            conn.execute(
+                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_to_fqn ON symbol_edges(to_fqn)"
+            )
 
             logger.info("DuckDB indexes created successfully")
 

@@ -1,11 +1,12 @@
 ---
 id: ch-a58
 title: DuckDB symbols + symbol_edges schema
-status: open
+status: active
 type: task
 priority: 1
 parent: ch-7j0
 ---
+
 
 
 
@@ -36,7 +37,9 @@ Key constraints:
 - symbols: fqn, file_id, file_path, kind
 - symbol_edges: from_symbol_id, to_symbol_id, edge_kind, from_fqn, to_fqn
 
-**Schema version:** Bump from 1→2. Fresh DBs stamp v2. Existing v1 DBs get additive tables via CREATE IF NOT EXISTS + version bump in `_executor_migrate_schema`.
+**Schema version:** Bump from 1→2. Two code paths:
+- Fresh DBs (version 0): change L516 stamp from `VALUES (1, ...)` to `VALUES (2, 'Initial schema with symbols')`.
+- Existing v1 DBs: add `if current_version == 1:` guard in `_executor_migrate_schema` → insert version 2 record. Tables already created by `CREATE IF NOT EXISTS` in `_executor_create_schema`.
 
 ## Implementation
 
@@ -51,7 +54,7 @@ Same file. Test: `test_symbol_edges_table_created_on_connect` — verify `symbol
 Test: `test_symbol_indexes_created` — after connect, verify indexes on: symbols(fqn, file_id, file_path, kind), symbol_edges(from_symbol_id, to_symbol_id, edge_kind). Query `duckdb_indexes()`.
 
 ### Step 4: Write failing test — schema version
-Test: `test_schema_version_is_2` — fresh DB → version 2. Test: `test_v1_db_migrated_to_v2` — create v1 DB (files+chunks only), reconnect, verify symbols exist + version = 2.
+Test: `test_schema_version_is_2` — fresh DB → version 2. Test: `test_v1_db_migrated_to_v2` — setup: raw `duckdb.connect(tmp_path)`, execute v1 DDL (CREATE schema_version + INSERT version 1, CREATE files/chunks/embeddings tables with sequences), close connection. Then DuckDBProvider.connect(tmp_path) → verify symbols/symbol_edges tables exist + `_get_schema_version == 2`.
 
 ### Step 5: Run tests — confirm failures
 Command: `uv run pytest tests/test_schema_symbols.py -v`
@@ -68,7 +71,7 @@ Same method, after symbols. Add: `CREATE SEQUENCE IF NOT EXISTS symbol_edges_id_
 `_executor_create_indexes` after chunk indexes (~L682). Add all symbol/edge indexes.
 
 ### Step 9: Bump schema version
-Fresh DBs: stamp v2. Existing v1: add version bump in `_executor_migrate_schema` after checking `_get_schema_version < 2`.
+Two changes: (a) In `_executor_create_schema` L516, change version stamp from 1 to 2 for fresh DBs. (b) In `_executor_migrate_schema`, after existing column migration, add: `if self._get_schema_version(conn) == 1:` → INSERT version 2 record with description 'Add symbols and symbol_edges tables'.
 
 ### Step 10: Run tests — confirm pass
 Command: `uv run pytest tests/test_schema_symbols.py -v`
@@ -91,6 +94,18 @@ Command: `uv run pytest tests/test_smoke.py -v -n auto`
 - NO changes to existing tables (files, chunks, embeddings) — additive only
 - NO FK between symbols↔chunks — resolution by file_id + line range overlap
 - NO blocking I/O — schema DDL runs in executor thread (existing pattern)
+
+## Key Considerations
+
+**DDL ordering (symbol_edges → symbols FK):** symbol_edges DDL references `symbols(id)`. Must appear AFTER symbols DDL in `_executor_create_schema`. Misordering causes CREATE TABLE failure. Verified: `_executor_create_schema` runs sequentially — add symbols first, then symbol_edges.
+
+**Connect call order (schema → indexes):** `_executor_connect` calls `_executor_create_schema` (L195) then `_executor_create_indexes` (L198) sequentially. New indexes added to `_executor_create_indexes` will always find the tables. No ordering risk.
+
+**Crash resilience:** All DDL operations use `IF NOT EXISTS` (sequences, tables, indexes). A crash mid-creation leaves a partial schema that completes cleanly on next connect. Version PK prevents duplicate stamps. No additional transaction wrapping needed — the existing pattern handles this.
+
+**Concurrent migration:** DuckDB single-writer model + executor thread pattern serialize writes. Multiple processes see DuckDB's write lock, not concurrent migration races. Version PK provides a safety net even if serialization failed.
+
+**v1 migration ordering:** New version bump code goes AFTER existing column migration in `_executor_migrate_schema`. If column migration fails, it raises — version bump never runs. If column migration succeeds but version bump fails, next connect retries the version bump only (column migration is no-op). Both paths are clean.
 
 ## Log
 
