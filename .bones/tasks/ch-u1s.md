@@ -1,13 +1,14 @@
 ---
 id: ch-u1s
 title: 'LSP Client Manager: Transport, Operations, State, Capability Gating'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-jsj]
 parent: ch-7j0
 ---
+
 
 
 
@@ -137,16 +138,16 @@ File: `tests/test_lsp_client.py`, fixture: `tests/fixtures/lsp_test_sample.py` (
 - Commit and push
 
 ## Success Criteria
-- [ ] LSP client manager spawns and initializes pyright successfully
-- [ ] LSP client manager has configs for all languages with tree-sitter grammars in pyproject.toml
-- [ ] documentSymbol, definition, references, implementation, incomingCalls, outgoingCalls, hover, diagnostics all return valid results via pyright
-- [ ] Server state tracking works (not_started → initializing → ready, and degraded with structured reason)
-- [ ] Capability gating: calls against unadvertised capabilities return graceful error, not crash
-- [ ] Connection pool reuses existing clients and respawns after stop
-- [ ] Per-operation timeout: operations exceeding timeout raise TimeoutError, don't hang
-- [ ] `uv run pytest tests/test_lsp_client.py -v` → all pass
-- [ ] Zero `chunkhound.*` imports in `chunkhound/lsp/` module
-- [ ] All existing tests still pass (zero regression)
+- [x] LSP client manager spawns and initializes pyright successfully
+- [x] LSP client manager has configs for all languages with tree-sitter grammars in pyproject.toml
+- [x] documentSymbol, definition, references, implementation, incomingCalls, outgoingCalls, hover, diagnostics all return valid results via pyright
+- [x] Server state tracking works (not_started → initializing → ready, and degraded with structured reason)
+- [x] Capability gating: calls against unadvertised capabilities return graceful error, not crash
+- [x] Connection pool reuses existing clients and respawns after stop
+- [x] Per-operation timeout: operations exceeding timeout raise TimeoutError, don't hang
+- [x] `uv run pytest tests/test_lsp_client.py -v` → all pass
+- [x] Zero `chunkhound.*` imports in `chunkhound/lsp/` module
+- [x] All existing tests still pass (zero regression)
 
 ## Key Considerations
 

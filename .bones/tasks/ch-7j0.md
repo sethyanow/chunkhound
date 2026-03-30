@@ -26,18 +26,18 @@ Scoped to parent epic R1, R2, R10:
 - R10: Path scoping fix + git-aware indexing
 
 ## Success Criteria
-- [ ] LSP client manager spawns and initializes pyright successfully
-- [ ] LSP client manager has configs for all languages with tree-sitter grammars in pyproject.toml
-- [ ] documentSymbol, definition, references, implementation, incomingCalls, outgoingCalls, hover, diagnostics all return valid results via pyright
-- [ ] Server state tracking works (not_started → initializing → ready, and degraded with structured reason)
-- [ ] Capability gating: calls against unadvertised capabilities return graceful error, not crash
+- [x] LSP client manager spawns and initializes pyright successfully
+- [x] LSP client manager has configs for all languages with tree-sitter grammars in pyproject.toml
+- [x] documentSymbol, definition, references, implementation, incomingCalls, outgoingCalls, hover, diagnostics all return valid results via pyright
+- [x] Server state tracking works (not_started → initializing → ready, and degraded with structured reason)
+- [x] Capability gating: calls against unadvertised capabilities return graceful error, not crash
 - [ ] `symbols` table created with correct schema and indexes
 - [ ] `symbol_edges` table created with correct schema and indexes
 - [ ] Schema migration integrates with existing `_executor_migrate_schema` pattern
 - [x] Semantic search with path filter returns ONLY results within that path prefix (no leakage)
 - [x] RealtimeIndexingService reflects committed + staged state
 - [x] All existing tests still pass (zero regression)
-- [ ] `uv run pytest tests/test_lsp_client.py -v` → all pass
+- [x] `uv run pytest tests/test_lsp_client.py -v` → all pass
 - [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
 
 ## Anti-Patterns
