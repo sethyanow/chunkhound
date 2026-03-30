@@ -50,3 +50,6 @@
 {"timestamp":"2026-03-30T13:30:17.488217+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-8e7","details":{"kind":"blocks","to":"ch-52s"}}
 {"timestamp":"2026-03-30T13:39:01.376528+00:00","actor":"Seth","event_type":"closed","task_id":"ch-a58","details":{"notes":null}}
 {"timestamp":"2026-03-30T13:39:43.079589+00:00","actor":"Seth","event_type":"logged","task_id":"ch-a58","details":{"message":"Debrief: DDL was clean additive work. SRE caught version guard ambiguity (== 1 vs < 2), fixed before implementation. execute_query returns dicts not tuples — alias aggregates. Discovered test suite is 2307 tests mixed unit/integration/e2e, 6+ min runtime. Created ch-52s P0 to fix. User correction: stop deferring discovered issues as 'separate concern.' Phase 1 criteria all checked — acceptance task pending after ch-52s resolved."}}
+{"timestamp":"2026-03-30T13:52:37.877635+00:00","actor":"Seth","event_type":"created","task_id":"ch-1j2","details":{}}
+{"timestamp":"2026-03-30T13:52:41.288407+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-7j0","details":{"kind":"parent-child","to":"ch-1j2"}}
+{"timestamp":"2026-03-30T13:52:41.289959+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-7j0","details":{"kind":"blocks","to":"ch-1j2"}}

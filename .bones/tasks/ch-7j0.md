@@ -4,9 +4,11 @@ title: 'Phase 1: Foundation — LSP Client + Schema + Fixes'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-jsj, ch-u1s, ch-a58]
+depends_on: [ch-jsj, ch-u1s, ch-a58, ch-1j2]
 parent: ch-8e7
 ---
+
+
 
 
 
