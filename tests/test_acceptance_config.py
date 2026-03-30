@@ -9,11 +9,11 @@ import pytest
 pytestmark = pytest.mark.unit
 
 
-def test_acceptance_config_defaults_to_real_openai_url(acceptance_embedding_config):
-    """Without env vars, fixture returns real OpenAI URL for cassette matching."""
-    assert acceptance_embedding_config["base_url"] == "https://api.openai.com/v1"
-    assert acceptance_embedding_config["model"] == "text-embedding-3-small"
-    assert acceptance_embedding_config["provider"] == "openai"
+def test_acceptance_config_defaults_to_real_voyageai_url(acceptance_embedding_config):
+    """Without env vars, fixture returns real VoyageAI URL for cassette matching."""
+    assert acceptance_embedding_config["base_url"] == "https://api.voyageai.com/v1"
+    assert acceptance_embedding_config["model"] == "voyage-4"
+    assert acceptance_embedding_config["provider"] == "voyageai"
 
 
 def test_acceptance_config_has_placeholder_key_by_default(acceptance_embedding_config):
@@ -44,8 +44,8 @@ def test_acceptance_config_partial_env_override(monkeypatch, acceptance_embeddin
 
     config = acceptance_embedding_config_factory()
     assert config["api_key"] == "sk-just-key"
-    assert config["base_url"] == "https://api.openai.com/v1"  # default preserved
-    assert config["model"] == "text-embedding-3-small"  # default preserved
+    assert config["base_url"] == "https://api.voyageai.com/v1"  # default preserved
+    assert config["model"] == "voyage-4"  # default preserved
 
 
 def test_acceptance_config_compatible_with_build_embedding_config(acceptance_embedding_config):

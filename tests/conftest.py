@@ -24,9 +24,9 @@ def pytest_collection_modifyitems(config, items):
 # Env vars override for recording (user provides real API key).
 _ACCEPTANCE_EMBEDDING_DEFAULTS: dict[str, str | int] = {
     "api_key": "vcr-replay-placeholder",
-    "provider": "openai",
-    "model": "text-embedding-3-small",
-    "base_url": "https://api.openai.com/v1",
+    "provider": "voyageai",
+    "model": "voyage-4",
+    "base_url": "https://api.voyageai.com/v1",
     "rerank_model": "",
     "rerank_url": "",
     "rerank_format": "auto",
