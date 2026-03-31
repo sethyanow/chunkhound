@@ -225,3 +225,119 @@ async def test_semantic_search_fuzzy_path_restores_substring(tmp_path: Path) -> 
         f"fuzzy_path=True should match nested paths via substring, "
         f"but only found: {paths}"
     )
+
+
+@pytest.mark.asyncio
+async def test_find_similar_chunks_path_prefix_no_nested_leakage(
+    tmp_path: Path,
+) -> None:
+    """find_similar_chunks(path_filter="src/auth") must not return chunks from vendor/src/auth/.
+
+    Bug: _executor_find_similar_chunks uses LIKE '%src/auth/%' (substring)
+    instead of LIKE 'src/auth/%' (prefix), leaking results through multi-hop
+    expansion in semantic search.
+    """
+    search_service, db = await _setup_path_scoping_fixture(tmp_path)
+
+    # Use search_service to find a seed chunk (it handles embedding generation)
+    seed_results, _ = await search_service.search_semantic(
+        query="authenticate user",
+        page_size=1,
+        offset=0,
+        path_filter="src/auth",
+        force_strategy="single_hop",
+    )
+    assert seed_results, "Should find at least one chunk in src/auth/"
+    seed_chunk_id = seed_results[0]["chunk_id"]
+
+    provider = FakeEmbeddingProvider()
+
+    # Now find similar chunks with path_filter — should NOT leak
+    neighbors = db.find_similar_chunks(
+        chunk_id=seed_chunk_id,
+        provider=provider.name,
+        model=provider.model,
+        limit=10,
+        path_filter="src/auth",
+    )
+
+    for neighbor in neighbors:
+        file_path = neighbor.get("file_path", "")
+        assert file_path.startswith("src/auth/"), (
+            f"Leakage: find_similar_chunks result '{file_path}' does not start "
+            f"with 'src/auth/' — substring LIKE match in _executor_find_similar_chunks"
+        )
+
+
+@pytest.mark.asyncio
+async def test_find_similar_chunks_fuzzy_path_allows_substring(
+    tmp_path: Path,
+) -> None:
+    """find_similar_chunks(path_filter="src/auth", fuzzy_path=True) uses substring match.
+
+    When fuzzy_path=True, find_similar_chunks should match paths containing
+    the filter anywhere (e.g., vendor/src/auth/), matching the behavior of
+    search_semantic with fuzzy_path=True.
+    """
+    search_service, db = await _setup_path_scoping_fixture(tmp_path)
+
+    # Use search_service to find a seed chunk
+    seed_results, _ = await search_service.search_semantic(
+        query="authenticate user",
+        page_size=1,
+        offset=0,
+        path_filter="src/auth",
+        force_strategy="single_hop",
+    )
+    assert seed_results, "Should find at least one chunk in src/auth/"
+    seed_chunk_id = seed_results[0]["chunk_id"]
+
+    provider = FakeEmbeddingProvider()
+
+    # With fuzzy_path=True, should match vendor/src/auth/ too
+    neighbors = db.find_similar_chunks(
+        chunk_id=seed_chunk_id,
+        provider=provider.name,
+        model=provider.model,
+        limit=10,
+        path_filter="src/auth",
+        fuzzy_path=True,
+    )
+
+    paths = {n.get("file_path", "") for n in neighbors}
+    has_nested = any("vendor/" in p for p in paths)
+    assert has_nested, (
+        f"fuzzy_path=True should match nested paths via substring in "
+        f"find_similar_chunks, but only found: {paths}"
+    )
+
+
+@pytest.mark.asyncio
+async def test_search_by_embedding_path_prefix_no_nested_leakage(
+    tmp_path: Path,
+) -> None:
+    """search_by_embedding(path_filter="src/auth") must use prefix match.
+
+    Same substring LIKE bug as find_similar_chunks — uses '%path%'
+    instead of 'path%'.
+    """
+    search_service, db = await _setup_path_scoping_fixture(tmp_path)
+
+    provider = FakeEmbeddingProvider()
+    embedding = (await provider.embed(["authenticate user"]))[0]
+
+    results = db.search_by_embedding(
+        query_embedding=embedding,
+        provider=provider.name,
+        model=provider.model,
+        limit=10,
+        path_filter="src/auth",
+    )
+
+    assert results, "Should find results in src/auth/"
+    for result in results:
+        file_path = result.get("file_path", "")
+        assert file_path.startswith("src/auth/"), (
+            f"Leakage: search_by_embedding result '{file_path}' does not start "
+            f"with 'src/auth/' — substring LIKE match in _executor_search_by_embedding"
+        )

@@ -249,6 +249,7 @@ class DatabaseProvider(Protocol):
         limit: int = 10,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> list[dict[str, Any]]:
         """Find chunks similar to the given chunk using its embedding.
 
@@ -259,6 +260,7 @@ class DatabaseProvider(Protocol):
             limit: Maximum number of results to return
             threshold: Optional similarity threshold
             path_filter: Optional relative path to limit search scope
+            fuzzy_path: If True, use substring matching instead of prefix
 
         Returns:
             List of similar chunks with scores and metadata
@@ -273,6 +275,7 @@ class DatabaseProvider(Protocol):
         limit: int = 10,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> list[dict[str, Any]]:
         """Find chunks similar to the given embedding vector.
 
@@ -283,6 +286,7 @@ class DatabaseProvider(Protocol):
             limit: Maximum number of results to return
             threshold: Optional similarity threshold
             path_filter: Optional relative path to limit search scope
+            fuzzy_path: If True, use substring matching instead of prefix
 
         Returns:
             List of similar chunks with scores and metadata

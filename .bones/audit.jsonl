@@ -80,3 +80,4 @@
 {"timestamp":"2026-03-31T01:42:56.582639+00:00","actor":"Seth","event_type":"created","task_id":"ch-5b3","details":{}}
 {"timestamp":"2026-03-31T01:43:00.753354+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-0um","details":{"kind":"parent-child","to":"ch-5b3"}}
 {"timestamp":"2026-03-31T01:43:00.754543+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-0um","details":{"kind":"blocks","to":"ch-5b3"}}
+{"timestamp":"2026-03-31T02:14:04.862853+00:00","actor":"Seth","event_type":"updated","task_id":"ch-u62","details":{"status":"active"}}

@@ -2337,6 +2337,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         limit: int = 10,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> list[dict[str, Any]]:
         """Find chunks similar to the given chunk using its embedding."""
         return self._execute_in_db_thread_sync(
@@ -2347,6 +2348,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             limit,
             threshold,
             path_filter,
+            fuzzy_path,
         )
 
     def _executor_find_similar_chunks(
@@ -2359,6 +2361,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         limit: int,
         threshold: float | None,
         path_filter: str | None,
+        fuzzy_path: bool = False,
     ) -> list[dict[str, Any]]:
         """Executor method for find_similar_chunks - runs in DB thread."""
         try:
@@ -2443,8 +2446,10 @@ class DuckDBProvider(SerialDatabaseProvider):
             if normalized_path is not None:
                 escaped_path = escape_like_pattern(normalized_path)
                 path_condition = "AND f.path LIKE ? ESCAPE '\\'"
-                # Substring match so repo-relative scopes still work when base_directory is higher
-                params.append(f"%{escaped_path}%")
+                if fuzzy_path:
+                    params.append(f"%{escaped_path}%")
+                else:
+                    params.append(f"{escaped_path}%")
 
             # Query for similar chunks (exclude the original chunk)
             # Cast the target embedding to match the table's embedding type
@@ -2507,6 +2512,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         limit: int = 10,
         threshold: float | None = None,
         path_filter: str | None = None,
+        fuzzy_path: bool = False,
     ) -> list[dict[str, Any]]:
         """Find chunks similar to the given embedding vector."""
         return self._execute_in_db_thread_sync(
@@ -2517,6 +2523,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             limit,
             threshold,
             path_filter,
+            fuzzy_path,
         )
 
     def _executor_search_by_embedding(
@@ -2529,6 +2536,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         limit: int,
         threshold: float | None,
         path_filter: str | None,
+        fuzzy_path: bool = False,
     ) -> list[dict[str, Any]]:
         """Executor method for search_by_embedding - runs in DB thread."""
         try:
@@ -2550,9 +2558,11 @@ class DuckDBProvider(SerialDatabaseProvider):
             query_params = [query_embedding, provider, model, limit]
 
             if normalized_path is not None:
-                # Convert relative path to SQL pattern
                 escaped_path = escape_like_pattern(normalized_path)
-                path_pattern = f"%{escaped_path}%"
+                if fuzzy_path:
+                    path_pattern = f"%{escaped_path}%"
+                else:
+                    path_pattern = f"{escaped_path}%"
                 path_condition = "AND f.path LIKE ? ESCAPE '\\'"
                 query_params.insert(-1, path_pattern)  # Insert before limit
 

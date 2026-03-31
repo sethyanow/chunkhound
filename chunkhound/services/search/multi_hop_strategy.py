@@ -213,6 +213,7 @@ class MultiHopStrategy:
                         limit=neighbor_limit,
                         threshold=None,
                         path_filter=path_filter,
+                        fuzzy_path=fuzzy_path,
                     )
 
                     # Filter out already seen chunks
