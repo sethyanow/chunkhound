@@ -72,3 +72,8 @@
 {"timestamp":"2026-03-30T21:37:45.089758+00:00","actor":"Seth","event_type":"created","task_id":"ch-u62","details":{}}
 {"timestamp":"2026-03-30T21:38:10.061206+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-8e7","details":{"kind":"blocks","to":"ch-u62"}}
 {"timestamp":"2026-03-30T22:32:56.169842+00:00","actor":"Seth","event_type":"updated","task_id":"ch-1j2","details":{"status":"active"}}
+{"timestamp":"2026-03-31T00:44:21.406223+00:00","actor":"Seth","event_type":"logged","task_id":"ch-7j0","details":{"message":"lgtm"}}
+{"timestamp":"2026-03-31T00:44:25.653942+00:00","actor":"Seth","event_type":"closed","task_id":"ch-7j0","details":{"notes":null}}
+{"timestamp":"2026-03-31T00:44:58.401301+00:00","actor":"Seth","event_type":"logged","task_id":"ch-1j2","details":{"message":"lgtm"}}
+{"timestamp":"2026-03-31T00:45:00.880471+00:00","actor":"Seth","event_type":"closed","task_id":"ch-1j2","details":{"notes":null}}
+{"timestamp":"2026-03-31T00:46:26.331957+00:00","actor":"Seth","event_type":"logged","task_id":"ch-1j2","details":{"message":"Debrief: Demo script approach replaced pytest walkthrough. Pyright needs didOpen before documentSymbol. DB snapshot workaround for MCP lock. Discovered ch-u62 (path leak). Reflections: user corrected agent-oriented walkthrough twice — both corrections saved to memory. Phase 1 complete, ch-7j0 closed."}}

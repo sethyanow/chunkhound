@@ -1,12 +1,14 @@
 ---
 id: ch-7j0
 title: 'Phase 1: Foundation — LSP Client + Schema + Fixes'
-status: open
+status: closed
 type: epic
 priority: 1
 depends_on: [ch-jsj, ch-u1s, ch-a58, ch-1j2]
 parent: ch-8e7
 ---
+
+
 
 
 
@@ -66,3 +68,7 @@ Inherited from parent epic, plus:
 - LSP client connects to at least one non-Python language server
 - DuckDB tables exist after fresh index
 - Semantic search path scoping returns no cross-directory leakage
+
+## Log
+
+- [2026-03-31T00:44:21Z] [Seth] lgtm

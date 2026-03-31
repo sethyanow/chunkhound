@@ -1,12 +1,15 @@
 ---
 id: ch-1j2
 title: 'Phase 1 Acceptance: Foundation — LSP Client + Schema + Fixes'
-status: open
+status: closed
 type: task
 priority: 1
 depends_on: [ch-52s]
 parent: ch-7j0
 ---
+
+
+
 
 
 
@@ -82,3 +85,5 @@ Reusable for future phases: Phase 2 extends to show populated symbol/edge counts
 ## Log
 
 - [2026-03-30T15:21:14Z] [Seth] BLOCKED: Created prematurely — agent followed skill mechanics instead of addressing P0 ch-52s. User rejected. Do not execute until ch-52s is closed.
+- [2026-03-31T00:44:58Z] [Seth] lgtm
+- [2026-03-31T00:46:26Z] [Seth] Debrief: Demo script approach replaced pytest walkthrough. Pyright needs didOpen before documentSymbol. DB snapshot workaround for MCP lock. Discovered ch-u62 (path leak). Reflections: user corrected agent-oriented walkthrough twice — both corrections saved to memory. Phase 1 complete, ch-7j0 closed.
