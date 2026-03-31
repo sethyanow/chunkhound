@@ -23,8 +23,8 @@ Scoped to parent epic R3:
 - R3: Background index-time population using 8 LSP operations
 
 ## Success Criteria
-- [ ] Background population service runs after tree-sitter indexing completes (not blocking it)
-- [ ] `documentSymbol` called per file → symbols written to `symbols` table with fqn, kind, range, parent_fqn
+- [x] Background population service runs after tree-sitter indexing completes (not blocking it)
+- [x] `documentSymbol` called per file → symbols written to `symbols` table with fqn, kind, range, parent_fqn
 - [ ] `hover` called per symbol → `type_signature` populated on `symbols` rows
 - [ ] `definition`, `references`, `implementation`, `incomingCalls`, `outgoingCalls` → edges written to `symbol_edges` with correct edge_kind
 - [ ] `workspaceSymbol("")` called during full reindex for cross-file completeness

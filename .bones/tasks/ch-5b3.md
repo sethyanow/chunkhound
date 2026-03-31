@@ -1,12 +1,13 @@
 ---
 id: ch-5b3
 title: 'Population service: documentSymbol → symbols table'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -109,19 +110,19 @@ SELECT id FROM files WHERE path = ?
 13. Smoke tests pass
 
 ## Success Criteria
-- [ ] `populate_file()` calls `didOpen` → `documentSymbol` → `didClose` sequence and inserts rows to `symbols` table
-- [ ] Symbols have correct fqn, kind, range, parent_fqn, confidence, lsp_server fields
-- [ ] Nested symbols (methods inside classes) flatten to rows with correct parent_fqn
-- [ ] Files with no configured LSP server are skipped gracefully (`LSPError` caught, no crash, no row)
-- [ ] Batch insert used — single batch INSERT per file (verified by mock/spy, not just row count)
-- [ ] `delete_file_symbols(file_id)` removes that file's symbols
-- [ ] Unknown SymbolKind values (>26) handled gracefully — mapped to `"unknown_N"`, not KeyError
-- [ ] Realtime path: file change queues `"lsp"` priority, population runs
-- [ ] Batch path: `process_directory()` runs symbol population after embeddings
-- [ ] `notify_did_close(uri)` added to `LSPClient` and called after population per file
-- [ ] `_SYMBOL_KIND` mapping lives in `chunkhound/lsp/constants.py` (shared, not duplicated)
-- [ ] All existing tests pass (zero regression)
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [x] `populate_file()` calls `didOpen` → `documentSymbol` → `didClose` sequence and inserts rows to `symbols` table
+- [x] Symbols have correct fqn, kind, range, parent_fqn, confidence, lsp_server fields
+- [x] Nested symbols (methods inside classes) flatten to rows with correct parent_fqn
+- [x] Files with no configured LSP server are skipped gracefully (`LSPError` caught, no crash, no row)
+- [x] Batch insert used — single batch INSERT per file (verified by mock/spy, not just row count)
+- [x] `delete_file_symbols(file_id)` removes that file's symbols
+- [x] Unknown SymbolKind values (>26) handled gracefully — mapped to `"unknown_N"`, not KeyError
+- [x] Realtime path: file change queues `"lsp"` priority, population runs
+- [x] Batch path: `process_directory()` runs symbol population after embeddings
+- [x] `notify_did_close(uri)` added to `LSPClient` and called after population per file
+- [x] `_SYMBOL_KIND` mapping lives in `chunkhound/lsp/constants.py` (shared, not duplicated)
+- [x] All existing tests pass (zero regression)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
 
 ## Key Considerations
 
