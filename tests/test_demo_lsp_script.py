@@ -406,3 +406,146 @@ class TestDemoEdgeKinds:
 
         assert demo_edge_kinds(conn) is False
         conn.close()
+
+
+# ── Phase 2: Connection management regression ──────────────────
+
+
+# ── Phase 2 Scenario 5: Live vs Populated comparison ────────
+
+
+class TestDemoLiveVsPopulated:
+    """Scenario 5: compare live LSP documentSymbol output with populated DB symbols."""
+
+    def test_pass_when_live_symbols_match_db(self, demo_db: Path) -> None:
+        """Returns True and match report when live symbols have DB counterparts."""
+        from scripts.demo_lsp import demo_live_vs_populated
+
+        # Fake "live" symbols matching fixture data for file_id=1 (client.py)
+        live_symbols = [
+            {"name": "LSPClient", "kind": "Class", "line": 32},
+            {"name": "start", "kind": "Method", "line": 63},
+        ]
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            result = demo_live_vs_populated(conn, live_symbols, "chunkhound/lsp/client.py")
+            assert result is True
+        finally:
+            conn.close()
+
+    def test_fail_when_live_symbol_missing_from_db(self, demo_db: Path) -> None:
+        """Returns False when a live symbol has no DB counterpart."""
+        from scripts.demo_lsp import demo_live_vs_populated
+
+        live_symbols = [
+            {"name": "LSPClient", "kind": "Class", "line": 32},
+            {"name": "totally_new_function", "kind": "Function", "line": 999},
+        ]
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            result = demo_live_vs_populated(conn, live_symbols, "chunkhound/lsp/client.py")
+            assert result is False
+        finally:
+            conn.close()
+
+    def test_reports_db_extras(self, demo_db: Path) -> None:
+        """Still passes but reports symbols in DB that live LSP didn't return."""
+        from scripts.demo_lsp import demo_live_vs_populated
+
+        # Only one live symbol — DB has 2 for this file
+        live_symbols = [
+            {"name": "LSPClient", "kind": "Class", "line": 32},
+        ]
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # Should still pass — DB extras aren't a failure (workspaceSymbol adds them)
+            result = demo_live_vs_populated(conn, live_symbols, "chunkhound/lsp/client.py")
+            assert result is True
+        finally:
+            conn.close()
+
+
+# ── Phase 2 Scenario 6: Cross-file edge health ─────────────
+
+
+class TestDemoCrossFileEdgeHealth:
+    """Scenario 6: cross-file edges exist and aren't all self-referential."""
+
+    def test_pass_when_cross_file_edges_exist(self, demo_db: Path) -> None:
+        """Returns True when edges span multiple files."""
+        from scripts.demo_lsp import demo_cross_file_edge_health
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # Fixture has edges between client.py, types.py, main.ts
+            result = demo_cross_file_edge_health(conn)
+            assert result is True
+        finally:
+            conn.close()
+
+    def test_fail_when_all_edges_self_referential(self, tmp_path: Path) -> None:
+        """Returns False when every edge is within the same file."""
+        from scripts.demo_lsp import demo_cross_file_edge_health
+
+        db_path = tmp_path / "self_ref.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("""
+            CREATE TABLE symbol_edges (
+                id INTEGER, from_symbol_id INTEGER, from_fqn TEXT,
+                from_file TEXT, to_symbol_id INTEGER, to_fqn TEXT,
+                to_file TEXT, edge_kind TEXT
+            )
+        """)
+        conn.execute(
+            "INSERT INTO symbol_edges VALUES "
+            "(1, 1, 'A', 'a.py', 2, 'B', 'a.py', 'references'),"
+            "(2, 2, 'B', 'a.py', 1, 'A', 'a.py', 'references')"
+        )
+
+        result = demo_cross_file_edge_health(conn)
+        assert result is False
+        conn.close()
+
+    def test_fail_when_no_edges(self, tmp_path: Path) -> None:
+        """Returns False when symbol_edges is empty."""
+        from scripts.demo_lsp import demo_cross_file_edge_health
+
+        db_path = tmp_path / "empty.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("CREATE TABLE symbol_edges (id INTEGER, from_file TEXT, to_file TEXT, edge_kind TEXT)")
+
+        result = demo_cross_file_edge_health(conn)
+        assert result is False
+        conn.close()
+
+
+class TestPhase2ConnectionManagement:
+    """Regression: read-only + read-write connections to same DuckDB file conflict."""
+
+    def test_phase2_scenarios_sequential_no_connection_conflict(
+        self, demo_db: Path
+    ) -> None:
+        """Running all Phase 2 scenarios sequentially against one DB must not crash.
+
+        DuckDB forbids mixing read-only and read-write connections to the same file.
+        Read-only scenarios run first, then the destructive incremental refresh
+        runs last with a separate read-write connection.
+        """
+        from scripts.demo_lsp import (
+            demo_edge_kinds,
+            demo_incremental_refresh,
+            demo_multi_language,
+            demo_symbols_populated,
+        )
+
+        # Read-only scenarios first (symbols, multi-lang, edges)
+        conn_ro = duckdb.connect(str(demo_db), read_only=True)
+        assert demo_symbols_populated(conn_ro) is True
+        assert demo_multi_language(conn_ro) is True
+        assert demo_edge_kinds(conn_ro) is True
+        conn_ro.close()
+
+        # Destructive scenario last: separate read-write connection
+        conn_rw = duckdb.connect(str(demo_db))
+        assert demo_incremental_refresh(conn_rw, file_id=1, file_path="chunkhound/lsp/client.py") is True
+        conn_rw.close()

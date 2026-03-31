@@ -32,7 +32,7 @@ class LSPPopulationService:
     ) -> None:
         self._pool = pool
         self._provider = provider
-        self._workspace_root = workspace_root
+        self._workspace_root = workspace_root.resolve()
 
     async def populate_file(
         self,

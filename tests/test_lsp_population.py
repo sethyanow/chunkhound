@@ -2961,3 +2961,31 @@ class TestCLIWiring:
         assert len(pool_stop_called) == 1, (
             "Pool must be cleaned up even when indexing fails"
         )
+
+
+class TestWorkspaceRootResolution:
+    """
+    Feature: LSPPopulationService resolves relative workspace_root to absolute
+
+    As the indexing pipeline
+    I want workspace_root to always be absolute
+    So that Path.as_uri() never raises ValueError for relative paths
+    """
+
+    def test_relative_workspace_root_resolved_to_absolute(
+        self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
+    ) -> None:
+        """
+        Scenario: Constructor receives a relative path
+        Given a relative Path(".") as workspace_root
+        When LSPPopulationService is constructed
+        Then _workspace_root is an absolute path
+        """
+        monkeypatch.chdir(tmp_path)
+        provider = _make_provider(tmp_path)
+        pool, _ = _make_mock_pool()
+
+        service = LSPPopulationService(pool, provider, workspace_root=Path("."))
+        assert service._workspace_root.is_absolute(), (
+            f"workspace_root must be absolute, got: {service._workspace_root}"
+        )

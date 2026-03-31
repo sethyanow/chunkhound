@@ -69,7 +69,7 @@ def _sep(widths: tuple[int, int] = (20, 32)) -> None:
 # ── 1. LSP Client ──────────────────────────────────────────────
 
 
-async def demo_lsp_client(target: str) -> bool:
+async def demo_lsp_client(target: str) -> tuple[bool, list[dict]]:
     from chunkhound.lsp.client import LSPClient
     from chunkhound.lsp.registry import LANGUAGE_SERVER_REGISTRY
     from chunkhound.lsp.types import ServerState
@@ -79,11 +79,11 @@ async def demo_lsp_client(target: str) -> bool:
     config = LANGUAGE_SERVER_REGISTRY.get("python")
     if not config or not config.command:
         print("  python entry missing from registry")
-        return False
+        return False, []
 
     if not shutil.which(config.command):
         print(f"  {config.command} not on PATH — install: npm i -g pyright")
-        return False
+        return False, []
 
     client = LSPClient(config)
     try:
@@ -123,7 +123,10 @@ async def demo_lsp_client(target: str) -> bool:
         _METHOD_KINDS = {6, 9, 12}  # Method, Constructor, Function
         _VARIABLE_KIND = 13
 
-        def _print_symbols(syms: list, indent: int = 0, parent_kind: int = 0) -> None:
+        # Collect flat symbol list for cross-check with DB
+        flat_symbols: list[dict] = []
+
+        def _collect_and_print(syms: list, indent: int = 0, parent_kind: int = 0) -> None:
             for s in syms:
                 # Skip local variables inside methods/functions
                 if s.kind == _VARIABLE_KIND and parent_kind in _METHOD_KINDS:
@@ -133,11 +136,12 @@ async def demo_lsp_client(target: str) -> bool:
                 name = f"{prefix}{s.name}"
                 lines = f"{s.range_start_line}–{s.range_end_line}"
                 _row(kind, name, lines, widths=(12, 36))
+                flat_symbols.append({"name": s.name, "kind": kind, "line": s.range_start_line})
                 if s.children:
-                    _print_symbols(s.children, indent + 1, parent_kind=s.kind)
+                    _collect_and_print(s.children, indent + 1, parent_kind=s.kind)
 
-        _print_symbols(symbols)
-        return True
+        _collect_and_print(symbols)
+        return True, flat_symbols
     finally:
         if client.state != ServerState.STOPPED:
             await client.stop()
@@ -533,6 +537,101 @@ def demo_edge_kinds(conn) -> bool:
     return True
 
 
+# ── 9. Live vs Populated ────────────────────────────────────
+
+
+def demo_live_vs_populated(
+    conn, live_symbols: list[dict], file_path: str,
+) -> bool:
+    """Compare live LSP documentSymbol output against populated DB symbols.
+
+    live_symbols: list of {"name": str, "kind": str, "line": int}
+    Returns True if every live symbol has a DB counterpart (by name+kind).
+    DB extras are expected (workspaceSymbol adds cross-file symbols) and don't fail.
+    """
+    db_rows = conn.execute(
+        "SELECT name, kind FROM symbols WHERE file_path = ?", [file_path]
+    ).fetchall()
+    db_set = {(row[0], row[1]) for row in db_rows}
+
+    matched = []
+    missing = []
+    for sym in live_symbols:
+        key = (sym["name"], sym["kind"])
+        if key in db_set:
+            matched.append(sym)
+        else:
+            missing.append(sym)
+
+    db_only = db_set - {(s["name"], s["kind"]) for s in live_symbols}
+
+    print(f"  Live LSP symbols:  {len(live_symbols)}")
+    print(f"  DB symbols:        {len(db_rows)}")
+    print(f"  Matched:           {len(matched)}")
+
+    if missing:
+        print(f"\n  MISSING from DB ({len(missing)}):")
+        for s in missing:
+            print(f"    {s['kind']:<12} {s['name']}")
+
+    if db_only:
+        print(f"\n  DB extras ({len(db_only)} — expected from workspaceSymbol):")
+        for name, kind in sorted(db_only):
+            print(f"    {kind:<12} {name}")
+
+    if missing:
+        print(f"\n  FAIL: {len(missing)} live symbols not found in populated DB")
+        return False
+
+    print(f"\n  All live symbols present in DB.")
+    return True
+
+
+# ── 10. Cross-File Edge Health ──────────────────────────────
+
+
+def demo_cross_file_edge_health(conn) -> bool:
+    """Check that edges span multiple files — not all self-referential.
+
+    Per-file findReferences with only didOpen produces mostly intra-file edges.
+    workspaceSymbol is supposed to supplement with cross-file data.
+    If cross-file edges are absent or near-zero, the workspace pass likely failed.
+    """
+    total = conn.execute("SELECT COUNT(*) FROM symbol_edges").fetchone()[0]
+    if total == 0:
+        print("  symbol_edges table is empty")
+        return False
+
+    self_refs = conn.execute(
+        "SELECT COUNT(*) FROM symbol_edges WHERE from_file = to_file"
+    ).fetchone()[0]
+    cross = total - self_refs
+
+    pct = (cross / total * 100) if total else 0
+
+    print(f"  Total edges:         {total:,}")
+    print(f"  Self-referential:    {self_refs:,}")
+    print(f"  Cross-file:          {cross:,} ({pct:.1f}%)")
+
+    # Show cross-file edge distribution
+    if cross > 0:
+        xfiles = conn.execute(
+            "SELECT from_file, to_file, edge_kind, COUNT(*) as cnt "
+            "FROM symbol_edges WHERE from_file != to_file "
+            "GROUP BY from_file, to_file, edge_kind "
+            "ORDER BY cnt DESC LIMIT 10"
+        ).fetchall()
+        print(f"\n  Top cross-file edges:")
+        for ff, tf, ek, cnt in xfiles:
+            print(f"    {cnt:>4} {ek:<12} {ff} → {tf}")
+
+    if cross == 0:
+        print(f"\n  FAIL: zero cross-file edges — workspaceSymbol pass likely failed")
+        return False
+
+    return True
+
+
 # ── Main ──────────────────────────────────────────────────────
 
 
@@ -549,12 +648,13 @@ async def main() -> int:
     results: dict[str, bool] = {}
 
     # ── Phase 1 ──
-    results["lsp_client"] = await demo_lsp_client(target)
+    lsp_ok, live_symbols = await demo_lsp_client(target)
+    results["lsp_client"] = lsp_ok
     demo_registry()
     results["schema"] = demo_schema()
     results["path_scoping"] = demo_path_scoping()
 
-    # ── Phase 2 ──
+    # ── Phase 2 (read-only scenarios first, destructive refresh last) ──
     db_path = _find_db()
     if db_path:
         conn = _open_db(db_path)
@@ -562,45 +662,58 @@ async def main() -> int:
             _hdr(5, "SYMBOL POPULATION — Phase 2")
             results["symbols_populated"] = demo_symbols_populated(conn)
 
-            _hdr(6, "INCREMENTAL REFRESH — Phase 2")
-            # Pick a known file for refresh demo — use the target file
-            file_row = conn.execute(
-                "SELECT id FROM files WHERE path = ? LIMIT 1",
-                [target],
-            ).fetchone()
-            if file_row:
-                # Need a writable connection for the refresh demo
-                conn_rw = _open_db_rw(db_path)
-                if conn_rw:
-                    try:
-                        results["incremental_refresh"] = demo_incremental_refresh(
-                            conn_rw, file_id=file_row[0], file_path=target,
-                        )
-                    finally:
-                        conn_rw.close()
-                else:
-                    print("  DB locked — cannot test incremental refresh (stop MCP server)")
-                    results["incremental_refresh"] = False
-            else:
-                print(f"  Target file not in DB: {target}")
-                results["incremental_refresh"] = False
-
-            _hdr(7, "MULTI-LANGUAGE SYMBOLS — Phase 2")
+            _hdr(6, "MULTI-LANGUAGE SYMBOLS — Phase 2")
             ml_result = demo_multi_language(conn)
             if ml_result is None:
                 print("  [SKIP]")
             else:
                 results["multi_language"] = ml_result
 
-            _hdr(8, "EDGE KINDS — Phase 2")
+            _hdr(7, "EDGE KINDS — Phase 2")
             results["edge_kinds"] = demo_edge_kinds(conn)
+
+            _hdr(8, "CROSS-FILE EDGE HEALTH — Phase 2")
+            results["cross_file_edges"] = demo_cross_file_edge_health(conn)
+
+            _hdr(9, "LIVE LSP vs POPULATED DB — Phase 2")
+            if live_symbols:
+                results["live_vs_populated"] = demo_live_vs_populated(
+                    conn, live_symbols, target,
+                )
+            else:
+                print("  [SKIP] No live symbols from Phase 1")
+
+            # Grab file_id while read-only connection is open
+            file_row = conn.execute(
+                "SELECT id FROM files WHERE path = ? LIMIT 1",
+                [target],
+            ).fetchone()
         finally:
             conn.close()
+
+        # Incremental refresh is destructive (deletes symbols/edges for the
+        # target file) — run last, with a separate read-write connection.
+        _hdr(10, "INCREMENTAL REFRESH — Phase 2")
+        if file_row:
+            conn_rw = _open_db_rw(db_path)
+            if conn_rw:
+                try:
+                    results["incremental_refresh"] = demo_incremental_refresh(
+                        conn_rw, file_id=file_row[0], file_path=target,
+                    )
+                finally:
+                    conn_rw.close()
+            else:
+                print("  DB locked — cannot test incremental refresh (stop MCP server)")
+                results["incremental_refresh"] = False
+        else:
+            print(f"  Target file not in DB: {target}")
+            results["incremental_refresh"] = False
     else:
         print("\n  No DuckDB found — skipping Phase 2 demos. Run: chunkhound index .")
 
     # Summary
-    section_num = 9 if db_path else 5
+    section_num = 11 if db_path else 5
     _hdr(section_num, "SUMMARY")
     for name, passed in results.items():
         icon = "PASS" if passed else "FAIL"
