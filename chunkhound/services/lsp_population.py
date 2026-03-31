@@ -11,10 +11,10 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from chunkhound.lsp.constants import symbol_kind_name
-from chunkhound.lsp.types import LSPError, SymbolInfo
+from chunkhound.lsp.types import LSPCapability, LSPError, SymbolInfo
 
 if TYPE_CHECKING:
-    from chunkhound.lsp.client import LSPClientPool
+    from chunkhound.lsp.client import LSPClient, LSPClientPool
     from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 
 logger = logging.getLogger(__name__)
@@ -62,6 +62,7 @@ class LSPPopulationService:
         try:
             await client.notify_did_open(uri, content, language)
             symbols = await client.document_symbols(uri)
+            type_signatures = await self._collect_type_signatures(client, uri, symbols) if symbols else {}
         finally:
             await client.notify_did_close(uri)
 
@@ -79,10 +80,51 @@ class LSPPopulationService:
             language=language,
             lsp_server=self._server_name(language),
             parent_fqn=None,
+            type_signatures=type_signatures,
         )
 
         if rows:
             self._batch_insert(rows)
+
+    async def _collect_type_signatures(
+        self,
+        client: LSPClient,
+        uri: str,
+        symbols: list[SymbolInfo],
+    ) -> dict[tuple[int, int], str]:
+        """Call hover per symbol to collect type_signature data.
+
+        Returns mapping of (range_start_line, range_start_char) → hover contents.
+        Skips symbols where hover fails or returns None.
+        Checks hover capability once at entry — returns empty dict if unsupported.
+        """
+        if LSPCapability.HOVER not in client.capabilities:
+            return {}
+
+        result: dict[tuple[int, int], str] = {}
+        await self._hover_recursive(client, uri, symbols, result)
+        return result
+
+    async def _hover_recursive(
+        self,
+        client: LSPClient,
+        uri: str,
+        symbols: list[SymbolInfo],
+        result: dict[tuple[int, int], str],
+    ) -> None:
+        """Recursively walk symbols and call hover for each."""
+        for sym in symbols:
+            try:
+                hover = await client.hover(uri, sym.range_start_line, sym.range_start_char)
+                if hover is not None:
+                    result[(sym.range_start_line, sym.range_start_char)] = hover.contents
+            except Exception:
+                logger.debug(
+                    "Hover failed for symbol %s at %d:%d, skipping",
+                    sym.name, sym.range_start_line, sym.range_start_char,
+                )
+            if sym.children:
+                await self._hover_recursive(client, uri, sym.children, result)
 
     def _flatten_symbols(
         self,
@@ -92,8 +134,10 @@ class LSPPopulationService:
         language: str,
         lsp_server: str,
         parent_fqn: str | None,
+        type_signatures: dict[tuple[int, int], str] | None = None,
     ) -> list[tuple]:
         """Recursively flatten SymbolInfo tree into insert-ready tuples."""
+        ts = type_signatures or {}
         rows: list[tuple] = []
         for sym in symbols:
             fqn = f"{parent_fqn}::{sym.name}" if parent_fqn else sym.name
@@ -109,6 +153,7 @@ class LSPPopulationService:
                 parent_fqn,
                 1.0,  # confidence: compiler_grade
                 lsp_server,
+                ts.get((sym.range_start_line, sym.range_start_char)),
             ))
             if sym.children:
                 rows.extend(
@@ -119,6 +164,7 @@ class LSPPopulationService:
                         language=language,
                         lsp_server=lsp_server,
                         parent_fqn=fqn,
+                        type_signatures=ts,
                     )
                 )
         return rows
@@ -127,13 +173,13 @@ class LSPPopulationService:
         """Single batch INSERT for all symbols from one file."""
         if not rows:
             return
-        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(rows))
+        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(rows))
         flat_params = [val for row in rows for val in row]
         self._provider.execute_query(
             "INSERT INTO symbols "
             "(fqn, name, kind, language, file_id, file_path, "
-            f"range_start, range_end, parent_fqn, confidence, lsp_server) "
-            f"VALUES {placeholders}",
+            "range_start, range_end, parent_fqn, confidence, lsp_server, "
+            f"type_signature) VALUES {placeholders}",
             flat_params,
         )
 

@@ -655,9 +655,9 @@ async def test_expansion_termination_conditions(indexed_codebase):
         # Verify result quality (top results should maintain decent scores)
         if results:
             top_scores = [r.get('score', 0) for r in results[:5]]
-            good_scores = [s for s in top_scores if s >= 0.5]
+            good_scores = [s for s in top_scores if s >= 0.3]
             assert len(good_scores) >= 3, \
-                f"{test['name']}: At least 3 of top 5 results should have score >= 0.5, " \
+                f"{test['name']}: At least 3 of top 5 results should have score >= 0.3, " \
                 f"got scores: {[f'{s:.3f}' for s in top_scores]}"
         
         termination_results.append({

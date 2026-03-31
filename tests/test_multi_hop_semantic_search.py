@@ -269,12 +269,12 @@ async def test_vocabulary_bridging(content_aware_test_data):
     original_find_neighbors = db.find_similar_chunks
     
     def track_expansion(
-        chunk_id, provider, model, limit=10, threshold=None, path_filter=None
+        chunk_id, provider, model, limit=10, threshold=None, path_filter=None, fuzzy_path=False
     ):
         nonlocal expansion_occurred
         expansion_occurred = True
         neighbors = original_find_neighbors(
-            chunk_id, provider, model, limit, threshold, path_filter
+            chunk_id, provider, model, limit, threshold, path_filter, fuzzy_path=fuzzy_path
         )
         return neighbors
     
@@ -409,10 +409,10 @@ async def test_semantic_distance_traversal(content_aware_test_data):
     original_find_neighbors = db.find_similar_chunks
     
     def track_semantic_bridges(
-        chunk_id, provider, model, limit=10, threshold=None, path_filter=None
+        chunk_id, provider, model, limit=10, threshold=None, path_filter=None, fuzzy_path=False
     ):
         neighbors = original_find_neighbors(
-            chunk_id, provider, model, limit, threshold, path_filter
+            chunk_id, provider, model, limit, threshold, path_filter, fuzzy_path=fuzzy_path
         )
         
         # Get source chunk domain

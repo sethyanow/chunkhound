@@ -1,11 +1,13 @@
 ---
 id: ch-nvc
 title: 'Hover per symbol: type_signature population'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -72,11 +74,27 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 - [ ] Symbols without hover data have `type_signature = NULL` (not empty string)
 - [ ] Hover failure on one symbol doesn't prevent other symbols from being populated
 - [ ] Batch INSERT includes `type_signature` as 12th column
+- [ ] Server without hover capability → all type_signatures NULL, no exceptions logged per symbol
 - [ ] All existing ch-5b3 tests updated and passing (tuple size change)
 - [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
+
+## Key Considerations (SRE)
+- **Error catch breadth:** `_collect_type_signatures` must catch `Exception` (broad) per symbol, not just `LSPError`. Hover can fail from JSON parsing, unicode, or other unexpected errors — none should crash the file's population.
+- **Recursive traversal:** `_collect_type_signatures` must visit `SymbolInfo.children` recursively (matching the recursion pattern in `_flatten_symbols`). Nested method/function type signatures are the highest-value data.
+- **type_signatures dict threading:** The dict returned by `_collect_type_signatures` is passed to `_flatten_symbols` unchanged through its recursive calls — no per-level re-collection needed.
+- **Existing test tuple breakage:** Every test that constructs `_sample_symbols()` and asserts DB rows will need the mock client to gain a `hover` mock, and DB assertions may need updating for the 12th column. The skeleton's step 9 covers this but the blast radius is ~10 tests.
+
+## Key Considerations (Adversarial)
+- **Capability gate:** `_collect_type_signatures` should check hover capability ONCE at entry (via `client.capabilities` or similar), returning empty dict immediately if not supported. Without this, every symbol in every file for that language triggers an `LSPCapabilityError` — N×M wasted exceptions and noisy logs.
+- **Server degradation mid-file:** If server transitions to DEGRADED during hover collection (transport error), remaining symbols all fail. This is acceptable — partial type_signature data is better than none. The per-symbol catch handles it.
+- **Position key collision:** Two symbols at the same `(line, char)` (decorators, overloads) → last-write wins in the dict. Acceptable tradeoff vs. duplicating FQN construction.
+- **Large files:** A 500-symbol file means 500 sequential hover round-trips (~25s at 50ms each). Acceptable for background population. Future batching/concurrency is a separate concern.
+- **Negative position sentinels:** Some servers return `range_start_line = -1` for synthetic symbols. Hover call may fail (caught by broad Exception). Dict key `(-1, -1)` is valid but harmless.
 
 ## Anti-Patterns
 - NO hover calls after `didClose` — file must still be open for hover to return results
 - NO blocking on hover failures — log and skip, set type_signature to NULL
 - NO parsing/transforming hover contents — store raw markdown string as-is
 - NO hover calls in a separate `populate_file` pass — integrate into existing single-pass flow
+- NO hover on only top-level symbols — must recursively include children (nested methods/functions are highest-value targets)
+- NO per-symbol capability checks — check once at method entry, return empty dict if hover unsupported
