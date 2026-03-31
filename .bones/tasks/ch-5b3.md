@@ -13,6 +13,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 First task for Phase 2 (ch-0um). Phase 1 delivered the LSP client (`chunkhound/lsp/`) and empty DuckDB tables (`symbols`, `symbol_edges`). This task creates the population service that calls `documentSymbol` per file and writes to the `symbols` table.
 
@@ -192,3 +193,7 @@ Original skeleton said TEXT (`"compiler_grade"`), but Phase 1 schema is `FLOAT D
 - NO silently dropping failed LSP calls — log with structured reason, set confidence to `0.0`
 - NO `type_signature` population in this task — that's hover, scoped to next task
 - NO edge population in this task — that's definition/references/calls, scoped to next task
+
+## Log
+
+- [2026-03-31T04:07:37Z] [Seth] Debrief: FQN separator changed '.' → '::' (user decision after adversarial test). populate_file made idempotent via delete-before-insert (user decision). didOpen protocol requirement was missing from skeleton — caught by adversarial planning checking demo script. Smoke tests marked e2e not unit. Next task ch-nvc scoped: hover → type_signature.

@@ -87,3 +87,7 @@
 {"timestamp":"2026-03-31T02:52:50.252721+00:00","actor":"Seth","event_type":"updated","task_id":"ch-5b3","details":{"status":"active"}}
 {"timestamp":"2026-03-31T03:30:31.735130+00:00","actor":"Seth","event_type":"logged","task_id":"ch-8e7","details":{"message":"Adversarial finding (ch-5b3): FQN uses '.' separator, but symbol names can contain dots (e.g., decorated names). Phase 3-4 graph tools that parse FQNs need to handle this ambiguity — cannot split on '.' naively."}}
 {"timestamp":"2026-03-31T04:04:23.652054+00:00","actor":"Seth","event_type":"closed","task_id":"ch-5b3","details":{"notes":null}}
+{"timestamp":"2026-03-31T04:06:45.894945+00:00","actor":"Seth","event_type":"created","task_id":"ch-nvc","details":{}}
+{"timestamp":"2026-03-31T04:06:53.241378+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-0um","details":{"kind":"parent-child","to":"ch-nvc"}}
+{"timestamp":"2026-03-31T04:06:53.242033+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-0um","details":{"kind":"blocks","to":"ch-nvc"}}
+{"timestamp":"2026-03-31T04:07:37.948393+00:00","actor":"Seth","event_type":"logged","task_id":"ch-5b3","details":{"message":"Debrief: FQN separator changed '.' → '::' (user decision after adversarial test). populate_file made idempotent via delete-before-insert (user decision). didOpen protocol requirement was missing from skeleton — caught by adversarial planning checking demo script. Smoke tests marked e2e not unit. Next task ch-nvc scoped: hover → type_signature."}}
