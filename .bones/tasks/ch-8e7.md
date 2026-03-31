@@ -154,11 +154,12 @@ WHERE c.file_id = :symbol_file_id
 
 ## Acceptance Walkthrough Pattern
 
-Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dogfoods deliverables against the live codebase. Scripts are the acceptance walkthrough — not pytest commands. They:
-- Use ChunkHound's own APIs to demo the deliverables
-- Compare results with existing tools (e.g., editor LSP vs ChunkHound LSP client)
-- Print a PASS/FAIL summary the user can run themselves
-- Extend across phases (Phase 2 adds symbol counts to the Phase 1 script)
+One demo script (`scripts/demo_lsp.py`) extends across all phases, dogfooding deliverables against the live codebase. The demo is the acceptance walkthrough — not pytest. It:
+- Uses ChunkHound's own APIs to demo the deliverables
+- Compares results with existing tools (e.g., editor LSP vs ChunkHound LSP client)
+- Prints a PASS/FAIL summary the user can run themselves
+- Extends across phases (each phase adds sections; ALL prior phases must still PASS = regression gate)
+- **TDD applies: demo scenario functions are code, not docs. No escape hatch. Unit tests cover each scenario's PASS/FAIL/SKIP logic (`tests/test_demo_lsp_script.py`).**
 
 ## Phases
 
@@ -180,6 +181,7 @@ Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dog
 ### Phase 3: Primitive Tools
 **Scope:** R4, R5
 **Gate:**
+- `uv run scripts/demo_lsp.py` → ALL prior phases + Phase 3 sections PASS (regression + new)
 - Each of lsp, graph, symbol_context, lsp_status callable via MCP and returning correct results
 - `search(type: symbols, query="parse")` returns symbol results
 - `search(type: structural, query="error handling", type_filter="Result")` returns type-filtered results
@@ -188,6 +190,7 @@ Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dog
 ### Phase 4: Fusion Tools
 **Scope:** R6
 **Gate:**
+- `uv run scripts/demo_lsp.py` → ALL prior phases + Phase 4 sections PASS (regression + new)
 - `test_targeting` returns correct test subset for known changed symbols
 - `impact_cascade` returns multi-hop caller tree with type signatures
 - `cross_language_check` detects known binding mismatches in a test fixture
@@ -197,6 +200,7 @@ Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dog
 ### Phase 5: Search Pipeline + code_research
 **Scope:** R7, R8
 **Gate:**
+- `uv run scripts/demo_lsp.py` → ALL prior phases + Phase 5 sections PASS (regression + new)
 - `code_research` query on a structural topic returns chunks from graph walk that semantic-only search misses
 - Prompt templates used during BFS (visible in research events/logs)
 - `uv run pytest tests/test_graph_expander.py -v` → all pass
@@ -204,6 +208,7 @@ Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dog
 ### Phase 6: Skill Script Library
 **Scope:** R9
 **Gate:**
+- `uv run scripts/demo_lsp.py` → ALL phases PASS (full regression)
 - All 5 skill scripts executable via `workflow.py --help` (shows params)
 - Each SKILL.md discoverable by Claude Code skill system
 - At least one skill (coverage-diff) produces correct structured output against a test fixture
