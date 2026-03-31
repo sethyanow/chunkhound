@@ -5,9 +5,12 @@ status: active
 type: task
 priority: 1
 owner: Seth
-depends_on: [ch-91j]
+depends_on: [ch-91j, ch-ko4, ch-uny]
 parent: ch-0um
 ---
+
+
+
 
 
 
@@ -52,3 +55,4 @@ Extend `scripts/demo_lsp.py` with Phase 2 population scenarios covering:
 ## Log
 
 - [2026-03-31T14:42:16Z] [Seth] BLOCKED: Demo reveals LSPPopulationService is dead code in production. Created ch-91j (wiring task). Acceptance cannot pass until ch-91j is done and demo re-run.
+- [2026-03-31T17:44:47Z] [Seth] ACCEPTANCE DEMO RESULT: 6/8 scenarios PASS, 2 new scenarios FAIL. live-vs-populated shows all live symbols matched in DB (51/51). Cross-file edge health FAILS — 1319/1323 edges self-referential, workspaceSymbol pass crashed. Two blocking bugs created: ch-ko4 (P0, loop crash on single failure) and ch-uny (P1, client degradation root cause). Demo script hardened with 6 new scenarios + 29 unit tests.
