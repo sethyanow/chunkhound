@@ -1,12 +1,13 @@
 ---
 id: ch-5a3
 title: 'Phase 2 completeness: workspaceSymbol, incremental, multi-language, confidence'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -80,14 +81,14 @@ Strategy:
 11. Run full test suite + smoke tests, commit
 
 ## Success Criteria
-- [ ] `LSPClient.workspace_symbols("")` returns parsed SymbolInfo list
-- [ ] `populate_files` calls workspaceSymbol after per-file loop
-- [ ] workspaceSymbol-sourced symbols have confidence=0.9 (not 1.0)
-- [ ] No duplicate symbols from workspaceSymbol + documentSymbol overlap
-- [ ] Incremental: second populate_file with different data → old symbols AND edges replaced
-- [ ] Multi-language: Python + 2 other languages in symbols table with correct `lsp_server` per language
-- [ ] All existing tests pass (zero regression)
-- [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
+- [x] `LSPClient.workspace_symbols("")` returns parsed SymbolInfo list
+- [x] `populate_files` calls workspaceSymbol after per-file loop
+- [x] workspaceSymbol-sourced symbols have confidence=0.9 (not 1.0)
+- [x] No duplicate symbols from workspaceSymbol + documentSymbol overlap
+- [x] Incremental: second populate_file with different data → old symbols AND edges replaced
+- [x] Multi-language: Python + 2 other languages in symbols table with correct `lsp_server` per language
+- [x] All existing tests pass (zero regression)
+- [x] `uv run pytest tests/test_lsp_population.py -v` → all pass (52 passed)
 
 ## Anti-Patterns
 - NO full table scan to deduplicate workspaceSymbol results — use targeted query by (fqn, file_path)
