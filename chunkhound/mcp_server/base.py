@@ -65,6 +65,10 @@ class MCPServerBase(ABC):
         self._init_lock = asyncio.Lock()
         self._connect_lock = asyncio.Lock()
 
+        # LSP population resources (constructed in _deferred_connect_and_start)
+        self._lsp_pool: Any = None
+        self._lsp_population_service: Any = None
+
         # Background tasks
         self._startup_task: asyncio.Task | None = None
         self._scan_task: asyncio.Task | None = None
@@ -192,10 +196,23 @@ class MCPServerBase(ABC):
                 return
             await self._connect_provider()
 
+            # Construct LSP population resources (guard against double-construction)
+            if self._lsp_pool is None:
+                from chunkhound.lsp.client import LSPClientPool
+                from chunkhound.services.lsp_population import LSPPopulationService
+
+                self._lsp_pool = LSPClientPool()
+                self._lsp_population_service = LSPPopulationService(
+                    self._lsp_pool, self.services.provider, target_path
+                )
+
             # Start real-time indexing service
             self.debug_log("Starting real-time indexing service (deferred)")
             self.realtime_indexing = RealtimeIndexingService(
-                self.services, self.config, debug_sink=self.debug_log
+                self.services,
+                self.config,
+                debug_sink=self.debug_log,
+                lsp_population=self._lsp_population_service,
             )
             monitoring_task = asyncio.create_task(
                 self.realtime_indexing.start(target_path)
@@ -258,6 +275,7 @@ class MCPServerBase(ABC):
                 indexing_coordinator=self.services.indexing_coordinator,
                 config=self.config,
                 progress_callback=progress_callback,
+                lsp_population=self._lsp_population_service,
             )
 
             # Perform scan with lower priority
@@ -312,6 +330,16 @@ class MCPServerBase(ABC):
         if self.realtime_indexing:
             self.debug_log("Stopping real-time indexing service")
             await self.realtime_indexing.stop()
+
+        # Shut down LSP client pool (best-effort)
+        if self._lsp_pool is not None:
+            self.debug_log("Shutting down LSP client pool")
+            try:
+                await self._lsp_pool.stop_all()
+            except Exception as e:
+                self.debug_log(f"LSP pool shutdown error (non-fatal): {e}")
+            self._lsp_pool = None
+            self._lsp_population_service = None
 
         if self.services and self.services.provider.is_connected:
             self.debug_log("Closing database connection")

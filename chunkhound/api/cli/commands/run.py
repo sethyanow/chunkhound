@@ -114,19 +114,37 @@ async def run_command(args: argparse.Namespace, config: Config) -> None:
                 if args.verbose:
                     formatter.verbose_info(message)
 
-            # Create indexing service with Progress instance
-            indexing_service = DirectoryIndexingService(
-                indexing_coordinator=indexing_coordinator,
-                config=config,
-                progress_callback=progress_callback,
-                progress=progress_instance,
-                metrics_collector=metrics_collector,
+            # Construct LSP population resources for symbol extraction
+            from chunkhound.lsp.client import LSPClientPool
+            from chunkhound.services.lsp_population import LSPPopulationService
+
+            lsp_pool = LSPClientPool()
+            lsp_population = LSPPopulationService(
+                lsp_pool,
+                indexing_coordinator.database,  # type: ignore[arg-type]
+                Path(args.path),
             )
 
-            # Process directory - service layers will add subtasks to progress_instance
-            stats = await indexing_service.process_directory(
-                Path(args.path), no_embeddings=args.no_embeddings
-            )
+            try:
+                # Create indexing service with Progress instance
+                indexing_service = DirectoryIndexingService(
+                    indexing_coordinator=indexing_coordinator,
+                    config=config,
+                    progress_callback=progress_callback,
+                    progress=progress_instance,
+                    metrics_collector=metrics_collector,
+                    lsp_population=lsp_population,
+                )
+
+                # Process directory - service layers will add subtasks to progress_instance
+                stats = await indexing_service.process_directory(
+                    Path(args.path), no_embeddings=args.no_embeddings
+                )
+            finally:
+                try:
+                    await lsp_pool.stop_all()
+                except Exception:
+                    pass
 
         # Performance diagnostics analysis
         if metrics_collector and metrics_collector.batches:

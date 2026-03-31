@@ -1,11 +1,14 @@
 ---
 id: ch-91j
 title: Wire LSPPopulationService into production indexing
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-0um
 ---
+
+
 
 
 
@@ -26,69 +29,134 @@ None. Bulk indexing (`process_directory`) has no LSP population pass at all.
 3. LSP population must not block tree-sitter indexing (background pass)
 
 ## Design
-Two integration points, both verified by reading the code in this session:
+Three integration points, verified by SRE code review (2026-03-31):
 
 ### Point 1: MCP server construction (realtime/incremental)
 File: `chunkhound/mcp_server/base.py:197`
 Currently: `RealtimeIndexingService(self.services, self.config, debug_sink=self.debug_log)`
-Need: Construct `LSPClientPool` + `LSPPopulationService`, pass as `lsp_population=`.
+Need: Construct `LSPClientPool()` + `LSPPopulationService(pool, provider, target_path)`,
+pass as `lsp_population=`. Store pool on `self` for cleanup and shared access.
 The handler code already exists at `realtime_indexing_service.py:899-930` and the
 enqueue at `:954-956`. This is purely a construction wiring change.
 
-### Point 2: Bulk indexing (process_directory)
-File: `chunkhound/services/indexing_coordinator.py`
-After tree-sitter batch storage completes (~line 1385), add a background LSP
-population pass over the indexed files. Same pattern as embedding generation:
-iterate stored files, call `populate_file()` per file, don't block the return.
+### Point 2: MCP server bulk indexing (background scan)
+File: `chunkhound/mcp_server/base.py:257` (`_background_initial_scan`)
+Currently: `DirectoryIndexingService(indexing_coordinator=..., config=..., progress_callback=...)`
+Need: Pass `lsp_population=self._lsp_population_service` to DirectoryIndexingService.
+**SRE correction:** The prior skeleton targeted `IndexingCoordinator.process_directory()`.
+`DirectoryIndexingService` already wraps IndexingCoordinator and already has:
+- `lsp_population` constructor param (line 46)
+- `_populate_symbols()` method (line 162)
+- Integration in `process_directory()` (lines 104-107)
+NO changes to `IndexingCoordinator` needed.
 
-The coordinator needs an `LSPPopulationService` attribute — set via constructor
-param or a `set_lsp_population()` method. `base.py` wires it at startup.
+### Point 3: CLI bulk indexing (chunkhound index)
+File: `chunkhound/api/cli/commands/run.py:118`
+Currently: `DirectoryIndexingService(indexing_coordinator=..., config=..., ...)`
+Need: Create own `LSPClientPool()` + `LSPPopulationService(pool, provider, target_path)`,
+pass `lsp_population=` to DirectoryIndexingService. Add try/finally for pool cleanup.
+**SRE finding:** This integration point was missing from the original skeleton.
+Required for success criterion 3 ("chunkhound index . → symbols table non-empty").
+
+### Cleanup
+File: `chunkhound/mcp_server/base.py` (`cleanup()` method, line 288)
+Need: Shut down `self._lsp_pool` if it exists. Best-effort — catch exceptions.
 
 ## Implementation
 
 ### Step 1: Write test — base.py passes lsp_population to RealtimeIndexingService
-File: `tests/test_lsp_population.py` (existing TestRealtimeWiring or new class)
-Test intent: Mock LSPClientPool, construct base server, verify RealtimeIndexingService
-receives a non-None lsp_population. Key assertion: `realtime_service._lsp_population is not None`.
+File: `tests/test_lsp_population.py` (new TestMCPServerWiring class)
+Test intent: Patch LSPClientPool and LSPPopulationService construction in base.py's
+`_deferred_connect_and_start`. Verify RealtimeIndexingService receives a non-None
+lsp_population AND DirectoryIndexingService (in `_background_initial_scan`) receives
+the same service. Key assertions:
+- `realtime_service._lsp_population is not None`
+- `directory_service._lsp_population is not None`
 
-### Step 2: Wire base.py construction
+### Step 2: Wire base.py — realtime + batch + cleanup
 File: `chunkhound/mcp_server/base.py`
-In `_deferred_connect_and_start`, before constructing RealtimeIndexingService:
-- Create `LSPClientPool()`
-- Create `LSPPopulationService(pool, self.services.provider, target_path)`
-- Pass `lsp_population=service` to RealtimeIndexingService constructor
-- Store pool reference for cleanup in stop()
+In `_deferred_connect_and_start` (line 187), before constructing RealtimeIndexingService:
+- Guard: if `self._lsp_pool` already exists, skip re-creation (prevents double-construction leak)
+- Create `LSPClientPool()` → store as `self._lsp_pool`
+- Create `LSPPopulationService(pool, self.services.provider, target_path)` → store as `self._lsp_population_service`
+- Pass `lsp_population=self._lsp_population_service` to RealtimeIndexingService (line 197)
+- Use lazy import for both classes to avoid circular deps
 
-### Step 3: Write test — process_directory triggers LSP population
-File: `tests/test_lsp_population.py` (new TestBatchWiring class or extend existing)
-Test intent: Mock population service on coordinator, call process_directory on a
-small fixture, verify populate_file called for each indexed file.
+In `_background_initial_scan` (line 257):
+- Pass `lsp_population=self._lsp_population_service` to DirectoryIndexingService
 
-### Step 4: Wire IndexingCoordinator
-File: `chunkhound/services/indexing_coordinator.py`
-- Add `lsp_population: LSPPopulationService | None = None` attribute
-- Add `set_lsp_population(service)` method
-- After batch store in process_directory (~line 1385), iterate stored file results
-  and call `await self.lsp_population.populate_file(...)` per file
-- Guard with `if self.lsp_population is not None`
+In `cleanup()` (line 288):
+- If `self._lsp_pool` exists, shut it down (best-effort, catch exceptions)
 
-### Step 5: Wire coordinator in base.py
-File: `chunkhound/mcp_server/base.py`
-After creating the LSPPopulationService, call
-`self.services.indexing_coordinator.set_lsp_population(service)`.
+Initialize `self._lsp_pool = None` and `self._lsp_population_service = None` in `__init__`.
 
-### Step 6: Verify — run demo script
-Command: `uv run scripts/demo_lsp.py`
-After re-indexing with the wiring in place, Phase 2 scenarios should pass.
+### Step 3: Write test — CLI index command passes lsp_population
+File: `tests/test_lsp_population.py` (new TestCLIWiring class)
+Test intent: Patch DirectoryIndexingService construction in run.py's index command.
+Verify it receives a non-None lsp_population. Verify pool cleanup runs even on error
+(try/finally pattern).
+
+### Step 4: Wire run.py — CLI bulk indexing
+File: `chunkhound/api/cli/commands/run.py`
+Around the DirectoryIndexingService construction (line 118):
+- Create `LSPClientPool()` + `LSPPopulationService(pool, provider, target_path)`
+- Pass `lsp_population=service` to DirectoryIndexingService
+- Wrap in try/finally: pool shutdown in finally block (best-effort)
+- Use lazy import for both classes
+
+### Step 5: Verify — run existing tests + demo script
+- `uv run pytest tests/test_lsp_population.py -v` → all pass (existing 52 + new wiring tests)
+- `uv run scripts/demo_lsp.py` → Phase 2 scenarios pass
+- Note: `TestBatchWiring` (line 524) already tests DirectoryIndexingService._populate_symbols
+  integration — no need to duplicate that test.
+
+## Existing Test Coverage (SRE verified)
+- `TestBatchWiring.test_process_directory_calls_populate_symbols` (line 524-575) — tests
+  DirectoryIndexingService.process_directory() calls populate_files. Already passes. ✅
+- `TestRealtimeWiring.test_process_loop_handles_lsp_priority` (line 578-653) — tests
+  RealtimeIndexingService._process_loop handles "lsp" priority events. Already passes. ✅
+- New tests needed: verify base.py and run.py actually CONSTRUCT and PASS the services.
 
 ## Success Criteria
 - [ ] `RealtimeIndexingService._lsp_population` is not None in production (base.py passes it)
+- [ ] `DirectoryIndexingService._lsp_population` is not None in MCP server background scan (base.py passes it)
 - [ ] File change via watcher → symbols + edges populated for that file (incremental path)
-- [ ] `chunkhound index .` → symbols table non-empty after bulk indexing
+- [ ] `chunkhound index .` → symbols table non-empty after bulk indexing (CLI path via run.py)
 - [ ] LSP population does not block tree-sitter indexing (background, after TS completes)
+- [ ] Pool cleanup runs on MCP server shutdown (base.py cleanup())
+- [ ] Pool cleanup runs on CLI exit, including error paths (run.py try/finally)
 - [ ] Existing tests pass (zero regression)
+
+## Key Considerations
+
+### Adversarial Failure Catalog (SRE 2026-03-31)
+
+**Temporal Betrayal: Pool double-construction in base.py**
+- Assumption: `_deferred_connect_and_start` is called exactly once
+- Betrayal: Called again on reconnect/error recovery — pool reference overwritten, first pool's LSP processes leak
+- Consequence: Orphaned LSP server processes accumulate
+- Mitigation: Guard in Step 2 — if `self._lsp_pool` already exists, skip. Structural prevention, not catch-after-fact.
+
+**Dependency Treachery: CLI pool cleanup (run.py)**
+- Assumption: CLI exits cleanly after indexing
+- Betrayal: Crash or Ctrl+C during population — pool not shut down, LSP servers orphaned
+- Consequence: Zombie language server processes (pyright, etc.) consuming memory
+- Mitigation: try/finally wrapping pool lifecycle in Step 4. Pool shutdown is best-effort.
+
+**Temporal Betrayal: Concurrent MCP server + CLI on same DB**
+- Assumption: Only one process populates symbols at a time
+- Betrayal: User runs `chunkhound index .` while MCP server is running
+- Consequence: Both processes populate same file's symbols simultaneously
+- Mitigation: Acceptable — `populate_file` is idempotent (delete + re-insert per file_id). Wasted work, no corruption.
+
+**State Corruption: Pool cleanup during active population**
+- Assumption: No population calls in flight when cleanup() runs
+- Betrayal: cleanup() called while `_populate_symbols()` still awaiting
+- Consequence: Pool shuts down LSP servers mid-request → LSPError
+- Mitigation: `populate_file` already catches exceptions per-file. Graceful degradation — partial population acceptable.
 
 ## Anti-Patterns
 - NO constructing LSP clients in the tree-sitter pipeline — population is a post-TS background pass
-- NO blocking process_directory return on LSP population — fire-and-forget or post-return
-- NO importing LSPPopulationService at module level in base.py — lazy import to avoid circular deps
+- NO modifying IndexingCoordinator — DirectoryIndexingService already handles batch population
+- NO importing LSPPopulationService at module level in base.py or run.py — lazy import to avoid circular deps
+- NO creating pool without cleanup path — every pool constructor needs a corresponding shutdown in finally/cleanup
