@@ -11,6 +11,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Phase 2 acceptance task. All 4 implementation tasks (ch-5b3, ch-nvc, ch-zlg, ch-5a3) are closed.
 All sub-epic success criteria are checked. This task delivers a user demo.
@@ -42,3 +43,7 @@ Extend `scripts/demo_lsp.py` with Phase 2 population scenarios covering:
 - NO vacuous passes — every PASS must assert row counts > 0 or specific values, not just "query ran"
 - NO creating a separate demo script — extend the existing `scripts/demo_lsp.py`
 - NO skipping scenario 2 (incremental refresh)
+
+## Log
+
+- [2026-03-31T14:42:16Z] [Seth] BLOCKED: Demo reveals LSPPopulationService is dead code in production. Created ch-91j (wiring task). Acceptance cannot pass until ch-91j is done and demo re-run.

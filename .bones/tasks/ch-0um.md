@@ -4,9 +4,12 @@ title: 'Phase 2: Index-Time Population'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-7j0, ch-5b3, ch-nvc, ch-zlg, ch-5a3, ch-yda]
+depends_on: [ch-7j0, ch-5b3, ch-nvc, ch-zlg, ch-5a3, ch-yda, ch-91j]
 parent: ch-8e7
 ---
+
+
+
 
 
 
@@ -31,12 +34,12 @@ Scoped to parent epic R3:
 - R3: Background index-time population using 8 LSP operations
 
 ## Success Criteria
-- [x] Background population service runs after tree-sitter indexing completes (not blocking it)
+- [ ] Background population service runs after tree-sitter indexing completes (not blocking it)
 - [x] `documentSymbol` called per file → symbols written to `symbols` table with fqn, kind, range, parent_fqn
 - [x] `hover` called per symbol → `type_signature` populated on `symbols` rows
 - [x] `definition`, `references`, `implementation`, `incomingCalls`, `outgoingCalls` → edges written to `symbol_edges` with correct edge_kind
 - [x] `workspaceSymbol("")` called during full reindex for cross-file completeness
-- [x] Incremental: file change via file watcher → deletes that file's symbols + edges → repopulates
+- [ ] Incremental: file change via file watcher → deletes that file's symbols + edges → repopulates
 - [x] Multi-language: symbols and edges populated for Python + at least 2 other languages in a test project
 - [x] Confidence field reflects LSP result quality (compiler_grade, partial, unavailable)
 - [x] Batch inserts for symbols and edges (no single-row loops)
@@ -64,3 +67,7 @@ Inherited from parent epic, plus:
 - Modify a file → verify that file's symbols are refreshed (not full reindex)
 - Index a multi-language project → verify symbols from multiple languages present
 - Check symbol_edges for calls, references, implements edge kinds
+
+## Log
+
+- [2026-03-31T14:38:46Z] [Seth] ACCEPTANCE DEMO FAILURE: LSPPopulationService has 0 references outside tests. Never wired into IndexingCoordinator.process_directory or RealtimeIndexingService. Criteria 1 and 6 unchecked — service works in isolation (52 tests pass) but is dead code in production. Need wiring task before acceptance can pass.
