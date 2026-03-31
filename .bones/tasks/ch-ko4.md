@@ -14,6 +14,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Surfaced during ch-yda acceptance demo. `populate_files()` iterates all files
 but has no per-file error handling. A single `LSPTransportError` (e.g., client
@@ -65,3 +66,7 @@ Test that simulates a mid-loop `LSPTransportError` and verifies:
 2. `_populate_workspace_symbols` is called
 3. Failed file is logged with path and error
 4. Summary counts are correct (attempted, failed)
+
+## Log
+
+- [2026-03-31T22:53:15Z] [Seth] Investigated FK constraint error on reindex. Root cause: stale data from crashed prior run, not a code bug. Fresh DB indexes 671/743 files successfully (70 skipped, 2 failed on C++ transport errors). Fixes: widened per-file catch to Exception (duckdb.ConstraintException was escaping), added query text to DB error log, added logger.info phase markers for progress ordering. Discovered DuckDB FK limitation: explicit transactions BREAK FK enforcement — auto-commit ordering is correct approach. Logged to memory. Also created ch-rym (P1) for test file decomposition, parented under ch-0um, blocks ch-yda.
