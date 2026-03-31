@@ -1,7 +1,8 @@
 """Unit tests for scripts/demo_lsp.py internal logic.
 
 The script itself IS the acceptance walkthrough (e2e test).
-These tests cover the internal helpers: DB discovery, lock fallback, symbol filtering.
+These tests cover the internal helpers: DB discovery, lock fallback, symbol filtering,
+and Phase 2 population demo scenarios.
 """
 
 from __future__ import annotations
@@ -12,6 +13,7 @@ from dataclasses import dataclass, field
 from pathlib import Path
 from unittest.mock import patch
 
+import duckdb
 import pytest
 
 pytestmark = [pytest.mark.unit]
@@ -187,3 +189,220 @@ class TestSymbolFiltering:
         assert "helper" in result
         assert "temp" not in result
         assert "x" not in result
+
+
+# ── Phase 2: DB fixture ─────────────────────────────────────
+
+
+@pytest.fixture()
+def demo_db(tmp_path: Path) -> Path:
+    """Create a DuckDB with symbols + symbol_edges tables and sample data."""
+    db_path = tmp_path / ".chunkhound" / "db"
+    db_path.parent.mkdir(parents=True)
+    conn = duckdb.connect(str(db_path))
+    conn.execute("CREATE SEQUENCE IF NOT EXISTS files_id_seq")
+    conn.execute("""
+        CREATE TABLE files (
+            id INTEGER PRIMARY KEY DEFAULT nextval('files_id_seq'),
+            path TEXT UNIQUE NOT NULL,
+            name TEXT NOT NULL,
+            content_hash TEXT
+        )
+    """)
+    conn.execute("CREATE SEQUENCE IF NOT EXISTS symbols_id_seq")
+    conn.execute("""
+        CREATE TABLE symbols (
+            id INTEGER PRIMARY KEY DEFAULT nextval('symbols_id_seq'),
+            fqn TEXT NOT NULL,
+            name TEXT NOT NULL,
+            kind TEXT NOT NULL,
+            language TEXT,
+            file_id INTEGER REFERENCES files(id),
+            file_path TEXT,
+            range_start INTEGER,
+            range_end INTEGER,
+            type_signature TEXT,
+            parent_fqn TEXT,
+            confidence FLOAT DEFAULT 1.0,
+            lsp_server TEXT
+        )
+    """)
+    conn.execute("CREATE SEQUENCE IF NOT EXISTS symbol_edges_id_seq")
+    conn.execute("""
+        CREATE TABLE symbol_edges (
+            id INTEGER PRIMARY KEY DEFAULT nextval('symbol_edges_id_seq'),
+            from_symbol_id INTEGER NOT NULL,
+            from_fqn TEXT,
+            from_file TEXT,
+            to_symbol_id INTEGER NOT NULL,
+            to_fqn TEXT,
+            to_file TEXT,
+            edge_kind TEXT NOT NULL,
+            confidence FLOAT DEFAULT 1.0,
+            lsp_server TEXT
+        )
+    """)
+    # Insert sample files
+    conn.execute(
+        "INSERT INTO files (id, path, name, content_hash) VALUES "
+        "(1, 'chunkhound/lsp/client.py', 'client.py', 'abc'), "
+        "(2, 'chunkhound/lsp/types.py', 'types.py', 'def'), "
+        "(3, 'src/main.ts', 'main.ts', 'ghi')"
+    )
+    # Insert symbols: Python + TypeScript
+    conn.execute(
+        "INSERT INTO symbols (id, fqn, name, kind, language, file_id, file_path, range_start, range_end) VALUES "
+        "(1, 'LSPClient', 'LSPClient', 'Class', 'python', 1, 'chunkhound/lsp/client.py', 32, 576), "
+        "(2, 'LSPClient::start', 'start', 'Method', 'python', 1, 'chunkhound/lsp/client.py', 63, 160), "
+        "(3, 'SymbolInfo', 'SymbolInfo', 'Class', 'python', 2, 'chunkhound/lsp/types.py', 10, 30), "
+        "(4, 'main', 'main', 'Function', 'typescript', 3, 'src/main.ts', 1, 50)"
+    )
+    # Insert edges: defines, references, calls
+    conn.execute(
+        "INSERT INTO symbol_edges (from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, to_file, edge_kind) VALUES "
+        "(2, 'LSPClient::start', 'chunkhound/lsp/client.py', 3, 'SymbolInfo', 'chunkhound/lsp/types.py', 'references'), "
+        "(1, 'LSPClient', 'chunkhound/lsp/client.py', 3, 'SymbolInfo', 'chunkhound/lsp/types.py', 'defines'), "
+        "(4, 'main', 'src/main.ts', 1, 'LSPClient', 'chunkhound/lsp/client.py', 'calls')"
+    )
+    conn.close()
+    return db_path
+
+
+# ── Phase 2 Scenario 1: Symbols Populated ────────────────────
+
+
+class TestDemoSymbolsPopulated:
+    """Scenario 1: symbols table has rows and known symbols are findable."""
+
+    def test_pass_when_symbols_exist(self, demo_db: Path) -> None:
+        """Returns True when symbols table has rows and spot-check passes."""
+        from scripts.demo_lsp import demo_symbols_populated
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            assert demo_symbols_populated(conn) is True
+        finally:
+            conn.close()
+
+    def test_fail_when_no_symbols(self, tmp_path: Path) -> None:
+        """Returns False when symbols table is empty."""
+        db_path = tmp_path / "empty.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("CREATE TABLE symbols (id INTEGER, fqn TEXT, name TEXT, kind TEXT, language TEXT, file_path TEXT)")
+        conn.execute("CREATE TABLE files (id INTEGER, path TEXT)")
+
+        from scripts.demo_lsp import demo_symbols_populated
+
+        assert demo_symbols_populated(conn) is False
+        conn.close()
+
+
+# ── Phase 2 Scenario 2: Incremental Refresh ──────────────────
+
+
+class TestDemoIncrementalRefresh:
+    """Scenario 2: per-file delete + repopulate path works."""
+
+    def test_pass_when_symbols_restored_after_delete(self, demo_db: Path) -> None:
+        """Returns True when delete + repopulate restores symbol count."""
+        from scripts.demo_lsp import demo_incremental_refresh
+
+        conn = duckdb.connect(str(demo_db))
+        try:
+            # File 1 has 2 symbols — delete then re-insert should restore count
+            result = demo_incremental_refresh(conn, file_id=1, file_path="chunkhound/lsp/client.py")
+            assert result is True
+        finally:
+            conn.close()
+
+    def test_fail_when_file_has_no_symbols(self, demo_db: Path) -> None:
+        """Returns False when target file has no symbols to refresh."""
+        from scripts.demo_lsp import demo_incremental_refresh
+
+        conn = duckdb.connect(str(demo_db))
+        try:
+            result = demo_incremental_refresh(conn, file_id=999, file_path="nonexistent.py")
+            assert result is False
+        finally:
+            conn.close()
+
+
+# ── Phase 2 Scenario 3: Multi-Language ────────────────────────
+
+
+class TestDemoMultiLanguage:
+    """Scenario 3: symbols from multiple languages present."""
+
+    def test_pass_with_two_languages(self, demo_db: Path) -> None:
+        """Returns True when ≥2 distinct languages in symbols table."""
+        from scripts.demo_lsp import demo_multi_language
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            assert demo_multi_language(conn) is True
+        finally:
+            conn.close()
+
+    def test_skip_with_one_language(self, tmp_path: Path) -> None:
+        """Returns None (SKIP) when only 1 language present."""
+        db_path = tmp_path / "single_lang.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("CREATE TABLE symbols (id INTEGER, name TEXT, language TEXT)")
+        conn.execute("INSERT INTO symbols VALUES (1, 'foo', 'python'), (2, 'bar', 'python')")
+
+        from scripts.demo_lsp import demo_multi_language
+
+        result = demo_multi_language(conn)
+        assert result is None  # SKIP, not FAIL
+        conn.close()
+
+    def test_fail_with_no_symbols(self, tmp_path: Path) -> None:
+        """Returns False when symbols table is empty."""
+        db_path = tmp_path / "empty.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("CREATE TABLE symbols (id INTEGER, name TEXT, language TEXT)")
+
+        from scripts.demo_lsp import demo_multi_language
+
+        assert demo_multi_language(conn) is False
+        conn.close()
+
+
+# ── Phase 2 Scenario 4: Edge Kinds ───────────────────────────
+
+
+class TestDemoEdgeKinds:
+    """Scenario 4: symbol_edges contains expected edge kinds."""
+
+    def test_pass_with_required_kinds(self, demo_db: Path) -> None:
+        """Returns True when both 'defines' and 'references' edge kinds exist."""
+        from scripts.demo_lsp import demo_edge_kinds
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            assert demo_edge_kinds(conn) is True
+        finally:
+            conn.close()
+
+    def test_fail_with_no_edges(self, tmp_path: Path) -> None:
+        """Returns False when symbol_edges table is empty."""
+        db_path = tmp_path / "no_edges.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("CREATE TABLE symbol_edges (id INTEGER, edge_kind TEXT)")
+
+        from scripts.demo_lsp import demo_edge_kinds
+
+        assert demo_edge_kinds(conn) is False
+        conn.close()
+
+    def test_fail_with_only_one_kind(self, tmp_path: Path) -> None:
+        """Returns False when only one of the required edge kinds exists."""
+        db_path = tmp_path / "one_kind.db"
+        conn = duckdb.connect(str(db_path))
+        conn.execute("CREATE TABLE symbol_edges (id INTEGER, edge_kind TEXT)")
+        conn.execute("INSERT INTO symbol_edges VALUES (1, 'calls')")
+
+        from scripts.demo_lsp import demo_edge_kinds
+
+        assert demo_edge_kinds(conn) is False
+        conn.close()

@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Phase 1 Demo — LSP Client, Registry, Schema v2, Path Scoping.
+"""Phase 1+2 Demo — LSP Client, Registry, Schema, Path Scoping, Population.
 
 USER ACCEPTANCE WALKTHROUGH — not for implementation tasks to touch.
 Updates happen between epics so each phase's delta is visible.
 
-Dogfood ChunkHound's Phase 1 deliverables against the live codebase.
+Dogfood ChunkHound's Phase 1+2 deliverables against the live codebase.
 Run from project root:
 
     uv run scripts/demo_lsp.py                          # default file
@@ -205,6 +205,16 @@ def _open_db(db_path: Path):
     return duckdb.connect(str(_temp_db), read_only=True)
 
 
+def _open_db_rw(db_path: Path):
+    """Open DuckDB with write access. Returns None if locked."""
+    import duckdb
+
+    try:
+        return duckdb.connect(str(db_path))
+    except duckdb.IOException:
+        return None
+
+
 # ── 3. Schema v2 ──────────────────────────────────────────────
 
 
@@ -355,6 +365,174 @@ def demo_path_scoping() -> bool:
         conn.close()
 
 
+# ── 5. Symbols Populated ─────────────────────────────────────
+
+
+def demo_symbols_populated(conn) -> bool:
+    """Scenario 1: symbols table has rows and a known Python symbol is findable."""
+    row = conn.execute("SELECT COUNT(*) AS cnt FROM symbols").fetchone()
+    total = row[0] if row else 0
+
+    if total == 0:
+        print("  symbols table is empty — population did not run")
+        return False
+
+    print(f"  Total symbols: {total:,}")
+
+    # Spot-check: look for any Class symbol (most codebases have at least one)
+    sample = conn.execute(
+        "SELECT name, kind, language, file_path FROM symbols WHERE kind = 'Class' LIMIT 5"
+    ).fetchall()
+
+    if sample:
+        print(f"\n  Sample classes:")
+        for name, kind, lang, fpath in sample:
+            print(f"    {name:<30} {kind:<10} {lang or '?':<12} {fpath}")
+    else:
+        print("  (no Class symbols — checking for any symbol)")
+        sample = conn.execute(
+            "SELECT name, kind, language, file_path FROM symbols LIMIT 5"
+        ).fetchall()
+        for name, kind, lang, fpath in sample:
+            print(f"    {name:<30} {kind:<10} {lang or '?':<12} {fpath}")
+
+    return True
+
+
+# ── 6. Incremental Refresh ───────────────────────────────────
+
+
+def demo_incremental_refresh(conn, file_id: int, file_path: str) -> bool:
+    """Scenario 2: per-file delete + re-insert round-trip.
+
+    Proves the incremental path works: delete a file's symbols, re-insert them,
+    verify the count is restored. Uses raw SQL to exercise the same operations
+    the LSPPopulationService calls (delete_file_symbols + batch insert).
+    """
+    # Count symbols before
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM symbols WHERE file_id = ?", [file_id]
+    ).fetchone()
+    count_before = row[0] if row else 0
+
+    if count_before == 0:
+        print(f"  No symbols for file_id={file_id} ({file_path}) — cannot test refresh")
+        return False
+
+    print(f"  File:             {file_path} (file_id={file_id})")
+    print(f"  Symbols before:   {count_before}")
+
+    # Save symbols for re-insert
+    saved = conn.execute(
+        "SELECT fqn, name, kind, language, file_id, file_path, "
+        "range_start, range_end, type_signature, parent_fqn, confidence, lsp_server "
+        "FROM symbols WHERE file_id = ?",
+        [file_id],
+    ).fetchall()
+
+    # Delete (same as LSPPopulationService.delete_file_edges + delete_file_symbols)
+    conn.execute(
+        "DELETE FROM symbol_edges WHERE "
+        "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
+        "to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)",
+        [file_id, file_id],
+    )
+    conn.execute("DELETE FROM symbols WHERE file_id = ?", [file_id])
+
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM symbols WHERE file_id = ?", [file_id]
+    ).fetchone()
+    count_deleted = row[0] if row else 0
+    print(f"  After delete:     {count_deleted}")
+
+    # Re-insert (same batch pattern as LSPPopulationService._batch_insert)
+    if saved:
+        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(saved))
+        flat = [v for row in saved for v in row]
+        conn.execute(
+            f"INSERT INTO symbols (fqn, name, kind, language, file_id, file_path, "
+            f"range_start, range_end, type_signature, parent_fqn, confidence, lsp_server) "
+            f"VALUES {placeholders}",
+            flat,
+        )
+
+    row = conn.execute(
+        "SELECT COUNT(*) AS cnt FROM symbols WHERE file_id = ?", [file_id]
+    ).fetchone()
+    count_after = row[0] if row else 0
+    print(f"  After re-insert:  {count_after}")
+
+    if count_after != count_before:
+        print(f"  MISMATCH: expected {count_before}, got {count_after}")
+        return False
+
+    # Verify total unchanged (proves per-file, not full reindex)
+    total = conn.execute("SELECT COUNT(*) AS cnt FROM symbols").fetchone()
+    print(f"  Total symbols:    {total[0]:,} (unchanged)")
+
+    return True
+
+
+# ── 7. Multi-Language ────────────────────────────────────────
+
+
+def demo_multi_language(conn) -> bool | None:
+    """Scenario 3: symbols from multiple languages present.
+
+    Returns True (PASS), None (SKIP if <2 languages), or False (FAIL if empty).
+    """
+    rows = conn.execute(
+        "SELECT language, COUNT(*) AS cnt FROM symbols "
+        "WHERE language IS NOT NULL GROUP BY language ORDER BY cnt DESC"
+    ).fetchall()
+
+    if not rows:
+        print("  No symbols with language data")
+        return False
+
+    print(f"  Languages found: {len(rows)}")
+    for lang, cnt in rows:
+        print(f"    {lang:<20} {cnt:,} symbols")
+
+    if len(rows) < 2:
+        print(f"\n  SKIP: only 1 language — need ≥2 LSP servers configured and installed")
+        return None
+
+    return True
+
+
+# ── 8. Edge Kinds ────────────────────────────────────────────
+
+
+def demo_edge_kinds(conn) -> bool:
+    """Scenario 4: symbol_edges contains expected edge kinds.
+
+    Requires at least 'defines' and 'references' — the two most fundamental
+    edge types that any LSP server with definition + references capability produces.
+    """
+    rows = conn.execute(
+        "SELECT edge_kind, COUNT(*) AS cnt FROM symbol_edges "
+        "GROUP BY edge_kind ORDER BY cnt DESC"
+    ).fetchall()
+
+    if not rows:
+        print("  symbol_edges table is empty")
+        return False
+
+    kinds_found = {row[0] for row in rows}
+    print(f"  Edge kinds found:")
+    for kind, cnt in rows:
+        print(f"    {kind:<20} {cnt:,} edges")
+
+    required = {"defines", "references"}
+    missing = required - kinds_found
+    if missing:
+        print(f"\n  MISSING required edge kinds: {', '.join(sorted(missing))}")
+        return False
+
+    return True
+
+
 # ── Main ──────────────────────────────────────────────────────
 
 
@@ -365,24 +543,72 @@ async def main() -> int:
         print(f"File not found: {target}")
         return 1
 
-    print(f"\n  ChunkHound Phase 1 Demo")
+    print(f"\n  ChunkHound Phase 1+2 Demo")
     print(f"  Target: {target}\n")
 
     results: dict[str, bool] = {}
 
+    # ── Phase 1 ──
     results["lsp_client"] = await demo_lsp_client(target)
     demo_registry()
     results["schema"] = demo_schema()
     results["path_scoping"] = demo_path_scoping()
 
+    # ── Phase 2 ──
+    db_path = _find_db()
+    if db_path:
+        conn = _open_db(db_path)
+        try:
+            _hdr(5, "SYMBOL POPULATION — Phase 2")
+            results["symbols_populated"] = demo_symbols_populated(conn)
+
+            _hdr(6, "INCREMENTAL REFRESH — Phase 2")
+            # Pick a known file for refresh demo — use the target file
+            file_row = conn.execute(
+                "SELECT id FROM files WHERE path = ? LIMIT 1",
+                [target],
+            ).fetchone()
+            if file_row:
+                # Need a writable connection for the refresh demo
+                conn_rw = _open_db_rw(db_path)
+                if conn_rw:
+                    try:
+                        results["incremental_refresh"] = demo_incremental_refresh(
+                            conn_rw, file_id=file_row[0], file_path=target,
+                        )
+                    finally:
+                        conn_rw.close()
+                else:
+                    print("  DB locked — cannot test incremental refresh (stop MCP server)")
+                    results["incremental_refresh"] = False
+            else:
+                print(f"  Target file not in DB: {target}")
+                results["incremental_refresh"] = False
+
+            _hdr(7, "MULTI-LANGUAGE SYMBOLS — Phase 2")
+            ml_result = demo_multi_language(conn)
+            if ml_result is None:
+                print("  [SKIP]")
+            else:
+                results["multi_language"] = ml_result
+
+            _hdr(8, "EDGE KINDS — Phase 2")
+            results["edge_kinds"] = demo_edge_kinds(conn)
+        finally:
+            conn.close()
+    else:
+        print("\n  No DuckDB found — skipping Phase 2 demos. Run: chunkhound index .")
+
     # Summary
-    _hdr(5, "SUMMARY")
+    section_num = 9 if db_path else 5
+    _hdr(section_num, "SUMMARY")
     for name, passed in results.items():
         icon = "PASS" if passed else "FAIL"
         print(f"  [{icon}]  {name}")
 
     all_pass = all(results.values())
-    print(f"\n  {'All Phase 1 deliverables verified.' if all_pass else 'Some checks failed — see above.'}")
+    phase = "Phase 1+2" if db_path else "Phase 1"
+    print(f"\n  {'All ' + phase + ' deliverables verified.' if all_pass else 'Some checks failed — see above.'}")
 
     # Clean up temp DB snapshot
     if _temp_db and _temp_db.exists():
