@@ -9,6 +9,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Acceptance demo (ch-yda) revealed LSPPopulationService is dead code in production.
 The service works (52 tests pass) and the realtime wiring code exists (priority="lsp"

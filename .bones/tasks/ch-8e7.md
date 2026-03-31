@@ -172,6 +172,7 @@ Each phase ends with a reusable demo script (`scripts/demo_<phase>.py`) that dog
 ### Phase 2: Index Population
 **Scope:** R3
 **Gate:**
+- `uv run scripts/demo_lsp.py` → Phase 2 sections all PASS (symbols populated, incremental refresh, multi-language, edge kinds)
 - After indexing a multi-language project, `symbols` and `symbol_edges` tables populated for all configured languages
 - File watcher change triggers incremental symbol/edge refresh (verify with before/after counts)
 - `uv run pytest tests/test_lsp_population.py -v` → all pass

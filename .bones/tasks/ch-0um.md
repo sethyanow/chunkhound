@@ -46,6 +46,7 @@ Scoped to parent epic R3:
 - [x] All existing tests still pass (zero regression)
 - [x] `uv run pytest tests/test_lsp_population.py -v` → all pass (52 passed)
 - [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (17 passed)
+- [ ] `uv run scripts/demo_lsp.py` → Phase 2 sections all PASS (acceptance demo, not just unit tests)
 
 ## Anti-Patterns
 Inherited from parent epic, plus:

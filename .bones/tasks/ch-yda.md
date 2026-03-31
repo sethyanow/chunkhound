@@ -5,6 +5,7 @@ status: active
 type: task
 priority: 1
 owner: Seth
+depends_on: [ch-91j]
 parent: ch-0um
 ---
 
@@ -12,9 +13,12 @@ parent: ch-0um
 
 
 
+
 ## Context
-Phase 2 acceptance task. All 4 implementation tasks (ch-5b3, ch-nvc, ch-zlg, ch-5a3) are closed.
-All sub-epic success criteria are checked. This task delivers a user demo.
+Phase 2 acceptance task. Blocked by ch-91j (wiring LSPPopulationService into production).
+Demo script is written and unit-tested (10 tests pass). Demo fails against live DB because
+population service was never wired into production indexing. After ch-91j completes and
+a re-index runs, re-run `uv run scripts/demo_lsp.py` — Phase 2 sections must all PASS.
 
 ## Requirements
 From ch-0um Acceptance Requirements:
