@@ -59,10 +59,6 @@ Inherited from parent epic, plus:
 - For incremental updates, deleting symbols cascades to edges — delete edges WHERE from_symbol_id or to_symbol_id references a deleted symbol.
 
 ## Acceptance Requirements
-**Agent Documentation:**
-- [ ] CLAUDE.md updated: population service module, how to trigger manual repopulation
-- [ ] AGENTS.md updated: new service, interaction with file watcher
-
 **User Walkthrough Must Cover:**
 - Index a Python project → verify symbols table has entries
 - Modify a file → verify that file's symbols are refreshed (not full reindex)
