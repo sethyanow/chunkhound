@@ -1,12 +1,13 @@
 ---
 id: ch-zlg
 title: 'Edge population: definition/references/calls → symbol_edges'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -116,20 +117,20 @@ New method, same pattern as `_batch_insert`:
 14. Verify existing tests still pass (no regression)
 
 ## Success Criteria
-- [ ] `go_to_definition` → edge with kind `defines` linking symbol to its definition
-- [ ] `find_references` → edges with kind `references` for each reference location
-- [ ] `go_to_implementation` → edges with kind `implements`
-- [ ] `incoming_calls` → edges with kind `called_by`
-- [ ] `outgoing_calls` → edges with kind `calls`
-- [ ] Edge deduplication on (from_fqn, to_fqn, edge_kind)
-- [ ] Missing capability → that operation skipped, others still run
-- [ ] Target symbol not in DB → edge skipped (no crash, no orphan FK violation)
-- [ ] `_resolve_symbol` picks innermost (most specific) symbol at a line
-- [ ] `_resolve_symbol` returns None for non-file:// URIs (stdlib, virtual files)
-- [ ] Self-edges filtered out (from_fqn == to_fqn with same edge_kind)
-- [ ] `delete_file_edges` removes edges referencing a file's symbols
-- [ ] All existing tests pass (zero regression)
-- [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
+- [x] `go_to_definition` → edge with kind `defines` linking symbol to its definition
+- [x] `find_references` → edges with kind `references` for each reference location
+- [x] `go_to_implementation` → edges with kind `implements`
+- [x] `incoming_calls` → edges with kind `called_by`
+- [x] `outgoing_calls` → edges with kind `calls`
+- [x] Edge deduplication on (from_fqn, to_fqn, edge_kind)
+- [x] Missing capability → that operation skipped, others still run
+- [x] Target symbol not in DB → edge skipped (no crash, no orphan FK violation)
+- [x] `_resolve_symbol` picks innermost (most specific) symbol at a line
+- [x] `_resolve_symbol` returns None for non-file:// URIs (stdlib, virtual files)
+- [x] Self-edges filtered out (from_fqn == to_fqn with same edge_kind)
+- [x] `delete_file_edges` removes edges referencing a file's symbols
+- [x] All existing tests pass (zero regression)
+- [x] `uv run pytest tests/test_lsp_population.py -v` → all pass
 
 ## Key Considerations
 

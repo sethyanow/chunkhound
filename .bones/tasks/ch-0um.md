@@ -30,12 +30,12 @@ Scoped to parent epic R3:
 - [x] Background population service runs after tree-sitter indexing completes (not blocking it)
 - [x] `documentSymbol` called per file → symbols written to `symbols` table with fqn, kind, range, parent_fqn
 - [x] `hover` called per symbol → `type_signature` populated on `symbols` rows
-- [ ] `definition`, `references`, `implementation`, `incomingCalls`, `outgoingCalls` → edges written to `symbol_edges` with correct edge_kind
+- [x] `definition`, `references`, `implementation`, `incomingCalls`, `outgoingCalls` → edges written to `symbol_edges` with correct edge_kind
 - [ ] `workspaceSymbol("")` called during full reindex for cross-file completeness
 - [ ] Incremental: file change via file watcher → deletes that file's symbols + edges → repopulates
 - [ ] Multi-language: symbols and edges populated for Python + at least 2 other languages in a test project
 - [ ] Confidence field reflects LSP result quality (compiler_grade, partial, unavailable)
-- [ ] Batch inserts for symbols and edges (no single-row loops)
+- [x] Batch inserts for symbols and edges (no single-row loops)
 - [ ] All existing tests still pass (zero regression)
 - [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
 - [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
