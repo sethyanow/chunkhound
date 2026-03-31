@@ -12,6 +12,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Second task for Phase 2 (ch-0um). ch-5b3 delivered `LSPPopulationService` with `populate_file` that calls `documentSymbol` and writes rows to the `symbols` table. The `type_signature` column is currently always NULL.
 
@@ -99,3 +100,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 - NO hover calls in a separate `populate_file` pass — integrate into existing single-pass flow
 - NO hover on only top-level symbols — must recursively include children (nested methods/functions are highest-value targets)
 - NO per-symbol capability checks — check once at method entry, return empty dict if hover unsupported
+
+## Log
+
+- [2026-03-31T12:56:25Z] [Seth] Debrief: Clean implementation. Capability gate added during SRE was valuable. Mock AsyncMock().capabilities returns truthy Mock — existing tests auto-skip hover via gate. Reflections: 4 test failures from ch-u62 fuzzy_path addition — test mocks missing new kwarg, TypeError silently caught by multi-hop exception handler. User corrected: (1) invented smoke marker, (2) back-to-back suites, (3) classifying failures as pre-existing. Next task: ch-zlg edge population.
