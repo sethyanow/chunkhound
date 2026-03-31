@@ -12,6 +12,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Third task for Phase 2 (ch-0um). ch-5b3 delivered documentSymbol → symbols, ch-nvc delivered hover → type_signature. This task populates the `symbol_edges` table using 5 LSP operations per symbol.
 
@@ -162,3 +163,7 @@ New method, same pattern as `_batch_insert`:
 - NO blocking on edge failures — log and skip per symbol, same pattern as hover
 - NO trusting that target symbols exist — always resolve via `_resolve_symbol`, skip if None
 - NO deleting symbols before edges — edges reference symbol IDs; delete edges first
+
+## Log
+
+- [2026-03-31T13:24:21Z] [Seth] Debrief: Implementation followed skeleton exactly after SRE restructure of populate_file flow. No workarounds introduced. lsp_server field resolved via DB query (lightweight, acceptable). 38 tests pass (17 new). Reflections: SRE caught genuinely impossible ordering in wiring section — validates fresh-session review mandate. FQN construction duplication (_flatten_symbols + _edges_recursive) logged on epic as future refactor candidate. Scoped ch-5a3 as final Phase 2 task covering workspaceSymbol, incremental, multi-language, confidence.
