@@ -9,6 +9,7 @@ from __future__ import annotations
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
+from urllib.parse import unquote, urlparse
 
 from chunkhound.lsp.constants import symbol_kind_name
 from chunkhound.lsp.types import LSPCapability, LSPError, SymbolInfo
@@ -59,32 +60,49 @@ class LSPPopulationService:
             logger.debug("Cannot read %s, skipping LSP population", file_path)
             return
 
+        edges: list[tuple] = []
         try:
             await client.notify_did_open(uri, content, language)
             symbols = await client.document_symbols(uri)
             type_signatures = await self._collect_type_signatures(client, uri, symbols) if symbols else {}
+
+            if not symbols:
+                return
+
+            # Delete edges before symbols (edges reference symbol IDs via FK)
+            await self.delete_file_edges(file_id)
+            await self.delete_file_symbols(file_id)
+
+            # Flatten nested symbols into rows and insert
+            rows = self._flatten_symbols(
+                symbols=symbols,
+                file_id=file_id,
+                file_path=str(file_path),
+                language=language,
+                lsp_server=self._server_name(language),
+                parent_fqn=None,
+                type_signatures=type_signatures,
+            )
+
+            if rows:
+                self._batch_insert(rows)
+
+            # Query back symbol IDs for edge collection
+            fqn_rows = self._provider.execute_query(
+                "SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]
+            )
+            fqn_to_id = {row["fqn"]: row["id"] for row in fqn_rows}
+
+            # Collect edges (LSP operations need file open)
+            edges = await self._collect_edges(
+                client, uri, symbols, str(file_path), fqn_to_id,
+            )
         finally:
             await client.notify_did_close(uri)
 
-        if not symbols:
-            return
-
-        # Delete existing symbols for this file (idempotent repopulation)
-        await self.delete_file_symbols(file_id)
-
-        # Flatten nested symbols into rows
-        rows = self._flatten_symbols(
-            symbols=symbols,
-            file_id=file_id,
-            file_path=str(file_path),
-            language=language,
-            lsp_server=self._server_name(language),
-            parent_fqn=None,
-            type_signatures=type_signatures,
-        )
-
-        if rows:
-            self._batch_insert(rows)
+        # Batch insert edges (pure DB write — safe after didClose)
+        if edges:
+            self._batch_insert_edges(edges)
 
     async def _collect_type_signatures(
         self,
@@ -205,6 +223,181 @@ class LSPPopulationService:
                 file_id=row["id"],
                 language=lang,
             )
+
+    async def _collect_edges(
+        self,
+        client: LSPClient,
+        uri: str,
+        symbols: list[SymbolInfo],
+        file_path: str,
+        fqn_to_id: dict[str, int],
+    ) -> list[tuple]:
+        """Collect edges from LSP operations for all symbols in a file.
+
+        Calls definition/references/implementation/calls per symbol, resolves
+        targets via _resolve_symbol, and returns deduplicated edge tuples.
+
+        Args:
+            client: Active LSP client (file must be open).
+            uri: File URI for the source file.
+            symbols: Symbol tree from documentSymbol.
+            file_path: Relative path of the source file.
+            fqn_to_id: Mapping of FQN → symbol_id for the source file's symbols.
+
+        Returns:
+            List of 9-element tuples ready for batch insert into symbol_edges.
+        """
+        # Dedup dict: (from_fqn, to_fqn, edge_kind) → edge tuple
+        edges: dict[tuple[str, str, str], tuple] = {}
+        # Infer language from fqn_to_id keys — look up any symbol's language from DB
+        # This is called from populate_file which knows the language, but the interface
+        # doesn't pass it. Use _server_name with a DB lookup as fallback.
+        lsp_server = "unknown"
+        if fqn_to_id:
+            any_id = next(iter(fqn_to_id.values()))
+            lang_rows = self._provider.execute_query(
+                "SELECT language FROM symbols WHERE id = ? LIMIT 1", [any_id]
+            )
+            if lang_rows and lang_rows[0]["language"]:
+                lsp_server = self._server_name(lang_rows[0]["language"])
+        await self._edges_recursive(
+            client, uri, symbols, file_path, fqn_to_id,
+            parent_fqn=None, lsp_server=lsp_server, edges=edges,
+        )
+        return list(edges.values())
+
+    async def _edges_recursive(
+        self,
+        client: LSPClient,
+        uri: str,
+        symbols: list[SymbolInfo],
+        file_path: str,
+        fqn_to_id: dict[str, int],
+        parent_fqn: str | None,
+        lsp_server: str,
+        edges: dict[tuple[str, str, str], tuple],
+    ) -> None:
+        """Recursively walk symbols and collect edges from LSP operations."""
+        # Build operation list gated by capabilities
+        ops: list[tuple[str, object]] = []
+        if LSPCapability.DEFINITION in client.capabilities:
+            ops.append(("defines", client.go_to_definition))
+        if LSPCapability.REFERENCES in client.capabilities:
+            ops.append(("references", client.find_references))
+        if LSPCapability.IMPLEMENTATION in client.capabilities:
+            ops.append(("implements", client.go_to_implementation))
+        if LSPCapability.CALL_HIERARCHY in client.capabilities:
+            ops.append(("called_by", client.incoming_calls))
+            ops.append(("calls", client.outgoing_calls))
+
+        for sym in symbols:
+            fqn = f"{parent_fqn}::{sym.name}" if parent_fqn else sym.name
+            from_id = fqn_to_id.get(fqn)
+            if from_id is None:
+                logger.debug("No symbol_id for FQN %s, skipping edge collection", fqn)
+                if sym.children:
+                    await self._edges_recursive(
+                        client, uri, sym.children, file_path, fqn_to_id,
+                        parent_fqn=fqn, lsp_server=lsp_server, edges=edges,
+                    )
+                continue
+
+            try:
+                for edge_kind, operation in ops:
+                    try:
+                        results = await operation(uri, sym.range_start_line, sym.range_start_char)
+                    except Exception:
+                        logger.debug(
+                            "Edge op %s failed for %s at %d:%d, skipping",
+                            edge_kind, sym.name, sym.range_start_line, sym.range_start_char,
+                        )
+                        continue
+
+                    for loc in results:
+                        target = self._resolve_symbol(loc.uri, loc.range_start_line)
+                        if target is None:
+                            continue
+                        to_id, to_fqn, to_file = target
+
+                        # Skip self-edges
+                        if fqn == to_fqn and edge_kind == "defines":
+                            continue
+
+                        dedup_key = (fqn, to_fqn, edge_kind)
+                        edges[dedup_key] = (
+                            from_id, fqn, file_path,
+                            to_id, to_fqn, to_file,
+                            edge_kind, 1.0, lsp_server,
+                        )
+            except Exception:
+                logger.debug(
+                    "Edge collection failed for symbol %s, skipping",
+                    sym.name,
+                )
+
+            if sym.children:
+                await self._edges_recursive(
+                    client, uri, sym.children, file_path, fqn_to_id,
+                    parent_fqn=fqn, lsp_server=lsp_server, edges=edges,
+                )
+
+    def _resolve_symbol(self, uri: str, line: int) -> tuple[int, str, str] | None:
+        """Resolve an LSP result location to the innermost symbol in the DB.
+
+        Args:
+            uri: File URI from an LSP result (e.g. "file:///path/to/file.py").
+            line: Line number within the file (0-based, matching stored range_start/range_end).
+
+        Returns:
+            (symbol_id, fqn, file_path) for the most specific symbol at that line,
+            or None if the URI is not a file:// scheme, points outside the workspace,
+            or no symbol covers that line.
+        """
+        parsed = urlparse(uri)
+        if parsed.scheme != "file":
+            return None
+
+        abs_path = Path(unquote(parsed.path))
+        try:
+            rel_path = abs_path.relative_to(self._workspace_root)
+        except ValueError:
+            return None
+
+        file_path_str = str(rel_path)
+        rows = self._provider.execute_query(
+            "SELECT id, fqn, file_path FROM symbols "
+            "WHERE file_path = ? AND range_start <= ? AND range_end >= ? "
+            "ORDER BY (range_end - range_start) ASC LIMIT 1",
+            [file_path_str, line, line],
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        return (row["id"], row["fqn"], row["file_path"])
+
+    def _batch_insert_edges(self, edges: list[tuple]) -> None:
+        """Single batch INSERT for all edges from one file."""
+        if not edges:
+            return
+        placeholders = ", ".join(
+            ["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(edges)
+        )
+        flat_params = [val for edge in edges for val in edge]
+        self._provider.execute_query(
+            "INSERT INTO symbol_edges "
+            "(from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, "
+            f"to_file, edge_kind, confidence, lsp_server) VALUES {placeholders}",
+            flat_params,
+        )
+
+    async def delete_file_edges(self, file_id: int) -> None:
+        """Remove all edges that reference symbols belonging to this file."""
+        self._provider.execute_query(
+            "DELETE FROM symbol_edges WHERE "
+            "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
+            "to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)",
+            [file_id, file_id],
+        )
 
     async def delete_file_symbols(self, file_id: int) -> None:
         """Remove all symbols for a given file_id."""

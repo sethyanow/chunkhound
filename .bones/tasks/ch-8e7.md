@@ -22,6 +22,7 @@ depends_on: [ch-7j0, ch-0um, ch-zyz, ch-dar, ch-z2o, ch-bf0, ch-52s, ch-u62]
 
 
 
+
 ## Requirements (IMMUTABLE)
 
 R1. Standalone LSP client manager module — asyncio JSON-RPC over stdio, config-driven server registry, capability gating, connection pooling. Zero ChunkHound imports. Server configs for all languages with existing tree-sitter grammars (pyright first, then all others).
@@ -335,3 +336,4 @@ Agents bounce between LSP (structural: types, call chains, references) and seman
 ## Log
 
 - [2026-03-31T03:30:31Z] [Seth] Adversarial finding (ch-5b3): FQN uses '.' separator, but symbol names can contain dots (e.g., decorated names). Phase 3-4 graph tools that parse FQNs need to handle this ambiguity — cannot split on '.' naively.
+- [2026-03-31T13:18:28Z] [Seth] Adversarial finding (ch-zlg): FQN construction is duplicated between _flatten_symbols and _edges_recursive — both do f"{parent_fqn}::{sym.name}". If either diverges, edges silently break. Consider extracting a shared _build_fqn helper in a future refactoring task.

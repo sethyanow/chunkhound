@@ -1,11 +1,13 @@
 ---
 id: ch-zlg
 title: 'Edge population: definition/references/calls → symbol_edges'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -36,15 +38,20 @@ New private method on `LSPPopulationService`:
 ### Edge collection: `_collect_edges`
 
 New async method on `LSPPopulationService`:
-- Signature: `async def _collect_edges(self, client: LSPClient, uri: str, symbols: list[SymbolInfo], file_path: str, symbol_id_map: dict[tuple[int, int], int]) -> list[tuple]`
-- `symbol_id_map`: mapping of `(range_start_line, range_start_char) → symbol_id` for the current file's just-inserted symbols
+- Signature: `async def _collect_edges(self, client: LSPClient, uri: str, symbols: list[SymbolInfo], file_path: str, fqn_to_id: dict[str, int]) -> list[tuple]`
+- `fqn_to_id`: mapping of `fqn → symbol_id` for the current file's just-inserted symbols
 - Capability gate per operation type (DEFINITION, REFERENCES, IMPLEMENTATION, CALL_HIERARCHY) — skip missing capabilities
 - Recursively walks symbols via `_edges_recursive` (same pattern as `_hover_recursive`)
-- For each symbol: looks up `from_symbol_id` from `symbol_id_map`
-- Calls each LSP operation, for each result:
+- For each symbol: builds FQN (same logic as `_flatten_symbols`), looks up `from_symbol_id` from `fqn_to_id`
+- Calls each LSP operation. Return types differ:
+  - `go_to_definition`, `find_references`, `go_to_implementation` return `list[Location]` (`.uri`, `.range_start_line`)
+  - `incoming_calls`, `outgoing_calls` return `list[CallHierarchyItem]` (`.uri`, `.range_start_line`, plus `.name`, `.kind`)
+  - Both types share the fields needed by `_resolve_symbol`
+- For each result:
+  - Skip self-edges (from_fqn == resolved to_fqn and same edge_kind)
   - `_resolve_symbol(result.uri, result.range_start_line)` → `(to_symbol_id, to_fqn, to_file)` or skip
   - Create edge tuple: `(from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, to_file, edge_kind, confidence, lsp_server)`
-- Deduplication: collect into a set keyed by `(from_fqn, to_fqn, edge_kind)`, last-write wins
+- Deduplication: collect into a dict keyed by `(from_fqn, to_fqn, edge_kind)`, last-write wins
 - Returns edge tuples for batch insert
 
 ### Edge kind mapping
@@ -59,16 +66,25 @@ New async method on `LSPPopulationService`:
 
 ### Wiring into `populate_file`
 
-After `_batch_insert(rows)`:
-1. Query back inserted symbol IDs: `SELECT id, range_start, range_end FROM symbols WHERE file_id = ?`
-2. Build `symbol_id_map: dict[tuple[int, int], int]` from `(range_start, range_end) → id`
+**Restructured flow** — current code runs delete + insert after didClose, but edge collection needs the file open AND symbol IDs from the DB. Move DB writes into the try block:
 
-Wait — the symbols table stores `range_start` (line) and `range_end` (line), but the map key should be `(range_start_line, range_start_char)` to match SymbolInfo. However, `range_start_char` isn't stored in the symbols table. Use `(range_start, fqn) → id` instead — FQN is unique per file.
+```
+try:
+    didOpen → documentSymbol → hover             # (existing)
+    delete_file_edges(file_id)                    # NEW: edges before symbols
+    delete_file_symbols(file_id)                  # (existing, moved earlier)
+    flatten → _batch_insert(rows)                 # (existing, moved earlier)
+    fqn_to_id = query_fqn_to_id(file_id)         # NEW: SELECT id, fqn FROM symbols WHERE file_id = ?
+    edges = _collect_edges(client, uri, symbols, file_path, fqn_to_id)  # NEW
+finally:
+    didClose
+if edges:
+    _batch_insert_edges(edges)                    # NEW: DB-only, safe after didClose
+```
 
-Revised: Build `fqn_to_id: dict[str, int]` from `SELECT id, fqn FROM symbols WHERE file_id = ?`. Then `_collect_edges` uses FQN lookup for `from_symbol_id`.
+Key constraint: `_collect_edges` calls LSP operations (needs file open) AND uses `fqn_to_id` (needs symbols inserted). Both requirements satisfied by this ordering. `_batch_insert_edges` is a pure DB write — safe after didClose.
 
-3. Call `_collect_edges(client, uri, symbols, file_path, fqn_to_id)` inside the try block (file still open)
-4. Call `_batch_insert_edges(edges)` after didClose
+Exception safety: if `_batch_insert` succeeds but `_collect_edges` throws, symbols are populated but edges are missing. Next `populate_file` call will clean up (delete + re-insert). Idempotent by design.
 
 ### Batch insert for edges: `_batch_insert_edges`
 
@@ -109,9 +125,34 @@ New method, same pattern as `_batch_insert`:
 - [ ] Missing capability → that operation skipped, others still run
 - [ ] Target symbol not in DB → edge skipped (no crash, no orphan FK violation)
 - [ ] `_resolve_symbol` picks innermost (most specific) symbol at a line
+- [ ] `_resolve_symbol` returns None for non-file:// URIs (stdlib, virtual files)
+- [ ] Self-edges filtered out (from_fqn == to_fqn with same edge_kind)
 - [ ] `delete_file_edges` removes edges referencing a file's symbols
 - [ ] All existing tests pass (zero regression)
 - [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
+
+## Key Considerations
+
+### `_resolve_symbol` — URI handling
+- Only accept `file://` scheme URIs. Return None for `untitled:`, `jar:`, or any non-file scheme.
+- Use `urllib.parse.unquote` for percent-encoded paths before stripping workspace_root.
+- If relative path doesn't start within workspace (stdlib, third-party), return None early — don't query.
+
+### `_resolve_symbol` — line number basis
+- Verify in first TDD cycle that line numbers from `go_to_definition` results use the same 0-based indexing as `symbols.range_start`/`range_end` stored by `_flatten_symbols`. Off-by-one here silently drops all edges or links to wrong symbols.
+
+### `_collect_edges` — multiple results per operation
+- `go_to_definition` returns `list[Location]` — may have multiple locations (overloads, re-exports). Create an edge for each.
+- `find_references` can return hundreds of locations for common symbols. All become edges. This is correct but produces high edge volume.
+
+### `_collect_edges` — FQN collision for overloads
+- Languages with overloading (TypeScript, C++) may produce multiple symbols with the same FQN. `fqn_to_id` dict last-write-wins is acceptable — edges from either overload point to a valid symbol_id with the correct FQN.
+
+### Cross-file asymmetry during initial indexing
+- During full-index, files are populated in arbitrary order. File A→B edges may be dropped if File B isn't populated yet (`_resolve_symbol` returns None). Graph is eventually consistent after full re-index but may have asymmetric edges on single pass. This is inherent to per-file population and addressed by the Phase 2 `workspaceSymbol("")` criterion (separate task).
+
+### LSP call volume
+- 5 operations × N symbols per file. For a 500-symbol file, ~2,500 round-trips. Same O(n) pattern as existing `_hover_recursive`. Performance optimization (batching, parallelism) is a separate concern.
 
 ## Anti-Patterns
 - NO edge inserts with NULL symbol_id — FK constraint will reject; skip if resolution fails
