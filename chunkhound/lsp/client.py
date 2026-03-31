@@ -272,6 +272,14 @@ class LSPClient:
         )
         return self._parse_symbols(result or [])
 
+    async def workspace_symbols(self, query: str = "") -> list[SymbolInfo]:
+        result = await self._send_operation(
+            "workspace/symbol",
+            LSPCapability.WORKSPACE_SYMBOL,
+            {"query": query},
+        )
+        return self._parse_symbols(result or [])
+
     async def go_to_definition(
         self, uri: str, line: int, char: int
     ) -> list[Location]:
@@ -459,10 +467,12 @@ class LSPClient:
     def _parse_symbols(cls, data: list[dict[str, Any]]) -> list[SymbolInfo]:
         symbols = []
         for item in data:
-            rng = item.get("range", item.get("location", {}).get("range", {}))
+            location = item.get("location", {})
+            rng = item.get("range", location.get("range", {}))
             start = rng.get("start", {})
             end = rng.get("end", {})
             children_data = item.get("children", [])
+            location_uri = location.get("uri")
             symbols.append(
                 SymbolInfo(
                     name=item.get("name", ""),
@@ -474,6 +484,7 @@ class LSPClient:
                     detail=item.get("detail"),
                     container_name=item.get("containerName"),
                     children=cls._parse_symbols(children_data),
+                    location_uri=location_uri,
                 )
             )
         return symbols

@@ -1,11 +1,13 @@
 ---
 id: ch-5a3
 title: 'Phase 2 completeness: workspaceSymbol, incremental, multi-language, confidence'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -32,6 +34,8 @@ From parent sub-epic ch-0um, scoped to remaining unchecked criteria:
 - Params: `{"query": query}` — empty string returns all workspace symbols
 - Parse response via existing `_parse_symbols`
 - Note: some servers (ty) don't support workspaceSymbol. Capability-gate as usual.
+
+**SRE: `location.uri` extraction (decision: option b).** Add `location_uri: str | None = None` to `SymbolInfo`. `_parse_symbols` populates it from `location.uri` when present (workspaceSymbol results have it, documentSymbol results don't). `populate_files` uses `location_uri` to resolve file_path and file_id for DB insertion.
 
 **Integration into `populate_files`:**
 - After the per-file `populate_file` loop in `LSPPopulationService.populate_files` (line 147)
@@ -69,17 +73,19 @@ Strategy:
 4. Implement workspaceSymbol integration in `populate_files` — deduplicate by (fqn, file_path)
 5. Write test: confidence is `0.9` for workspaceSymbol-sourced symbols (vs `1.0` for documentSymbol)
 6. Update `populate_files` workspaceSymbol insert path to use confidence=0.9
-7. Write test: incremental refresh — populate_file twice with different symbols → old replaced by new
-8. Write test: multi-language — 3 languages with mock clients → symbols for all 3 in DB
-9. Run full test suite + smoke tests, commit
+7. Write test: incremental refresh — populate_file twice with DIFFERENT symbols → old replaced by new. Setup: first call inserts symbols [A, B] with edges. Second call inserts symbols [C]. Verify: A and B gone from `symbols` table, their edges gone from `symbol_edges` table, only C remains.
+8. Write test: multi-language — 3 languages with mock clients → symbols for all 3 in DB with correct `language` AND `lsp_server` fields per language.
+9. Write test: workspaceSymbol for file not in `files` table → symbol silently skipped (no crash, no orphan row).
+10. Write test: workspaceSymbol on server without `WORKSPACE_SYMBOL` capability → skipped gracefully.
+11. Run full test suite + smoke tests, commit
 
 ## Success Criteria
 - [ ] `LSPClient.workspace_symbols("")` returns parsed SymbolInfo list
 - [ ] `populate_files` calls workspaceSymbol after per-file loop
 - [ ] workspaceSymbol-sourced symbols have confidence=0.9 (not 1.0)
 - [ ] No duplicate symbols from workspaceSymbol + documentSymbol overlap
-- [ ] Incremental: second populate_file with different data → old data replaced
-- [ ] Multi-language: Python + 2 other languages in symbols table
+- [ ] Incremental: second populate_file with different data → old symbols AND edges replaced
+- [ ] Multi-language: Python + 2 other languages in symbols table with correct `lsp_server` per language
 - [ ] All existing tests pass (zero regression)
 - [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
 
@@ -88,6 +94,8 @@ Strategy:
 - NO modifying confidence on existing symbols — workspaceSymbol adds NEW rows only
 - NO changing the per-file populate_file flow — workspaceSymbol is a separate batch-level pass
 - NO assuming all LSP servers support workspaceSymbol — capability-gate it
+- NO reusing `test_second_run_is_idempotent` as the incremental test — idempotent uses same data, incremental requires DIFFERENT data to prove deletion
+- NO treating `_parse_symbols` as sufficient for workspaceSymbol — must also extract `location.uri` for file resolution
 
 ## Key Considerations
 
@@ -99,3 +107,19 @@ If a symbol's file_path doesn't have a matching `files` row, skip it — FK cons
 
 ### Incremental test is a verification, not new code
 The wiring exists in `populate_file` (delete before insert). The test proves the wiring works end-to-end. If the test passes on first run, that's expected — the code was designed for idempotency in ch-zlg.
+
+### SRE: Edge cases to test
+- workspaceSymbol returns symbol for file not in `files` table → skip, don't crash
+- workspaceSymbol returns symbol overlapping with documentSymbol (same fqn + file_path) → existing row kept, no duplicate
+- Server lacks `WORKSPACE_SYMBOL` capability → `populate_files` workspaceSymbol pass silently skipped
+- Incremental refresh test must verify BOTH symbols and edges are deleted/replaced, not just symbols
+
+### Adversarial: workspaceSymbol URI handling
+- Non-file URIs (`untitled:`, `git:`, `inmemory:`) must be filtered before path resolution — gate on `scheme == "file"` same as `_resolve_symbol` (lsp_population.py:358)
+- Percent-encoded paths (`my%20file.py`) must be `unquote()`ed before comparing to `files.path` — same pattern as `_resolve_symbol` (line 360)
+- Duplicate symbols in the response batch (re-exports, multiple paths) — dedup in-memory with `set[tuple[str, str]]` of `(fqn, file_path)` before DB check
+
+### Adversarial: workspaceSymbol reliability
+- `workspace/symbol` on large workspaces can be slow (10-30s for pyright on 10k+ files). Wrap call in try/except for `LSPError` family — log + skip on timeout, same as per-file pattern
+- LSP spec allows partial results — workspace symbols are best-effort for cross-file completeness, not authoritative. Confidence=0.9 already signals this
+- If `populate_files` is interrupted mid-loop, workspace pass checks dedup against partial state. Acceptable: next full reindex corrects confidence values. No design change needed

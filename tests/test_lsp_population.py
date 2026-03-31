@@ -1902,3 +1902,615 @@ class TestAdversarialEdges:
         assert edge[1] == "MyClass::method"  # from_fqn preserves parent::child
         assert edge[4] == "dep_func"          # to_fqn
         assert edge[6] == "defines"           # edge_kind
+
+
+class TestWorkspaceSymbolsParsing:
+    """
+    Feature: workspace_symbols returns SymbolInfo with location_uri
+
+    As the population service
+    I want workspace symbol results to include the file URI
+    So that I can resolve which file each symbol belongs to
+    """
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbols_returns_symbolinfo_with_location_uri(self) -> None:
+        """
+        Scenario: workspace_symbols parses SymbolInformation format
+        Given a mock LSP server returning SymbolInformation[] with location.uri
+        When workspace_symbols is called
+        Then results are SymbolInfo instances with location_uri populated
+        """
+        from chunkhound.lsp.client import LSPClient
+
+        # SymbolInformation format (flat, with location.uri — what workspace/symbol returns)
+        raw_response = [
+            {
+                "name": "MyClass",
+                "kind": 5,  # Class
+                "location": {
+                    "uri": "file:///workspace/src/foo.py",
+                    "range": {
+                        "start": {"line": 10, "character": 0},
+                        "end": {"line": 20, "character": 0},
+                    },
+                },
+                "containerName": "foo",
+            },
+            {
+                "name": "helper",
+                "kind": 12,  # Function
+                "location": {
+                    "uri": "file:///workspace/src/bar.py",
+                    "range": {
+                        "start": {"line": 5, "character": 0},
+                        "end": {"line": 8, "character": 0},
+                    },
+                },
+            },
+        ]
+
+        symbols = LSPClient._parse_symbols(raw_response)
+
+        assert len(symbols) == 2
+
+        assert symbols[0].name == "MyClass"
+        assert symbols[0].kind == 5
+        assert symbols[0].range_start_line == 10
+        assert symbols[0].location_uri == "file:///workspace/src/foo.py"
+
+        assert symbols[1].name == "helper"
+        assert symbols[1].location_uri == "file:///workspace/src/bar.py"
+
+    @pytest.mark.asyncio
+    async def test_document_symbols_have_no_location_uri(self) -> None:
+        """
+        Scenario: documentSymbol results have no location.uri
+        Given a DocumentSymbol[] response (has range, no location)
+        When _parse_symbols is called
+        Then location_uri is None
+        """
+        from chunkhound.lsp.client import LSPClient
+
+        raw_response = [
+            {
+                "name": "MyFunc",
+                "kind": 12,
+                "range": {
+                    "start": {"line": 1, "character": 0},
+                    "end": {"line": 5, "character": 0},
+                },
+                "children": [],
+            },
+        ]
+
+        symbols = LSPClient._parse_symbols(raw_response)
+        assert len(symbols) == 1
+        assert symbols[0].location_uri is None
+
+
+class TestPopulateFilesWorkspaceSymbols:
+    """
+    Feature: populate_files calls workspaceSymbol after per-file loop
+
+    As the population service
+    I want workspace symbols to supplement per-file documentSymbol results
+    So that cross-file symbols not visible per-file are captured
+    """
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbols_inserts_new_symbols(self, tmp_path: Path) -> None:
+        """
+        Scenario: workspaceSymbol adds symbols not found by documentSymbol
+        Given documentSymbol returns [Greeter] for a file
+        And workspaceSymbol returns [Greeter, hidden_helper] (hidden_helper is in same file)
+        When populate_files runs
+        Then both Greeter (from documentSymbol) and hidden_helper (from workspaceSymbol) are in DB
+        And hidden_helper has confidence=0.9, Greeter has confidence=1.0
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+
+        # Create actual file on disk (populate_file reads content for didOpen)
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("class Greeter: pass\ndef hidden_helper(): pass\n")
+
+        # documentSymbol returns one symbol
+        doc_symbols = [
+            SymbolInfo(
+                name="Greeter", kind=5,
+                range_start_line=1, range_start_char=0,
+                range_end_line=10, range_end_char=0,
+                children=[],
+            ),
+        ]
+
+        # workspaceSymbol returns two symbols (one overlaps, one is new)
+        workspace_symbols_response = [
+            SymbolInfo(
+                name="Greeter", kind=5,
+                range_start_line=1, range_start_char=0,
+                range_end_line=10, range_end_char=0,
+                location_uri=f"file://{tmp_path}/src/foo.py",
+            ),
+            SymbolInfo(
+                name="hidden_helper", kind=12,
+                range_start_line=12, range_start_char=0,
+                range_end_line=15, range_end_char=0,
+                location_uri=f"file://{tmp_path}/src/foo.py",
+            ),
+        ]
+
+        pool, client = _make_mock_pool(doc_symbols)
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        client.workspace_symbols = AsyncMock(return_value=workspace_symbols_response)
+
+        # Mock edge collection to avoid LSP calls
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        # Both symbols should be in DB
+        rows = provider.execute_query("SELECT fqn, confidence FROM symbols ORDER BY fqn")
+        fqns = {row["fqn"] for row in rows}
+        assert "Greeter" in fqns
+        assert "hidden_helper" in fqns
+        assert len(rows) == 2
+
+        # Verify confidence differentiation
+        for row in rows:
+            if row["fqn"] == "Greeter":
+                assert row["confidence"] == pytest.approx(1.0)  # documentSymbol source
+            elif row["fqn"] == "hidden_helper":
+                assert row["confidence"] == pytest.approx(0.9, abs=1e-6)  # workspaceSymbol source
+
+
+class TestIncrementalRefresh:
+    """
+    Feature: Incremental refresh replaces old symbols and edges
+
+    As the population service
+    I want a second populate_file call with different symbols to replace old data
+    So that the DB reflects the current file state, not stale data
+    """
+
+    @pytest.mark.asyncio
+    async def test_second_populate_replaces_symbols_and_edges(self, tmp_path: Path) -> None:
+        """
+        Scenario: File changes, second populate_file replaces old symbols + edges
+        Given populate_file inserts symbols [A, B] with edges for file_id=1
+        When populate_file is called again with symbols [C]
+        Then A and B are gone from symbols, their edges are gone, only C remains
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/mod.py")
+        _insert_file(provider, 2, "src/dep.py")
+
+        # Create file on disk
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "mod.py").write_text("class A: pass\nclass B: pass\n")
+
+        # First run: symbols A and B
+        first_symbols = [
+            SymbolInfo(name="A", kind=5, range_start_line=0, range_start_char=0,
+                       range_end_line=5, range_end_char=0, children=[]),
+            SymbolInfo(name="B", kind=5, range_start_line=6, range_start_char=0,
+                       range_end_line=10, range_end_char=0, children=[]),
+        ]
+
+        pool, client = _make_mock_pool(first_symbols)
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {
+            LSPCapability.DOCUMENT_SYMBOL, LSPCapability.DEFINITION,
+        }
+
+        # Mock definition to produce an edge: A defines something in dep.py
+        # Insert a symbol in dep.py so _resolve_symbol can find it
+        provider.execute_query(
+            "INSERT INTO symbols (fqn, name, kind, language, file_id, file_path, "
+            "range_start, range_end, parent_fqn, confidence, lsp_server, type_signature) "
+            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            ["dep_func", "dep_func", "Function", "python", 2, "src/dep.py",
+             0, 5, None, 1.0, "pyright-langserver", None],
+        )
+
+        dep_location = Location(
+            uri=f"file://{tmp_path}/src/dep.py",
+            range_start_line=0, range_start_char=0,
+            range_end_line=5, range_end_char=0,
+        )
+        client.go_to_definition = AsyncMock(return_value=[dep_location])
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        await service.populate_file(
+            file_path=Path("src/mod.py"), file_id=1, language="python",
+        )
+
+        # Verify first run: A, B in symbols, at least 1 edge
+        sym_rows = provider.execute_query(
+            "SELECT fqn FROM symbols WHERE file_id = 1"
+        )
+        first_fqns = {row["fqn"] for row in sym_rows}
+        assert "A" in first_fqns
+        assert "B" in first_fqns
+
+        edge_rows = provider.execute_query(
+            "SELECT from_fqn FROM symbol_edges WHERE from_fqn IN ('A', 'B')"
+        )
+        assert len(edge_rows) > 0, "Expected at least one edge from first run"
+        first_edge_count = len(edge_rows)
+
+        # Second run: only symbol C (file content changed)
+        second_symbols = [
+            SymbolInfo(name="C", kind=12, range_start_line=0, range_start_char=0,
+                       range_end_line=3, range_end_char=0, children=[]),
+        ]
+        client.document_symbols = AsyncMock(return_value=second_symbols)
+        client.go_to_definition = AsyncMock(return_value=[])  # no edges
+
+        await service.populate_file(
+            file_path=Path("src/mod.py"), file_id=1, language="python",
+        )
+
+        # Verify second run: only C remains, A and B gone
+        sym_rows = provider.execute_query(
+            "SELECT fqn FROM symbols WHERE file_id = 1"
+        )
+        second_fqns = {row["fqn"] for row in sym_rows}
+        assert second_fqns == {"C"}, f"Expected only C, got {second_fqns}"
+
+        # Edges from A/B should be gone
+        edge_rows = provider.execute_query(
+            "SELECT from_fqn FROM symbol_edges WHERE from_fqn IN ('A', 'B')"
+        )
+        assert len(edge_rows) == 0, f"Expected 0 edges from A/B, got {len(edge_rows)}"
+
+
+class TestMultiLanguagePopulation:
+    """
+    Feature: Symbols populated for multiple languages
+
+    As the population service
+    I want to populate symbols from Python, TypeScript, and Go files
+    So that multi-language codebases have complete symbol coverage
+    """
+
+    @pytest.mark.asyncio
+    async def test_three_languages_produce_correct_symbols(self, tmp_path: Path) -> None:
+        """
+        Scenario: Three languages each produce symbols with correct language and lsp_server
+        Given files in Python, TypeScript, and Go
+        When populate_file is called for each
+        Then symbols table has entries for all 3 languages with correct lsp_server per language
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/main.py")
+        _insert_file(provider, 2, "src/app.ts")
+        _insert_file(provider, 3, "src/main.go")
+
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "main.py").write_text("class PyClass: pass\n")
+        (tmp_path / "src" / "app.ts").write_text("class TsClass {}\n")
+        (tmp_path / "src" / "main.go").write_text("type GoStruct struct{}\n")
+
+        py_symbols = [SymbolInfo(name="PyClass", kind=5, range_start_line=0,
+                                  range_start_char=0, range_end_line=1, range_end_char=0)]
+        ts_symbols = [SymbolInfo(name="TsClass", kind=5, range_start_line=0,
+                                  range_start_char=0, range_end_line=1, range_end_char=0)]
+        go_symbols = [SymbolInfo(name="GoStruct", kind=23, range_start_line=0,
+                                  range_start_char=0, range_end_line=1, range_end_char=0)]
+
+        # Create separate mock clients per language
+        py_client = AsyncMock()
+        py_client.document_symbols = AsyncMock(return_value=py_symbols)
+        py_client.notify_did_open = AsyncMock()
+        py_client.notify_did_close = AsyncMock()
+        py_client.hover = AsyncMock(return_value=None)
+        py_client.capabilities = {LSPCapability.DOCUMENT_SYMBOL}
+
+        ts_client = AsyncMock()
+        ts_client.document_symbols = AsyncMock(return_value=ts_symbols)
+        ts_client.notify_did_open = AsyncMock()
+        ts_client.notify_did_close = AsyncMock()
+        ts_client.hover = AsyncMock(return_value=None)
+        ts_client.capabilities = {LSPCapability.DOCUMENT_SYMBOL}
+
+        go_client = AsyncMock()
+        go_client.document_symbols = AsyncMock(return_value=go_symbols)
+        go_client.notify_did_open = AsyncMock()
+        go_client.notify_did_close = AsyncMock()
+        go_client.hover = AsyncMock(return_value=None)
+        go_client.capabilities = {LSPCapability.DOCUMENT_SYMBOL}
+
+        client_map = {"python": py_client, "typescript": ts_client, "go": go_client}
+
+        pool = AsyncMock()
+        pool.get = AsyncMock(side_effect=lambda lang, _ws: client_map[lang])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+            await service.populate_file(Path("src/main.py"), file_id=1, language="python")
+            await service.populate_file(Path("src/app.ts"), file_id=2, language="typescript")
+            await service.populate_file(Path("src/main.go"), file_id=3, language="go")
+
+        rows = provider.execute_query(
+            "SELECT fqn, language, lsp_server FROM symbols ORDER BY fqn"
+        )
+        assert len(rows) == 3
+
+        by_fqn = {row["fqn"]: row for row in rows}
+        assert by_fqn["PyClass"]["language"] == "python"
+        assert by_fqn["TsClass"]["language"] == "typescript"
+        assert by_fqn["GoStruct"]["language"] == "go"
+
+        # lsp_server should differ per language (looked up from registry)
+        servers = {row["lsp_server"] for row in rows}
+        assert len(servers) >= 2, f"Expected different servers per language, got {servers}"
+
+
+class TestWorkspaceSymbolEdgeCases:
+    """
+    Feature: workspaceSymbol edge case handling
+
+    As the population service
+    I want workspaceSymbol to handle edge cases gracefully
+    So that bad data from LSP servers doesn't crash or corrupt the DB
+    """
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_for_unknown_file_is_skipped(self, tmp_path: Path) -> None:
+        """
+        Scenario: workspaceSymbol returns symbol for file not in files table
+        Given file "src/foo.py" is in files table but "src/unknown.py" is not
+        And workspaceSymbol returns a symbol in "src/unknown.py"
+        When populate_files runs
+        Then the unknown file's symbol is skipped (no crash, no orphan row)
+        And the known file's workspace symbol IS inserted
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        # Note: src/unknown.py is NOT in the files table
+
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("def known(): pass\n")
+
+        # documentSymbol returns nothing (so we only test workspace path)
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        # workspaceSymbol returns two symbols: one in known file, one in unknown file
+        workspace_results = [
+            SymbolInfo(
+                name="known_func", kind=12,
+                range_start_line=0, range_start_char=0,
+                range_end_line=1, range_end_char=0,
+                location_uri=f"file://{tmp_path}/src/foo.py",
+            ),
+            SymbolInfo(
+                name="unknown_func", kind=12,
+                range_start_line=0, range_start_char=0,
+                range_end_line=1, range_end_char=0,
+                location_uri=f"file://{tmp_path}/src/unknown.py",
+            ),
+        ]
+        client.workspace_symbols = AsyncMock(return_value=workspace_results)
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        fqns = {row["fqn"] for row in rows}
+        assert "known_func" in fqns, "Known file's workspace symbol should be inserted"
+        assert "unknown_func" not in fqns, "Unknown file's symbol should be skipped"
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_no_capability_skips_gracefully(self, tmp_path: Path) -> None:
+        """
+        Scenario: Server lacks WORKSPACE_SYMBOL capability
+        Given a server that only supports DOCUMENT_SYMBOL (not WORKSPACE_SYMBOL)
+        When populate_files runs
+        Then workspace symbol pass is skipped (no crash, no workspace_symbols call)
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("def hello(): pass\n")
+
+        doc_symbols = [SymbolInfo(name="hello", kind=12, range_start_line=0,
+                                   range_start_char=0, range_end_line=1, range_end_char=0)]
+
+        pool, client = _make_mock_pool(doc_symbols)
+        client.hover = AsyncMock(return_value=None)
+        # Only DOCUMENT_SYMBOL — no WORKSPACE_SYMBOL
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL}
+        client.workspace_symbols = AsyncMock()  # should NOT be called
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        # workspace_symbols should never have been called
+        client.workspace_symbols.assert_not_called()
+
+        # documentSymbol symbols should still be present
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        assert {row["fqn"] for row in rows} == {"hello"}
+
+
+class TestAdversarialWorkspaceSymbols:
+    """Adversarial stress tests for _populate_workspace_symbols."""
+
+    @pytest.mark.asyncio
+    async def test_empty_workspace_symbols_no_crash(self, tmp_path: Path) -> None:
+        """Empty: workspace_symbols returns [] — no inserts, no crash."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        client.workspace_symbols = AsyncMock(return_value=[])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        assert len(rows) == 0  # no doc symbols, no workspace symbols
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_with_non_file_uri_skipped(self, tmp_path: Path) -> None:
+        """Encoding boundaries: non-file URI schemes (git:, untitled:) must be filtered."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        client.workspace_symbols = AsyncMock(return_value=[
+            SymbolInfo(name="ghost", kind=12, range_start_line=0, range_start_char=0,
+                       range_end_line=1, range_end_char=0,
+                       location_uri="git:///some/virtual/file.py"),
+            SymbolInfo(name="phantom", kind=12, range_start_line=0, range_start_char=0,
+                       range_end_line=1, range_end_char=0,
+                       location_uri="untitled:Untitled-1"),
+        ])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        assert len(rows) == 0, f"Non-file URIs should be skipped, got {[r['fqn'] for r in rows]}"
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_with_percent_encoded_path(self, tmp_path: Path) -> None:
+        """Encoding boundaries: percent-encoded URI must match unencoded DB path."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/my file.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "my file.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        # URI has %20 for space — must match "my file.py" in DB after unquote
+        client.workspace_symbols = AsyncMock(return_value=[
+            SymbolInfo(name="spaced_func", kind=12, range_start_line=0, range_start_char=0,
+                       range_end_line=1, range_end_char=0,
+                       location_uri=f"file://{tmp_path}/src/my%20file.py"),
+        ])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        fqns = {row["fqn"] for row in rows}
+        assert "spaced_func" in fqns, "Percent-encoded URI should resolve to DB path after unquote"
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_outside_workspace_skipped(self, tmp_path: Path) -> None:
+        """Disconnected: symbol URI points outside workspace root."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        client.workspace_symbols = AsyncMock(return_value=[
+            SymbolInfo(name="external_func", kind=12, range_start_line=0, range_start_char=0,
+                       range_end_line=1, range_end_char=0,
+                       location_uri="file:///completely/different/path/ext.py"),
+        ])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        assert len(rows) == 0, "Symbols outside workspace should be skipped"
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_duplicate_in_batch_deduped(self, tmp_path: Path) -> None:
+        """Redundant: same symbol appears twice in workspace results (re-exports)."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        # Same symbol returned twice (simulating re-export)
+        dup_sym = SymbolInfo(name="ReExported", kind=5, range_start_line=0, range_start_char=0,
+                             range_end_line=5, range_end_char=0,
+                             location_uri=f"file://{tmp_path}/src/foo.py")
+        client.workspace_symbols = AsyncMock(return_value=[dup_sym, dup_sym])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols WHERE fqn = 'ReExported'")
+        assert len(rows) == 1, f"Duplicate workspace symbols should be deduped, got {len(rows)}"
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbol_none_location_uri_skipped(self, tmp_path: Path) -> None:
+        """Semantically hostile: SymbolInfo with location_uri=None from workspace results."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        client.workspace_symbols = AsyncMock(return_value=[
+            SymbolInfo(name="no_uri_func", kind=12, range_start_line=0, range_start_char=0,
+                       range_end_line=1, range_end_char=0,
+                       location_uri=None),  # Missing URI
+        ])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+
+        rows = provider.execute_query("SELECT fqn FROM symbols")
+        assert len(rows) == 0, "Symbols with no location_uri should be skipped"
+
+    @pytest.mark.asyncio
+    async def test_second_run_workspace_symbols_idempotent(self, tmp_path: Path) -> None:
+        """The 'second run': populate_files twice with same workspace data → no duplicates."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/foo.py")
+        (tmp_path / "src").mkdir(parents=True)
+        (tmp_path / "src" / "foo.py").write_text("x = 1\n")
+
+        ws_sym = SymbolInfo(name="ws_only", kind=12, range_start_line=0, range_start_char=0,
+                            range_end_line=1, range_end_char=0,
+                            location_uri=f"file://{tmp_path}/src/foo.py")
+
+        pool, client = _make_mock_pool(symbols=[])
+        client.hover = AsyncMock(return_value=None)
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+        client.workspace_symbols = AsyncMock(return_value=[ws_sym])
+
+        with patch.object(LSPPopulationService, "_collect_edges", new_callable=AsyncMock, return_value=[]):
+            service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+            await service.populate_files()
+            await service.populate_files()  # second run
+
+        rows = provider.execute_query("SELECT fqn FROM symbols WHERE fqn = 'ws_only'")
+        assert len(rows) == 1, f"Second run should not duplicate workspace symbols, got {len(rows)}"

@@ -98,6 +98,7 @@ class SymbolInfo:
     children: list[SymbolInfo] = field(default_factory=list)
     detail: str | None = None
     container_name: str | None = None
+    location_uri: str | None = None
 
 
 @dataclass

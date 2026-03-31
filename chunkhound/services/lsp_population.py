@@ -215,14 +215,95 @@ class LSPPopulationService:
         rows = self._provider.execute_query(
             "SELECT id, path FROM files"
         )
+        languages_seen: set[str] = set()
         for row in rows:
             file_path = Path(row["path"])
             lang = Language.from_file_extension(file_path).value
+            languages_seen.add(lang)
             await self.populate_file(
                 file_path=file_path,
                 file_id=row["id"],
                 language=lang,
             )
+
+        # workspaceSymbol pass: supplement per-file results with cross-file symbols
+        await self._populate_workspace_symbols(languages_seen)
+
+    async def _populate_workspace_symbols(self, languages: set[str]) -> None:
+        """Call workspaceSymbol per language and insert new symbols not already in DB."""
+        for language in languages:
+            try:
+                client = await self._pool.get(language, str(self._workspace_root))
+            except LSPError:
+                continue
+
+            if LSPCapability.WORKSPACE_SYMBOL not in client.capabilities:
+                continue
+
+            try:
+                symbols = await client.workspace_symbols("")
+            except LSPError:
+                logger.debug("workspaceSymbol failed for language=%s, skipping", language)
+                continue
+
+            lsp_server = self._server_name(language)
+            seen: set[tuple[str, str]] = set()  # (fqn, file_path) dedup within batch
+
+            for sym in symbols:
+                if sym.location_uri is None:
+                    continue
+
+                parsed = urlparse(sym.location_uri)
+                if parsed.scheme != "file":
+                    continue
+
+                abs_path = Path(unquote(parsed.path))
+                try:
+                    rel_path = abs_path.relative_to(self._workspace_root)
+                except ValueError:
+                    continue
+
+                file_path_str = str(rel_path)
+
+                # Look up file_id — skip symbols for files not in the DB
+                file_rows = self._provider.execute_query(
+                    "SELECT id FROM files WHERE path = ?", [file_path_str]
+                )
+                if not file_rows:
+                    continue
+
+                file_id = file_rows[0]["id"]
+                fqn = sym.name  # workspaceSymbol returns flat results, no parent context
+
+                # In-batch dedup
+                dedup_key = (fqn, file_path_str)
+                if dedup_key in seen:
+                    continue
+                seen.add(dedup_key)
+
+                # Skip if symbol already exists (from documentSymbol pass)
+                existing = self._provider.execute_query(
+                    "SELECT id FROM symbols WHERE fqn = ? AND file_path = ? LIMIT 1",
+                    [fqn, file_path_str],
+                )
+                if existing:
+                    continue
+
+                # Insert with lower confidence (workspace symbols are less precise)
+                self._batch_insert([(
+                    fqn,
+                    sym.name,
+                    symbol_kind_name(sym.kind),
+                    language,
+                    file_id,
+                    file_path_str,
+                    sym.range_start_line,
+                    sym.range_end_line,
+                    None,  # parent_fqn — flat results, no parent context
+                    0.9,   # confidence: workspace symbol (less precise than documentSymbol)
+                    lsp_server,
+                    None,  # type_signature — not collected for workspace symbols
+                )])
 
     async def _collect_edges(
         self,
