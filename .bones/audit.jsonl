@@ -100,3 +100,6 @@
 {"timestamp":"2026-03-31T13:07:35.732459+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-zlg","details":{"actor":"Seth"}}
 {"timestamp":"2026-03-31T13:18:28.642490+00:00","actor":"Seth","event_type":"logged","task_id":"ch-8e7","details":{"message":"Adversarial finding (ch-zlg): FQN construction is duplicated between _flatten_symbols and _edges_recursive — both do f\"{parent_fqn}::{sym.name}\". If either diverges, edges silently break. Consider extracting a shared _build_fqn helper in a future refactoring task."}}
 {"timestamp":"2026-03-31T13:20:14.851327+00:00","actor":"Seth","event_type":"closed","task_id":"ch-zlg","details":{"notes":null}}
+{"timestamp":"2026-03-31T13:23:16.054457+00:00","actor":"Seth","event_type":"created","task_id":"ch-5a3","details":{}}
+{"timestamp":"2026-03-31T13:23:20.068910+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-0um","details":{"kind":"parent-child","to":"ch-5a3"}}
+{"timestamp":"2026-03-31T13:23:20.069336+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-0um","details":{"kind":"blocks","to":"ch-5a3"}}
