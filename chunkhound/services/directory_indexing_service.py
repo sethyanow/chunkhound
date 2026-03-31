@@ -87,6 +87,7 @@ class DirectoryIndexingService:
             include_patterns, exclude_patterns = self._resolve_file_patterns()
 
             # Directory processing (extracted from run.py:80-82, 253-284)
+            logger.info("Phase: file processing")
             self.progress_callback("Starting file processing...")
             process_result = await self._process_directory_files(
                 target_path, include_patterns, exclude_patterns
@@ -97,12 +98,14 @@ class DirectoryIndexingService:
 
             # Embedding generation (extracted from run.py:85-88, 287-312)
             if not no_embeddings:
+                logger.info("Phase: embedding generation")
                 self.progress_callback("Checking for missing embeddings...")
                 embed_result = await self._generate_missing_embeddings(exclude_patterns)
                 stats.embeddings_generated = embed_result.get("generated", 0)
 
             # LSP symbol population (runs after embeddings, background pass)
             if self._lsp_population is not None:
+                logger.info("Phase: LSP symbol population")
                 self.progress_callback("Populating LSP symbols...")
                 await self._populate_symbols()
 

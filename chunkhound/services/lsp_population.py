@@ -251,7 +251,7 @@ class LSPPopulationService:
                     populated += 1
                 elif result is PopulateResult.SKIPPED:
                     skipped += 1
-            except (LSPError, asyncio.TimeoutError, OSError) as exc:
+            except Exception as exc:
                 failed += 1
                 logger.warning(
                     "Population failed for %s: %s: %s",

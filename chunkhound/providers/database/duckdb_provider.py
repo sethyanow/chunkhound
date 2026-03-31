@@ -2816,7 +2816,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             return []
 
         except Exception as e:
-            logger.error(f"Failed to execute query: {e}")
+            logger.error("Failed to execute query: %s | query: %.200s", e, query)
             raise
 
     def _executor_begin_transaction(self, conn: Any, state: dict[str, Any]) -> None:

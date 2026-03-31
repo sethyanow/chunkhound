@@ -3073,6 +3073,54 @@ class TestPopulateFilesResilience:
     """
 
     @pytest.mark.asyncio
+    async def test_loop_continues_after_db_constraint_error(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Scenario: DB ConstraintError on one file must not abort the loop.
+        This is the exact error type that escaped the original catch clause.
+        """
+        import duckdb
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+        _insert_file(provider, 2, "src/b.py")
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        for name in ("src/a.py", "src/b.py"):
+            f = tmp_path / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("class Foo:\n    def bar(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+        # Monkeypatch populate_file to raise ConstraintError on first file only
+        original_populate = service.populate_file
+        call_count = 0
+
+        async def patched_populate(file_path, file_id, language):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise duckdb.ConstraintException(
+                    "Constraint Error: Violates foreign key constraint"
+                )
+            return await original_populate(file_path, file_id, language)
+
+        service.populate_file = patched_populate  # type: ignore[assignment]
+
+        # Should NOT raise — loop must catch the DB error and continue
+        await service.populate_files()
+
+        # Second file should still be populated
+        rows = provider.execute_query("SELECT file_id FROM symbols")
+        file_ids = {r["file_id"] for r in rows}
+        assert 2 in file_ids, "Second file should be populated despite first file's DB error"
+
+    @pytest.mark.asyncio
     async def test_loop_continues_after_mid_loop_transport_error(
         self, tmp_path: Path
     ) -> None:
@@ -3357,3 +3405,148 @@ class TestPopulateFilesAdversarial:
         file_ids = {r["file_id"] for r in rows}
         assert 2 in file_ids, "real.py should be populated"
         assert 1 not in file_ids, "ghost.py should be skipped (not on disk)"
+
+
+class TestDeleteSymbolsWithCrossFileEdges:
+    """Regression: delete_file_symbols must not fail when cross-file edges reference the file's symbols."""
+
+    @pytest.mark.asyncio
+    async def test_repopulate_file_with_cross_file_edges(self, tmp_path: Path) -> None:
+        """
+        Scenario: File A has symbols referenced by edges from File B.
+        When File A is repopulated (delete + reinsert), the delete pair
+        must be atomic so FK constraints don't fire.
+        """
+        provider = _make_provider(tmp_path)
+
+        # Insert two files
+        _insert_file(provider, 1, "src/a.py")
+        _insert_file(provider, 2, "src/b.py")
+
+        # Insert symbols for both files
+        provider.execute_query(
+            "INSERT INTO symbols (id, fqn, name, kind, language, file_id, file_path, range_start, range_end, confidence, lsp_server) "
+            "VALUES (100, 'Foo', 'Foo', 'class', 'python', 1, 'src/a.py', 0, 10, 1.0, 'pyright'), "
+            "       (200, 'Bar', 'Bar', 'class', 'python', 2, 'src/b.py', 0, 10, 1.0, 'pyright')"
+        )
+
+        # Insert a cross-file edge: Bar (file B) → Foo (file A)
+        provider.execute_query(
+            "INSERT INTO symbol_edges (from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, to_file, edge_kind, confidence, lsp_server) "
+            "VALUES (200, 'Bar', 'src/b.py', 100, 'Foo', 'src/a.py', 'references', 1.0, 'pyright')"
+        )
+
+        # Verify edge exists
+        edges = provider.execute_query("SELECT * FROM symbol_edges")
+        assert len(edges) == 1, f"Expected 1 edge, got {len(edges)}"
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        src = tmp_path / "src" / "a.py"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("class Foo:\n    def bar(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+        # This must NOT raise ConstraintError — the delete pair must be atomic
+        result = await service.populate_file(
+            file_path=Path("src/a.py"),
+            file_id=1,
+            language="python",
+        )
+        assert result is PopulateResult.POPULATED
+
+    @pytest.mark.asyncio
+    async def test_full_reindex_with_cross_file_edges(self, tmp_path: Path) -> None:
+        """
+        Scenario: Full populate_files run with existing symbols+edges from a prior run.
+        Simulates the actual reindex crash: File A has edges pointing to File B's symbols.
+        When File B is repopulated, its symbols must be deletable.
+        """
+        provider = _make_provider(tmp_path)
+
+        # Insert two files
+        _insert_file(provider, 1, "src/a.py")
+        _insert_file(provider, 2, "src/b.py")
+
+        # Simulate prior run: symbols exist with sequence-assigned IDs
+        provider.execute_query(
+            "INSERT INTO symbols (id, fqn, name, kind, language, file_id, file_path, range_start, range_end, confidence, lsp_server) "
+            "VALUES (10001, 'Foo', 'Foo', 'class', 'python', 1, 'src/a.py', 0, 10, 1.0, 'pyright'), "
+            "       (10002, 'Bar', 'Bar', 'class', 'python', 2, 'src/b.py', 0, 10, 1.0, 'pyright')"
+        )
+
+        # Prior run edges: bidirectional cross-file references
+        provider.execute_query(
+            "INSERT INTO symbol_edges (from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, to_file, edge_kind, confidence, lsp_server) "
+            "VALUES (10001, 'Foo', 'src/a.py', 10002, 'Bar', 'src/b.py', 'references', 1.0, 'pyright'), "
+            "       (10002, 'Bar', 'src/b.py', 10001, 'Foo', 'src/a.py', 'references', 1.0, 'pyright')"
+        )
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        for name in ("src/a.py", "src/b.py"):
+            f = tmp_path / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("class Foo:\n    def bar(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+        # Full reindex — must NOT raise ConstraintError
+        await service.populate_files()
+
+        # Both files should be populated with new symbols
+        rows = provider.execute_query("SELECT file_id FROM symbols")
+        file_ids = {r["file_id"] for r in rows}
+        assert 1 in file_ids, "File A should have symbols after reindex"
+        assert 2 in file_ids, "File B should have symbols after reindex"
+
+    @pytest.mark.asyncio
+    async def test_delete_edges_before_symbols_ordering(self, tmp_path: Path) -> None:
+        """
+        Verify edges are deleted BEFORE symbols so FK constraints don't fire.
+        DuckDB auto-commits per statement — ordering is the safety mechanism.
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+
+        # Insert symbol and a self-referencing edge
+        provider.execute_query(
+            "INSERT INTO symbols (id, fqn, name, kind, language, file_id, file_path, range_start, range_end, confidence, lsp_server) "
+            "VALUES (100, 'Foo', 'Foo', 'class', 'python', 1, 'src/a.py', 0, 10, 1.0, 'pyright')"
+        )
+        provider.execute_query(
+            "INSERT INTO symbol_edges (from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, to_file, edge_kind, confidence, lsp_server) "
+            "VALUES (100, 'Foo', 'src/a.py', 100, 'Foo', 'src/a.py', 'references', 1.0, 'pyright')"
+        )
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+        # Track call order
+        call_order: list[str] = []
+        original_edges = service.delete_file_edges
+        original_symbols = service.delete_file_symbols
+
+        async def tracked_edges(file_id: int) -> None:
+            call_order.append("edges")
+            await original_edges(file_id)
+
+        async def tracked_symbols(file_id: int) -> None:
+            call_order.append("symbols")
+            await original_symbols(file_id)
+
+        service.delete_file_edges = tracked_edges  # type: ignore[assignment]
+        service.delete_file_symbols = tracked_symbols  # type: ignore[assignment]
+
+        (tmp_path / "src" / "a.py").parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "a.py").write_text("class Foo:\n    def bar(self): ...\n")
+
+        result = await service.populate_file(Path("src/a.py"), 1, "python")
+        assert result is PopulateResult.POPULATED
+
+        # Edges must be deleted before symbols — this is the FK safety mechanism
+        assert call_order == ["edges", "symbols"], (
+            f"Expected edges-before-symbols ordering, got {call_order}"
+        )

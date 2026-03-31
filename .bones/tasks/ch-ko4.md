@@ -32,11 +32,11 @@ populated but cross-file edges nearly absent (1,319/1,323 self-referential).
 5. Summary at end: X populated, Y failed, Z skipped (no LSP server)
 
 ## Success Criteria
-- [ ] Single degraded client does not crash the population loop
-- [ ] `_populate_workspace_symbols` runs after the file loop regardless of per-file failures
-- [ ] Failed files are logged with file path and error detail
-- [ ] `populate_file` returns a status enum distinguishing populated/skipped/failed
-- [ ] Summary logged at end: X populated, Y failed, Z skipped
+- [x] Single degraded client does not crash the population loop
+- [x] `_populate_workspace_symbols` runs after the file loop regardless of per-file failures
+- [x] Failed files are logged with file path and error detail
+- [x] `populate_file` returns a status enum distinguishing populated/skipped/failed
+- [x] Summary logged at end: X populated, Y failed, Z skipped
 - [ ] `uv run scripts/demo_lsp.py` cross-file edge health check passes after re-index
 
 ## Anti-Patterns
