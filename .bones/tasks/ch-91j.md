@@ -14,6 +14,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Acceptance demo (ch-yda) revealed LSPPopulationService is dead code in production.
 The service works (52 tests pass) and the realtime wiring code exists (priority="lsp"
@@ -161,3 +162,7 @@ Around the DirectoryIndexingService construction (line 118):
 - NO modifying IndexingCoordinator — DirectoryIndexingService already handles batch population
 - NO importing LSPPopulationService at module level in base.py or run.py — lazy import to avoid circular deps
 - NO creating pool without cleanup path — every pool constructor needs a corresponding shutdown in finally/cleanup
+
+## Log
+
+- [2026-03-31T15:18:25Z] [Seth] Debrief: Wired LSPPopulationService into 3 production paths (base.py realtime, base.py batch, run.py CLI). SRE caught skeleton error — DirectoryIndexingService already had lsp_population interface, no IndexingCoordinator changes needed. 7 new tests (2 wiring, 1 CLI, 4 adversarial). Reflections: Skeleton had wrong wiring target and missing CLI path — SRE prevented rework. Phase 2 criteria 1+6 checked on ch-0um. Only ch-yda demo remains.
