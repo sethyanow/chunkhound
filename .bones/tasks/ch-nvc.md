@@ -1,12 +1,13 @@
 ---
 id: ch-nvc
 title: 'Hover per symbol: type_signature population'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -69,14 +70,14 @@ VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
 9. Verify existing tests still pass (no regression from tuple size change)
 
 ## Success Criteria
-- [ ] `hover` called for each symbol returned by `documentSymbol`
-- [ ] `type_signature` column populated with hover contents for symbols that have hover data
-- [ ] Symbols without hover data have `type_signature = NULL` (not empty string)
-- [ ] Hover failure on one symbol doesn't prevent other symbols from being populated
-- [ ] Batch INSERT includes `type_signature` as 12th column
-- [ ] Server without hover capability → all type_signatures NULL, no exceptions logged per symbol
-- [ ] All existing ch-5b3 tests updated and passing (tuple size change)
-- [ ] `uv run pytest tests/test_lsp_population.py -v` → all pass
+- [x] `hover` called for each symbol returned by `documentSymbol`
+- [x] `type_signature` column populated with hover contents for symbols that have hover data
+- [x] Symbols without hover data have `type_signature = NULL` (not empty string)
+- [x] Hover failure on one symbol doesn't prevent other symbols from being populated
+- [x] Batch INSERT includes `type_signature` as 12th column
+- [x] Server without hover capability → all type_signatures NULL, no exceptions logged per symbol
+- [x] All existing ch-5b3 tests updated and passing (tuple size change)
+- [x] `uv run pytest tests/test_lsp_population.py -v` → all pass
 
 ## Key Considerations (SRE)
 - **Error catch breadth:** `_collect_type_signatures` must catch `Exception` (broad) per symbol, not just `LSPError`. Hover can fail from JSON parsing, unicode, or other unexpected errors — none should crash the file's population.

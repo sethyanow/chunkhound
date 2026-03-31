@@ -27,7 +27,7 @@ Scoped to parent epic R3:
 ## Success Criteria
 - [x] Background population service runs after tree-sitter indexing completes (not blocking it)
 - [x] `documentSymbol` called per file → symbols written to `symbols` table with fqn, kind, range, parent_fqn
-- [ ] `hover` called per symbol → `type_signature` populated on `symbols` rows
+- [x] `hover` called per symbol → `type_signature` populated on `symbols` rows
 - [ ] `definition`, `references`, `implementation`, `incomingCalls`, `outgoingCalls` → edges written to `symbol_edges` with correct edge_kind
 - [ ] `workspaceSymbol("")` called during full reindex for cross-file completeness
 - [ ] Incremental: file change via file watcher → deletes that file's symbols + edges → repopulates
