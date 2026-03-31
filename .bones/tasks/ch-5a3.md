@@ -12,6 +12,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 Fourth and final implementation task for Phase 2 (ch-0um). ch-5b3 delivered documentSymbol, ch-nvc delivered hover/type_signature, ch-zlg delivered edge population. This task completes the remaining 4 functional criteria.
 
@@ -124,3 +125,7 @@ The wiring exists in `populate_file` (delete before insert). The test proves the
 - `workspace/symbol` on large workspaces can be slow (10-30s for pyright on 10k+ files). Wrap call in try/except for `LSPError` family — log + skip on timeout, same as per-file pattern
 - LSP spec allows partial results — workspace symbols are best-effort for cross-file completeness, not authoritative. Confidence=0.9 already signals this
 - If `populate_files` is interrupted mid-loop, workspace pass checks dedup against partial state. Acceptable: next full reindex corrects confidence values. No design change needed
+
+## Log
+
+- [2026-03-31T13:59:39Z] [Seth] Debrief: No workarounds. location_uri as optional SymbolInfo field (user chose option b). DuckDB FLOAT precision needs pytest.approx for confidence. Workspace symbols insert individually (optimization candidate for later). Reflections: Steps 5-6 redundant with 3-4 (confidence inseparable from workspace insertion). URI resolution pattern appears twice (_resolve_symbol + _populate_workspace_symbols) — extract shared helper at 3rd occurrence. User correction: surfaced design decision as 3 options, user chose — good pattern to repeat.
