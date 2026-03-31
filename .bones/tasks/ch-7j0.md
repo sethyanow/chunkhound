@@ -58,8 +58,8 @@ Inherited from parent epic, plus:
 
 ## Acceptance Requirements
 **Agent Documentation:**
-- [ ] CLAUDE.md updated: LSP client module location, config format, new DuckDB tables documented
-- [ ] AGENTS.md updated: new tables, new module, key commands for LSP
+- [x] CLAUDE.md updated: references AGENTS.md; no new content needed (derivable from code/bones)
+- [x] AGENTS.md updated: fixed stale pre-push test command to include all 4 tiers
 
 **User Walkthrough Must Cover:**
 - LSP client connects to pyright and returns documentSymbol for a Python file

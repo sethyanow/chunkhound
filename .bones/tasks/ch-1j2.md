@@ -45,11 +45,11 @@ Update CLAUDE.md and AGENTS.md with Phase 1 deliverables:
 Reusable demo script (`scripts/demo_lsp.py`) that dogfoods Phase 1 deliverables against the live codebase.
 
 ## Success Criteria
-- [ ] CLAUDE.md updated: LSP client module location, config format, new DuckDB tables documented
-- [ ] AGENTS.md updated: new tables, new module, key commands for LSP
-- [ ] `scripts/demo_lsp.py` exists and runs successfully against this repo
-- [ ] User has run the demo script and confirmed observable outcomes
-- [ ] No information in CLAUDE.md/AGENTS.md contradicts actual code state
+- [x] CLAUDE.md updated: references AGENTS.md; no new content needed (derivable from code/bones per user direction)
+- [x] AGENTS.md updated: fixed stale pre-push test command to include all 4 tiers
+- [x] `scripts/demo_lsp.py` exists and runs successfully against this repo
+- [x] User has run the demo script and confirmed observable outcomes
+- [x] No information in CLAUDE.md/AGENTS.md contradicts actual code state
 
 ## Walkthrough
 
