@@ -1,10 +1,11 @@
 ---
 id: ch-u62
 title: Semantic search path scoping leaks through MCP tool layer
-status: active
+status: closed
 type: bug
 priority: 1
 ---
+
 
 
 
@@ -43,11 +44,11 @@ Additionally, `find_similar_chunks` doesn't accept `fuzzy_path` — it hardcodes
    - Pass `fuzzy_path=fuzzy_path` to `find_similar_chunks` call
 
 ## Success Criteria
-- [ ] `search_semantic(path="chunkhound/lsp/")` returns zero results from outside `chunkhound/lsp/`
-- [ ] Existing path scoping tests still pass (`test_path_prefix_scoping.py`)
-- [ ] Regex search path scoping unaffected
-- [ ] `find_similar_chunks` uses prefix match by default, substring only with `fuzzy_path=True`
-- [ ] `search_by_embedding` uses prefix match by default, substring only with `fuzzy_path=True`
+- [x] `search_semantic(path="chunkhound/lsp/")` returns zero results from outside `chunkhound/lsp/`
+- [x] Existing path scoping tests still pass (`test_path_prefix_scoping.py`)
+- [x] Regex search path scoping unaffected
+- [x] `find_similar_chunks` uses prefix match by default, substring only with `fuzzy_path=True`
+- [x] `search_by_embedding` uses prefix match by default, substring only with `fuzzy_path=True`
 
 ## Anti-Patterns
 - Do NOT add a post-query Python filter — fix the SQL LIKE pattern at the source
