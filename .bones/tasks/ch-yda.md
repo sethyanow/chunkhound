@@ -5,9 +5,10 @@ status: active
 type: task
 priority: 1
 owner: Seth
-depends_on: [ch-91j, ch-ko4, ch-uny]
+depends_on: [ch-91j, ch-ko4, ch-uny, ch-rym]
 parent: ch-0um
 ---
+
 
 
 

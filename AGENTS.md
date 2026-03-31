@@ -90,3 +90,4 @@ uv publish
 - Smoke tests are mandatory guardrails
 - Run `uv run mypy chunkhound` during reviews to catch Optional/type boundary issues
 - All code patterns should be self-documenting
+- LSP Diagnostics are issues to be resolved when seen not triaged away

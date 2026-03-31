@@ -248,3 +248,40 @@ class TestRealtimeFailures:
         # Verify cleanup completed - task should be done or None
         assert service._polling_task is None or service._polling_task.done(), \
             "Polling task should be cleaned up after stop()"
+
+
+@pytest.mark.unit
+class TestStopWithUnstartedObserver:
+    """Regression: stop() must not raise when observer was never started."""
+
+    @pytest.mark.asyncio
+    async def test_stop_with_unstarted_observer_does_not_raise(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Scenario: Observer object assigned but thread never started
+        Given a RealtimeIndexingService with an observer that was never started
+        When stop() is called
+        Then no RuntimeError is raised
+        """
+        from types import SimpleNamespace
+
+        from watchdog.observers import Observer
+
+        fake_args = SimpleNamespace(path=tmp_path)
+        config = Config(
+            args=fake_args,
+            database={"path": str(tmp_path / "db"), "provider": "duckdb"},
+            indexing={"include": ["*.py"], "exclude": []},
+        )
+        services = create_services(tmp_path / "db", config)
+        services.provider.connect()
+
+        service = RealtimeIndexingService(services, config)
+        # Assign observer but never call observer.start()
+        service.observer = Observer()
+
+        # This should NOT raise RuntimeError("cannot join thread before it is started")
+        await service.stop()
+
+        services.provider.disconnect()

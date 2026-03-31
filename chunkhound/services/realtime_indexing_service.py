@@ -408,10 +408,11 @@ class RealtimeIndexingService:
         # Stop filesystem observer
         if self.observer:
             self.observer.stop()
-            loop = asyncio.get_running_loop()
-            await loop.run_in_executor(None, self.observer.join, 1.0)
             if self.observer.is_alive():
-                logger.warning("Observer thread did not exit within timeout")
+                loop = asyncio.get_running_loop()
+                await loop.run_in_executor(None, self.observer.join, 1.0)
+                if self.observer.is_alive():
+                    logger.warning("Observer thread did not exit within timeout")
 
         # Cancel event consumer task
         if self.event_consumer_task:

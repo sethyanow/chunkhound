@@ -6,6 +6,7 @@ symbols table with LSP-derived structure data.
 
 from __future__ import annotations
 
+import enum
 import logging
 from pathlib import Path
 from typing import TYPE_CHECKING
@@ -19,6 +20,14 @@ if TYPE_CHECKING:
     from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 
 logger = logging.getLogger(__name__)
+
+
+class PopulateResult(enum.Enum):
+    """Status returned by populate_file for accurate caller counting."""
+
+    POPULATED = "populated"
+    SKIPPED = "skipped"
+    FAILED = "failed"
 
 
 class LSPPopulationService:
@@ -39,17 +48,21 @@ class LSPPopulationService:
         file_path: Path,
         file_id: int,
         language: str,
-    ) -> None:
+    ) -> PopulateResult:
         """Run documentSymbol on a single file and write rows to the symbols table.
 
         Follows LSP protocol: didOpen → documentSymbol → didClose.
         Skips gracefully if no LSP server is configured for the language.
+
+        Returns:
+            PopulateResult.POPULATED if symbols were written.
+            PopulateResult.SKIPPED if file was skipped (no server, unreadable, no symbols).
         """
         try:
             client = await self._pool.get(language, str(self._workspace_root))
         except LSPError:
             logger.debug("No LSP server for language=%s, skipping %s", language, file_path)
-            return
+            return PopulateResult.SKIPPED
 
         abs_path = self._workspace_root / file_path
         uri = abs_path.as_uri()
@@ -58,7 +71,7 @@ class LSPPopulationService:
             content = abs_path.read_text()
         except (OSError, UnicodeDecodeError):
             logger.debug("Cannot read %s, skipping LSP population", file_path)
-            return
+            return PopulateResult.SKIPPED
 
         edges: list[tuple] = []
         try:
@@ -67,7 +80,7 @@ class LSPPopulationService:
             type_signatures = await self._collect_type_signatures(client, uri, symbols) if symbols else {}
 
             if not symbols:
-                return
+                return PopulateResult.SKIPPED
 
             # Delete edges before symbols (edges reference symbol IDs via FK)
             await self.delete_file_edges(file_id)
@@ -103,6 +116,8 @@ class LSPPopulationService:
         # Batch insert edges (pure DB write — safe after didClose)
         if edges:
             self._batch_insert_edges(edges)
+
+        return PopulateResult.POPULATED
 
     async def _collect_type_signatures(
         self,
@@ -210,24 +225,48 @@ class LSPPopulationService:
 
     async def populate_files(self) -> None:
         """Populate symbols for all indexed files. Used by batch indexing path."""
+        import asyncio
+
         from chunkhound.core.types.common import Language
 
         rows = self._provider.execute_query(
             "SELECT id, path FROM files"
         )
         languages_seen: set[str] = set()
+        populated = 0
+        failed = 0
+        skipped = 0
+
         for row in rows:
-            file_path = Path(row["path"])
-            lang = Language.from_file_extension(file_path).value
-            languages_seen.add(lang)
-            await self.populate_file(
-                file_path=file_path,
-                file_id=row["id"],
-                language=lang,
-            )
+            try:
+                file_path = Path(row["path"])
+                lang = Language.from_file_extension(file_path).value
+                languages_seen.add(lang)
+                result = await self.populate_file(
+                    file_path=file_path,
+                    file_id=row["id"],
+                    language=lang,
+                )
+                if result is PopulateResult.POPULATED:
+                    populated += 1
+                elif result is PopulateResult.SKIPPED:
+                    skipped += 1
+            except (LSPError, asyncio.TimeoutError, OSError) as exc:
+                failed += 1
+                logger.warning(
+                    "Population failed for %s: %s: %s",
+                    row["path"],
+                    type(exc).__name__,
+                    exc,
+                )
 
         # workspaceSymbol pass: supplement per-file results with cross-file symbols
         await self._populate_workspace_symbols(languages_seen)
+
+        logger.info(
+            "Population complete: %d populated, %d failed, %d skipped",
+            populated, failed, skipped,
+        )
 
     async def _populate_workspace_symbols(self, languages: set[str]) -> None:
         """Call workspaceSymbol per language and insert new symbols not already in DB."""

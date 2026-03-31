@@ -20,7 +20,7 @@ from chunkhound.lsp.types import (
     SymbolInfo,
 )
 from chunkhound.providers.database.duckdb_provider import DuckDBProvider
-from chunkhound.services.lsp_population import LSPPopulationService
+from chunkhound.services.lsp_population import LSPPopulationService, PopulateResult
 
 pytestmark = pytest.mark.unit
 
@@ -2812,7 +2812,8 @@ class TestCLIWiring:
         When run_command executes the indexing flow
         Then DirectoryIndexingService receives a non-None lsp_population
         """
-        from types import SimpleNamespace
+        from argparse import Namespace
+        from typing import Any
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from chunkhound.core.config.config import Config
@@ -2823,7 +2824,7 @@ class TestCLIWiring:
         # Minimal args + config
         db_path = tmp_path / ".chunkhound" / "test.db"
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        args = SimpleNamespace(
+        args = Namespace(
             path=str(tmp_path),
             db=str(db_path),
             verbose=False,
@@ -2892,7 +2893,8 @@ class TestCLIWiring:
         """
         Adversarial: State transition — process_directory raises, pool still cleaned up.
         """
-        from types import SimpleNamespace
+        from argparse import Namespace
+        from typing import Any
         from unittest.mock import AsyncMock, MagicMock, patch
 
         from chunkhound.core.config.config import Config
@@ -2903,7 +2905,7 @@ class TestCLIWiring:
 
         db_path = tmp_path / ".chunkhound" / "test.db"
         db_path.parent.mkdir(parents=True, exist_ok=True)
-        args = SimpleNamespace(
+        args = Namespace(
             path=str(tmp_path),
             db=str(db_path),
             verbose=False,
@@ -2989,3 +2991,369 @@ class TestWorkspaceRootResolution:
         assert service._workspace_root.is_absolute(), (
             f"workspace_root must be absolute, got: {service._workspace_root}"
         )
+
+
+class TestPopulateResult:
+    """
+    Feature: populate_file returns a status enum for accurate counting
+
+    As the population loop
+    I want populate_file to signal populated/skipped/failed
+    So that the summary can report accurate counts (ch-ko4)
+    """
+
+    def test_enum_has_three_members(self) -> None:
+        """PopulateResult has POPULATED, SKIPPED, FAILED members."""
+        assert hasattr(PopulateResult, "POPULATED")
+        assert hasattr(PopulateResult, "SKIPPED")
+        assert hasattr(PopulateResult, "FAILED")
+
+    @pytest.mark.asyncio
+    async def test_populate_file_returns_populated_on_success(
+        self, tmp_path: Path
+    ) -> None:
+        """populate_file returns POPULATED when symbols are written."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/greeter.py")
+
+        pool, _client = _make_mock_pool(_sample_symbols())
+
+        src_file = tmp_path / "src" / "greeter.py"
+        src_file.parent.mkdir(parents=True, exist_ok=True)
+        src_file.write_text("class Greeter:\n    def greet(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        result = await service.populate_file(
+            file_path=Path("src/greeter.py"), file_id=1, language="python",
+        )
+        assert result is PopulateResult.POPULATED
+
+    @pytest.mark.asyncio
+    async def test_populate_file_returns_skipped_when_no_server(
+        self, tmp_path: Path
+    ) -> None:
+        """populate_file returns SKIPPED when LSPError (no server) is raised."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/main.mk")
+
+        pool = AsyncMock()
+        pool.get = AsyncMock(side_effect=LSPError("No server"))
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        result = await service.populate_file(
+            file_path=Path("src/main.mk"), file_id=1, language="makefile",
+        )
+        assert result is PopulateResult.SKIPPED
+
+    @pytest.mark.asyncio
+    async def test_populate_file_returns_skipped_when_unreadable(
+        self, tmp_path: Path
+    ) -> None:
+        """populate_file returns SKIPPED when file can't be read."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/missing.py")
+
+        pool, _client = _make_mock_pool()
+
+        # Don't create the file — it won't be readable
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        result = await service.populate_file(
+            file_path=Path("src/missing.py"), file_id=1, language="python",
+        )
+        assert result is PopulateResult.SKIPPED
+
+
+class TestPopulateFilesResilience:
+    """
+    Feature: populate_files continues on per-file failure (ch-ko4)
+
+    As the batch indexing path
+    I want a single file failure to not crash the entire loop
+    So that remaining files are populated and workspace symbols still runs
+    """
+
+    @pytest.mark.asyncio
+    async def test_loop_continues_after_mid_loop_transport_error(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Scenario: Second of three files raises LSPTransportError
+        Given three files in the DB, middle one triggers transport error
+        When populate_files runs
+        Then first and third files are populated, workspace symbols runs
+        """
+        from chunkhound.lsp.types import LSPTransportError
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+        _insert_file(provider, 2, "src/b.py")
+        _insert_file(provider, 3, "src/c.py")
+
+        symbols = _sample_symbols()
+        pool, client = _make_mock_pool(symbols)
+
+        # Create source files
+        for name in ("a.py", "b.py", "c.py"):
+            f = tmp_path / "src" / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("class Foo:\n    def bar(self): ...\n")
+
+        call_count = 0
+
+        async def doc_symbols_with_failure(uri: str) -> list:
+            nonlocal call_count
+            call_count += 1
+            if call_count == 2:  # Second file fails
+                raise LSPTransportError("Client degraded")
+            return symbols
+
+        client.document_symbols = AsyncMock(side_effect=doc_symbols_with_failure)
+        # workspace_symbols returns empty (just needs to be called)
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        await service.populate_files()
+
+        # Files 1 and 3 should have symbols, file 2 should not
+        rows = provider.execute_query(
+            "SELECT DISTINCT file_id FROM symbols ORDER BY file_id"
+        )
+        file_ids = [r["file_id"] for r in rows]
+        assert 1 in file_ids, "First file should be populated"
+        assert 2 not in file_ids, "Failed file should have no symbols"
+        assert 3 in file_ids, "Third file should be populated despite earlier failure"
+
+    @pytest.mark.asyncio
+    async def test_workspace_symbols_runs_after_all_files_fail(
+        self, tmp_path: Path
+    ) -> None:
+        """
+        Scenario: Every file fails but workspace symbols still runs
+        Given one file that raises on populate
+        When populate_files runs
+        Then _populate_workspace_symbols is still called
+        """
+        from chunkhound.lsp.types import LSPTransportError
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/fail.py")
+
+        pool, client = _make_mock_pool()
+        client.document_symbols = AsyncMock(
+            side_effect=LSPTransportError("Dead")
+        )
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        (tmp_path / "src" / "fail.py").parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "fail.py").write_text("x = 1\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        await service.populate_files()
+
+        # workspace_symbols should have been called despite file failure
+        client.workspace_symbols.assert_called_once()
+
+    @pytest.mark.asyncio
+    async def test_summary_logged_with_correct_counts(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """
+        Scenario: Summary shows accurate populated/failed/skipped counts
+        Given three files — one succeeds, one fails, one has no server
+        When populate_files completes
+        Then summary log contains correct counts
+        """
+        import logging as _logging
+
+        from chunkhound.lsp.types import LSPTransportError
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/good.py")
+        _insert_file(provider, 2, "src/bad.py")
+        _insert_file(provider, 3, "src/skip.mk")
+
+        symbols = _sample_symbols()
+
+        call_count = 0
+
+        async def get_client(language: str, workspace: str) -> AsyncMock:
+            nonlocal call_count
+            if language == "makefile":
+                raise LSPError("No server for makefile")
+            client = AsyncMock()
+            client.notify_did_open = AsyncMock()
+            client.notify_did_close = AsyncMock()
+            client.workspace_symbols = AsyncMock(return_value=[])
+            client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+            async def doc_sym(uri: str) -> list:
+                nonlocal call_count
+                call_count += 1
+                if "bad.py" in uri:
+                    raise LSPTransportError("Degraded")
+                return symbols
+
+            client.document_symbols = AsyncMock(side_effect=doc_sym)
+            return client
+
+        pool = AsyncMock()
+        pool.get = AsyncMock(side_effect=get_client)
+
+        for name in ("good.py", "bad.py"):
+            f = tmp_path / "src" / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("class Foo:\n    def bar(self): ...\n")
+        # skip.mk doesn't need to exist — pool.get raises before file read
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        with caplog.at_level(_logging.INFO, logger="chunkhound.services.lsp_population"):
+            await service.populate_files()
+
+        # Find the summary log line
+        summary_lines = [r.message for r in caplog.records if "populated" in r.message.lower() and "failed" in r.message.lower()]
+        assert len(summary_lines) >= 1, f"Expected summary log, got: {[r.message for r in caplog.records]}"
+        summary = summary_lines[0]
+        assert "1" in summary, f"Expected 1 populated in: {summary}"
+
+    @pytest.mark.asyncio
+    async def test_failed_file_logged_with_path_and_error(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """
+        Scenario: Each failed file gets a log entry with path and error detail
+        """
+        import logging as _logging
+
+        from chunkhound.lsp.types import LSPTransportError
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/broken.py")
+
+        pool, client = _make_mock_pool()
+        client.document_symbols = AsyncMock(
+            side_effect=LSPTransportError("Pipe broken")
+        )
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        (tmp_path / "src" / "broken.py").parent.mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "broken.py").write_text("x = 1\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        with caplog.at_level(_logging.WARNING, logger="chunkhound.services.lsp_population"):
+            await service.populate_files()
+
+        # Should log the failed file path and error
+        failure_logs = [r.message for r in caplog.records if "broken.py" in r.message]
+        assert len(failure_logs) >= 1, f"Expected failure log for broken.py, got: {[r.message for r in caplog.records]}"
+        assert "Pipe broken" in failure_logs[0] or "LSPTransportError" in failure_logs[0]
+
+
+class TestPopulateFilesAdversarial:
+    """Adversarial stress tests for populate_files error handling (ch-ko4)."""
+
+    @pytest.mark.asyncio
+    async def test_empty_files_table_no_crash(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Empty: zero files in DB — loop is a no-op, summary still logged."""
+        import logging as _logging
+
+        provider = _make_provider(tmp_path)
+        pool, client = _make_mock_pool()
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.WORKSPACE_SYMBOL}
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        with caplog.at_level(_logging.INFO, logger="chunkhound.services.lsp_population"):
+            await service.populate_files()
+
+        summary = [r.message for r in caplog.records if "complete" in r.message.lower()]
+        assert len(summary) >= 1, f"Expected summary log, got: {[r.message for r in caplog.records]}"
+
+    @pytest.mark.asyncio
+    async def test_file_with_no_extension_caught(self, tmp_path: Path) -> None:
+        """Type boundary: file with no extension — Language.from_file_extension may raise."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "Makefile")
+        _insert_file(provider, 2, "src/good.py")
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        (tmp_path / "Makefile").write_text("all: build\n")
+        src = tmp_path / "src" / "good.py"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("class Foo:\n    def bar(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        # Should not crash — extensionless file should be handled
+        await service.populate_files()
+
+        # good.py should still be populated despite Makefile issue
+        rows = provider.execute_query("SELECT file_id FROM symbols")
+        file_ids = {r["file_id"] for r in rows}
+        assert 2 in file_ids, "good.py should be populated even if Makefile fails"
+
+    @pytest.mark.asyncio
+    async def test_second_run_resets_counters(
+        self, tmp_path: Path, caplog: pytest.LogCaptureFixture
+    ) -> None:
+        """Second run: counters must reflect the second run, not accumulate."""
+        import logging as _logging
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        src = tmp_path / "src" / "a.py"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("class Foo:\n    def bar(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+        # First run
+        await service.populate_files()
+
+        # Second run — capture logs
+        caplog.clear()
+        with caplog.at_level(_logging.INFO, logger="chunkhound.services.lsp_population"):
+            await service.populate_files()
+
+        summary = [r.message for r in caplog.records if "complete" in r.message.lower()]
+        assert len(summary) >= 1
+        # Should show 1 populated for second run, not 2 accumulated
+        assert "1 populated" in summary[0]
+
+    @pytest.mark.asyncio
+    async def test_file_deleted_from_disk_between_query_and_populate(
+        self, tmp_path: Path
+    ) -> None:
+        """Semantically hostile: file in DB but deleted from disk before populate_file reads it."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/ghost.py")
+        _insert_file(provider, 2, "src/real.py")
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        # Only create real.py — ghost.py doesn't exist on disk
+        src = tmp_path / "src" / "real.py"
+        src.parent.mkdir(parents=True, exist_ok=True)
+        src.write_text("class Foo:\n    def bar(self): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        await service.populate_files()
+
+        # real.py should be populated, ghost.py skipped
+        rows = provider.execute_query("SELECT file_id FROM symbols")
+        file_ids = {r["file_id"] for r in rows}
+        assert 2 in file_ids, "real.py should be populated"
+        assert 1 not in file_ids, "ghost.py should be skipped (not on disk)"

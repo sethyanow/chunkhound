@@ -1,11 +1,14 @@
 ---
 id: ch-ko4
 title: populate_files crashes entire loop on single file failure
-status: open
+status: active
 type: bug
 priority: 0
+owner: Seth
 parent: ch-0um
 ---
+
+
 
 
 
@@ -25,10 +28,40 @@ populated but cross-file edges nearly absent (1,319/1,323 self-referential).
 1. `populate_files` must catch per-file failures and continue to the next file
 2. `_populate_workspace_symbols` must run even if some files failed
 3. Failed files should be logged with structured reason (not silently dropped)
-4. Summary at end: X files populated, Y failed, Z skipped (no LSP server)
+4. `populate_file` returns a status enum (populated, skipped, failed) so callers can count accurately
+5. Summary at end: X populated, Y failed, Z skipped (no LSP server)
 
 ## Success Criteria
 - [ ] Single degraded client does not crash the population loop
 - [ ] `_populate_workspace_symbols` runs after the file loop regardless of per-file failures
 - [ ] Failed files are logged with file path and error detail
+- [ ] `populate_file` returns a status enum distinguishing populated/skipped/failed
+- [ ] Summary logged at end: X populated, Y failed, Z skipped
 - [ ] `uv run scripts/demo_lsp.py` cross-file edge health check passes after re-index
+
+## Anti-Patterns
+- NO bare `except Exception` — catch specific LSP/transport errors only
+- NO suppressing `KeyboardInterrupt`, `SystemExit`, or `BaseException`
+- NO silent drops — every caught failure must log file path + error detail
+
+## Edge Cases
+- `Language.from_file_extension` (line 221) can also raise before `populate_file` is called — needs same per-iteration protection
+- ALL files fail → summary still prints, `_populate_workspace_symbols` still runs
+- Exception types: `LSPTransportError`, `LSPError`, `asyncio.TimeoutError`, `ConnectionError`, `OSError` from transport layer
+
+## Key Considerations
+
+**try/except scope must cover the full iteration body (lines 220-227)**, not just the `populate_file` call. `Language.from_file_extension` and `Path(row["path"])` can both raise before `populate_file` is reached.
+
+**`languages_seen` gap after failures.** If `Language.from_file_extension` raises, the language is never added to `languages_seen`, so `_populate_workspace_symbols` skips it. Safer: query distinct languages from the `files` table directly, or add the language to the set before the try block using a separate try/except for the extension lookup.
+
+**`populate_file` needs a return status.** Currently returns `None` for both skipped-no-server and succeeded. Add a status enum (`PopulateResult`: `POPULATED`, `SKIPPED`, `FAILED`) so the caller can count accurately. This is the proper fix — not scope creep.
+
+**Logging volume under mass failure.** Client degrades at file 10 → 730 failure log lines. Per-file logging at DEBUG level (matching existing pattern) keeps it manageable. The summary is the user-facing signal.
+
+## Regression Test
+Test that simulates a mid-loop `LSPTransportError` and verifies:
+1. Loop continues to subsequent files
+2. `_populate_workspace_symbols` is called
+3. Failed file is logged with path and error
+4. Summary counts are correct (attempted, failed)
