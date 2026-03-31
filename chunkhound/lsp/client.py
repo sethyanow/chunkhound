@@ -397,6 +397,14 @@ class LSPClient:
             },
         )
 
+    async def notify_did_close(self, uri: str) -> None:
+        """Send textDocument/didClose to free server memory for a file."""
+        transport = self._require_transport()
+        await transport.send_notification(
+            "textDocument/didClose",
+            {"textDocument": {"uri": uri}},
+        )
+
     async def wait_for_diagnostics(
         self, uri: str, timeout: float = 10.0, wait_for_nonempty: bool = True
     ) -> list[Diagnostic]:

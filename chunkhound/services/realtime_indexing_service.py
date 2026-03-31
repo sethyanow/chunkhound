@@ -285,6 +285,7 @@ class RealtimeIndexingService:
         config: Config,
         debug_sink: Callable[[str], None] | None = None,
         force_polling: bool = False,
+        lsp_population: Any | None = None,
     ):
         self.services = services
         self.config = config
@@ -293,6 +294,8 @@ class RealtimeIndexingService:
         self._debug_sink = debug_sink
         # Force polling mode - useful for Windows CI where watchdog is unreliable
         self._force_polling = force_polling
+        # Optional LSP population service for background symbol extraction
+        self._lsp_population = lsp_population
 
         # Existing asyncio queue for priority processing
         self.file_queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue()
@@ -893,6 +896,39 @@ class RealtimeIndexingService:
                         )
                     continue
 
+                # LSP population pass: extract symbols from file after tree-sitter indexing.
+                # Runs as a background pass — does not block the main indexing loop.
+                if priority == "lsp":
+                    if self._lsp_population is not None:
+                        try:
+                            # Look up file_id and language from the DB
+                            from chunkhound.core.types.common import Language
+
+                            rows = self.services.provider.execute_query(
+                                "SELECT id FROM files WHERE path = ?",
+                                [str(file_path.relative_to(self.watch_path))]
+                                if self.watch_path
+                                else [str(file_path)],
+                            )
+                            if rows:
+                                file_id = rows[0]["id"]
+                                lang = Language.from_file_extension(file_path).value
+                                rel_path = (
+                                    file_path.relative_to(self.watch_path)
+                                    if self.watch_path
+                                    else file_path
+                                )
+                                await self._lsp_population.populate_file(
+                                    file_path=rel_path,
+                                    file_id=file_id,
+                                    language=lang,
+                                )
+                        except Exception as e:
+                            logger.warning(
+                                f"LSP population failed for {file_path}: {e}"
+                            )
+                    continue
+
                 # Skip embeddings for initial and change events to keep loop responsive.
                 # An explicit 'embed' follow-up event will generate embeddings.
                 skip_embeddings = True
@@ -914,6 +950,10 @@ class RealtimeIndexingService:
                 # If we skipped embeddings, queue for embedding generation
                 if skip_embeddings:
                     await self.add_file(file_path, priority="embed")
+
+                # Queue LSP population pass (background, after tree-sitter)
+                if self._lsp_population is not None:
+                    await self.add_file(file_path, priority="lsp")
 
                 # Record processing summary into MCP debug log
                 try:

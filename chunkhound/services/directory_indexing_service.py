@@ -43,6 +43,7 @@ class DirectoryIndexingService:
         progress_callback: Callable[[str], None] | None = None,
         progress: Any = None,
         metrics_collector: BatchMetricsCollector | None = None,
+        lsp_population: Any | None = None,
     ):
         """Initialize directory indexing service.
 
@@ -52,12 +53,14 @@ class DirectoryIndexingService:
             progress_callback: Optional callback for progress messages
             progress: Optional Rich Progress instance for hierarchical progress display
             metrics_collector: Optional metrics collector for batch diagnostics
+            lsp_population: Optional LSP population service for symbol extraction
         """
         self.indexing_coordinator = indexing_coordinator
         self.config = config
         self.progress_callback = progress_callback or (lambda msg: None)
         self.progress = progress
         self._metrics_collector = metrics_collector
+        self._lsp_population = lsp_population
 
         # Pass progress to coordinator if it supports it
         if hasattr(self.indexing_coordinator, "progress"):
@@ -97,6 +100,11 @@ class DirectoryIndexingService:
                 self.progress_callback("Checking for missing embeddings...")
                 embed_result = await self._generate_missing_embeddings(exclude_patterns)
                 stats.embeddings_generated = embed_result.get("generated", 0)
+
+            # LSP symbol population (runs after embeddings, background pass)
+            if self._lsp_population is not None:
+                self.progress_callback("Populating LSP symbols...")
+                await self._populate_symbols()
 
             stats.processing_time = time.time() - start_time
 
@@ -150,6 +158,15 @@ class DirectoryIndexingService:
             logger.warning(f"Embedding generation failed: {embed_result}")
 
         return embed_result
+
+    async def _populate_symbols(self) -> None:
+        """Run LSP population for all indexed files. Mirrors _generate_missing_embeddings."""
+        if self._lsp_population is None:
+            return
+        try:
+            await self._lsp_population.populate_files()
+        except Exception as e:
+            logger.warning(f"LSP symbol population failed: {e}")
 
     def _update_stats_from_process_result(
         self, stats: IndexingStats, result: dict[str, Any]
