@@ -119,3 +119,4 @@
 {"timestamp":"2026-03-31T14:45:02.205429+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-yda","details":{"kind":"blocks","to":"ch-91j"}}
 {"timestamp":"2026-03-31T15:00:21.920576+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-91j","details":{"actor":"Seth"}}
 {"timestamp":"2026-03-31T15:00:21.973921+00:00","actor":"Seth","event_type":"updated","task_id":"ch-91j","details":{"status":"active"}}
+{"timestamp":"2026-03-31T15:17:29.510630+00:00","actor":"Seth","event_type":"closed","task_id":"ch-91j","details":{"notes":null}}

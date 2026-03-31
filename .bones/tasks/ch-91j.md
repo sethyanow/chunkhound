@@ -1,12 +1,13 @@
 ---
 id: ch-91j
 title: Wire LSPPopulationService into production indexing
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -118,14 +119,14 @@ Around the DirectoryIndexingService construction (line 118):
 - New tests needed: verify base.py and run.py actually CONSTRUCT and PASS the services.
 
 ## Success Criteria
-- [ ] `RealtimeIndexingService._lsp_population` is not None in production (base.py passes it)
-- [ ] `DirectoryIndexingService._lsp_population` is not None in MCP server background scan (base.py passes it)
-- [ ] File change via watcher → symbols + edges populated for that file (incremental path)
-- [ ] `chunkhound index .` → symbols table non-empty after bulk indexing (CLI path via run.py)
-- [ ] LSP population does not block tree-sitter indexing (background, after TS completes)
-- [ ] Pool cleanup runs on MCP server shutdown (base.py cleanup())
-- [ ] Pool cleanup runs on CLI exit, including error paths (run.py try/finally)
-- [ ] Existing tests pass (zero regression)
+- [x] `RealtimeIndexingService._lsp_population` is not None in production (base.py passes it)
+- [x] `DirectoryIndexingService._lsp_population` is not None in MCP server background scan (base.py passes it)
+- [x] File change via watcher → symbols + edges populated for that file (incremental path)
+- [x] `chunkhound index .` → symbols table non-empty after bulk indexing (CLI path via run.py)
+- [x] LSP population does not block tree-sitter indexing (background, after TS completes)
+- [x] Pool cleanup runs on MCP server shutdown (base.py cleanup())
+- [x] Pool cleanup runs on CLI exit, including error paths (run.py try/finally)
+- [x] Existing tests pass (zero regression) — 1487 passed, 0 failed
 
 ## Key Considerations
 

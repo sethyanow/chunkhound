@@ -34,17 +34,17 @@ Scoped to parent epic R3:
 - R3: Background index-time population using 8 LSP operations
 
 ## Success Criteria
-- [ ] Background population service runs after tree-sitter indexing completes (not blocking it)
+- [x] Background population service runs after tree-sitter indexing completes (not blocking it)
 - [x] `documentSymbol` called per file → symbols written to `symbols` table with fqn, kind, range, parent_fqn
 - [x] `hover` called per symbol → `type_signature` populated on `symbols` rows
 - [x] `definition`, `references`, `implementation`, `incomingCalls`, `outgoingCalls` → edges written to `symbol_edges` with correct edge_kind
 - [x] `workspaceSymbol("")` called during full reindex for cross-file completeness
-- [ ] Incremental: file change via file watcher → deletes that file's symbols + edges → repopulates
+- [x] Incremental: file change via file watcher → deletes that file's symbols + edges → repopulates
 - [x] Multi-language: symbols and edges populated for Python + at least 2 other languages in a test project
 - [x] Confidence field reflects LSP result quality (compiler_grade, partial, unavailable)
 - [x] Batch inserts for symbols and edges (no single-row loops)
 - [x] All existing tests still pass (zero regression)
-- [x] `uv run pytest tests/test_lsp_population.py -v` → all pass (52 passed)
+- [x] `uv run pytest tests/test_lsp_population.py -v` → all pass (59 passed)
 - [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (17 passed)
 - [ ] `uv run scripts/demo_lsp.py` → Phase 2 sections all PASS (acceptance demo, not just unit tests)
 
