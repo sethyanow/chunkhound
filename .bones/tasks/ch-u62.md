@@ -9,6 +9,7 @@ priority: 1
 
 
 
+
 ## Context
 Discovered during Phase 1 acceptance walkthrough (ch-1j2). The DuckDB provider-level path scoping fix (ch-jsj) uses strict prefix matching, but the MCP tool layer (`search_semantic`) still returns results outside the specified path prefix.
 
@@ -80,3 +81,7 @@ Additionally, `find_similar_chunks` doesn't accept `fuzzy_path` — it hardcodes
 - Betrayal: Param added to wrong position or forgotten in executor
 - Consequence: Silently ignored if positional, TypeError if keyword
 - Mitigation: Use keyword argument `fuzzy_path=fuzzy_path` in the call — fails loudly if missing.
+
+## Log
+
+- [2026-03-31T02:33:04Z] [Seth] Debrief: Root cause was substring LIKE in find_similar_chunks (line 2447) and search_by_embedding (line 2555), not MCP tool layer. Fix: 2 lines changed to prefix match + fuzzy_path param added for opt-in substring. 3 regression tests added. 7/7 path scoping tests pass. 6 pre-existing failures in full suite (multi-hop flaky, MCP timeout, embedding consistency). Reflections: skeleton root cause hypothesis was wrong — SRE code trace found real bug. ty LSP lacks call hierarchy support (new reference memory). User corrected tool choice: code_research too heavy for targeted bug investigation.
