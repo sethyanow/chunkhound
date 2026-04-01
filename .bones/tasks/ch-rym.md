@@ -11,6 +11,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 `tests/test_lsp_population.py` — 3627 lines, 33 classes, 79 tests across unrelated concerns. Grew organically across ch-5b3, ch-nvc, ch-zlg, ch-ko4 without decomposition. Not just too big — the tests have accumulated quality issues that should be fixed during restructuring.
 
@@ -111,19 +112,19 @@ For each target file:
 - Commit and push
 
 ## Success Criteria
-- [ ] `tests/lsp/` module exists with 7 test files + conftest + __init__
-- [ ] Each test file covers a single cohesion seam
-- [ ] Shared setup in conftest.py (no duplication across files)
-- [ ] TestBatchInsert revised to test flattening correctness across varied symbol trees
-- [ ] TestRealtimeWiring has no timing-dependent sleep
-- [ ] MCPServer/CLI wiring boilerplate extracted to shared fixture
-- [ ] LSP diagnostics in lsp_population.py resolved
-- [ ] Overlapping-symbol resolve test covers innermost selection
-- [ ] Workspace symbol skip-existing test covers dedup guard
-- [ ] didClose-under-failure test covers finally block contract
-- [ ] All tests pass: `uv run pytest tests/lsp/ -v`
-- [ ] Original file deleted
-- [ ] Full test suite passes
+- [x] `tests/lsp/` module exists with 7 test files + conftest + __init__
+- [x] Each test file covers a single cohesion seam
+- [x] Shared setup in conftest.py (no duplication across files)
+- [x] TestBatchInsert revised to test flattening correctness across varied symbol trees
+- [x] TestRealtimeWiring has no timing-dependent sleep
+- [x] MCPServer/CLI wiring boilerplate extracted to shared fixture
+- [x] LSP diagnostics in lsp_population.py resolved
+- [x] Overlapping-symbol resolve test covers innermost selection
+- [x] Workspace symbol skip-existing test covers dedup guard
+- [x] didClose-under-failure test covers finally block contract
+- [x] All tests pass: `uv run pytest tests/lsp/ -v`
+- [x] Original file deleted
+- [x] Full test suite passes
 
 ## Key Considerations
 
@@ -151,3 +152,4 @@ For each target file:
 
 - [2026-04-01T04:27:33Z] [Seth] Skeleton rewritten after test quality review. Key findings: TestBatchInsert tests impl detail not behavior, TestRealtimeWiring uses sleep(0.5), MCPServer/CLI wiring tests have ~200 lines of duplicated _TestServer boilerplate. Two LSP diagnostics in source (unused var L78, untyped callable L430). Restructure is a cleanup pass, not pure code motion.
 - [2026-04-01T12:54:26Z] [Seth] Session aborted by user. Agent wrote a Python AST extraction script to batch-move 33 test classes from monolith into 7 files instead of doing one-at-a-time TDD. Script had hardcoded import lists that were guessed wrong — 4 of 6 generated files had missing imports and were broken. Agent also rationalized skipping review of extracted files by calling it 'code motion' and treating skeleton's 'no quality fixes needed' as license to skip TDD and LSP diagnostic checks. User deleted all script-generated files (test_edges, test_resolve, test_type_signatures, test_workspace_symbols, test_resilience, test_wiring, _extract.py). Surviving work: test_core.py (manually created, 17 tests pass) and Step 1 source fixes (lsp_population.py diagnostics resolved with regression tests). Next session must redo extraction one file at a time with proper TDD — read each class, understand its imports and diagnostics, write file, verify, apply quality fixes.
+- [2026-04-01T15:31:46Z] [Seth] Restructuring complete. 7 files extracted, monolith deleted. 81 LSP tests pass. Quality fixes: sleep→event in RealtimeWiring, _TestServer+config deduped in wiring, unused uri params fixed. Found and fixed 3 cross-test issues during full suite: (1) FakeCoordinator missing .database from ch-91j wiring, (2) MCPServerBase.__init__ leaked CHUNKHOUND_MCP_MODE=1 via os.environ — root cause fixed with regression test, cleanup fixture as defense-in-depth. Full suite: 2417 passed, 0 failed.
