@@ -83,8 +83,10 @@ class MCPServerBase(ABC):
             "scan_completed_at": None,
         }
 
-        # Set MCP mode to suppress stderr output that interferes with JSON-RPC
-        os.environ["CHUNKHOUND_MCP_MODE"] = "1"
+        # NOTE: CHUNKHOUND_MCP_MODE is set by the entry point (stdio.py:main),
+        # NOT here. Setting it in __init__ pollutes os.environ for any code that
+        # constructs MCPServerBase (including tests), silently suppressing
+        # RichOutputFormatter.error() output in unrelated code paths.
 
     def debug_log(self, message: str) -> None:
         """Log debug message to file if debug mode is enabled."""

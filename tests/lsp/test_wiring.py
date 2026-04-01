@@ -201,6 +201,30 @@ class TestMCPServerWiring:
         yield
         os.environ.pop("CHUNKHOUND_MCP_MODE", None)
 
+    def test_server_init_does_not_pollute_global_env(self, tmp_path: Path) -> None:
+        """Regression: MCPServerBase.__init__ must not permanently set env vars.
+
+        CHUNKHOUND_MCP_MODE=1 suppresses RichOutputFormatter.error() globally.
+        Any test constructing MCPServerBase poisons all subsequent tests that
+        rely on formatter output (e.g., code_mapper_invalid_poi_concurrency).
+        """
+        saved = os.environ.get("CHUNKHOUND_MCP_MODE")
+
+        config, fake_args = _make_mcp_config(tmp_path)
+        _TestServer(config=config, args=fake_args)
+
+        current = os.environ.get("CHUNKHOUND_MCP_MODE")
+        # Cleanup regardless so this test doesn't itself leak
+        if saved is None:
+            os.environ.pop("CHUNKHOUND_MCP_MODE", None)
+        else:
+            os.environ["CHUNKHOUND_MCP_MODE"] = saved
+
+        assert current == saved, (
+            f"MCPServerBase.__init__ leaked CHUNKHOUND_MCP_MODE: {saved!r} → {current!r}. "
+            "This suppresses RichOutputFormatter.error() in all subsequent code."
+        )
+
     @pytest.mark.asyncio
     async def test_deferred_connect_passes_lsp_population_to_realtime(
         self, tmp_path: Path
