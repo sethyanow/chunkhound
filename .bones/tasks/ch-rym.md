@@ -1,12 +1,13 @@
 ---
 id: ch-rym
 title: Restructure test_lsp_population.py into tests/lsp/ with quality fixes
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
