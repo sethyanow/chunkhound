@@ -894,3 +894,296 @@ class TestGraphTool:
         helper = result["symbols"][1]
         assert helper["breakdown"]["called_by"] == 6
         assert result["count"] == 2
+
+
+# ---------------------------------------------------------------------------
+# Adversarial stress tests for graph tool
+# ---------------------------------------------------------------------------
+
+
+class TestGraphToolAdversarial:
+    """Adversarial battery: structural patterns to expose assumptions."""
+
+    # --- _escape_like: pure function, encoding boundaries ---
+
+    def test_escape_like_percent(self) -> None:
+        """LIKE wildcard % in scope must be escaped."""
+        from chunkhound.mcp_server.tools import _escape_like
+        assert _escape_like("chunk%ound") == "chunk\\%ound"
+
+    def test_escape_like_underscore(self) -> None:
+        """LIKE wildcard _ in scope must be escaped."""
+        from chunkhound.mcp_server.tools import _escape_like
+        assert _escape_like("chunk_ound") == "chunk\\_ound"
+
+    def test_escape_like_backslash(self) -> None:
+        """Backslash itself must be escaped first to avoid double-escaping."""
+        from chunkhound.mcp_server.tools import _escape_like
+        assert _escape_like("path\\to") == "path\\\\to"
+
+    def test_escape_like_all_special(self) -> None:
+        """All three LIKE-special chars in one string."""
+        from chunkhound.mcp_server.tools import _escape_like
+        assert _escape_like("a%b_c\\d") == "a\\%b\\_c\\\\d"
+
+    def test_escape_like_empty(self) -> None:
+        """Empty string stays empty."""
+        from chunkhound.mcp_server.tools import _escape_like
+        assert _escape_like("") == ""
+
+    def test_escape_like_unicode(self) -> None:
+        """Unicode chars pass through unchanged."""
+        from chunkhound.mcp_server.tools import _escape_like
+        assert _escape_like("パス/ファイル") == "パス/ファイル"
+
+    # --- walk: self-referential (self-loop) ---
+
+    @pytest.mark.asyncio
+    async def test_walk_self_loop(self) -> None:
+        """Walk from a symbol that has an edge to itself terminates."""
+        import asyncio
+
+        services = _make_mock_services([
+            [{"fqn": "mod::Self", "name": "Self", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [{"from_fqn": "mod::Self", "to_fqn": "mod::Self", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"}],
+        ])
+
+        result = await asyncio.wait_for(
+            execute_tool(
+                tool_name="graph",
+                services=services,
+                embedding_manager=None,
+                arguments={"operation": "walk", "symbol": "mod::Self", "depth": 10},
+            ),
+            timeout=5.0,
+        )
+
+        assert len(result["results"]) == 1  # only Self, no infinite expansion
+        assert result["results"][0]["fqn"] == "mod::Self"
+
+    # --- walk: dense graph (fully connected) ---
+
+    @pytest.mark.asyncio
+    async def test_walk_dense_graph_respects_limit(self) -> None:
+        """Walk on a dense graph returns at most `limit` nodes."""
+        # 50 nodes all interconnected — limit should cap results
+        nodes = [
+            {"fqn": f"mod::N{i}", "name": f"N{i}", "kind": "Function", "file_path": "mod.py", "depth": 1}
+            for i in range(50)
+        ]
+        nodes.insert(0, {"fqn": "mod::Root", "name": "Root", "kind": "Function", "file_path": "mod.py", "depth": 0})
+        edges = [
+            {"from_fqn": "mod::Root", "to_fqn": f"mod::N{i}", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"}
+            for i in range(50)
+        ]
+        services = _make_mock_services([nodes[:5], edges[:5]])  # CTE returns capped results
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::Root", "depth": 2, "limit": 5},
+        )
+
+        assert len(result["results"]) <= 5
+
+    # --- walk: type boundaries (depth/limit edge values) ---
+
+    @pytest.mark.asyncio
+    async def test_walk_depth_zero_clamped(self) -> None:
+        """depth=0 should be clamped to 1 (minimum)."""
+        services = _make_mock_services([
+            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A", "depth": 0},
+        )
+
+        # Should not error — depth clamped to 1
+        assert "error" not in result
+        assert "results" in result
+
+    @pytest.mark.asyncio
+    async def test_walk_depth_huge_clamped(self) -> None:
+        """depth=9999 should be clamped to 20 (maximum)."""
+        services = _make_mock_services([
+            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A", "depth": 9999},
+        )
+
+        assert "error" not in result
+        # Verify the clamped depth was passed to the query
+        call_args = services.provider.execute_query.call_args_list[0]
+        params = call_args[0][1]  # second positional arg is params list
+        # params[1] is depth — should be clamped to 20
+        assert params[1] == 20
+
+    @pytest.mark.asyncio
+    async def test_walk_negative_limit_clamped(self) -> None:
+        """limit=-5 should be clamped to 1."""
+        services = _make_mock_services([
+            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A", "limit": -5},
+        )
+
+        assert "error" not in result
+
+    # --- reachability: empty (no symbols in scope) ---
+
+    @pytest.mark.asyncio
+    async def test_reachability_empty_scope(self) -> None:
+        """Reachability on a scope with no symbols returns empty."""
+        services = _make_mock_services([[], []])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "reachability", "scope": "nonexistent/"},
+        )
+
+        assert result["unreachable"] == []
+        assert result["count"] == 0
+
+    # --- reachability: all reachable (nothing unreachable) ---
+
+    @pytest.mark.asyncio
+    async def test_reachability_all_connected(self) -> None:
+        """When all symbols are reachable, unreachable list is empty."""
+        services = _make_mock_services([
+            [
+                {"fqn": "pkg::a", "name": "a", "kind": "Function", "file_path": "pkg/a.py"},
+                {"fqn": "pkg::b", "name": "b", "kind": "Function", "file_path": "pkg/b.py"},
+            ],
+            [{"fqn": "pkg::a"}, {"fqn": "pkg::b"}],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "reachability", "scope": "pkg/"},
+        )
+
+        assert result["unreachable"] == []
+        assert result["count"] == 0
+
+    # --- boundary: scope with LIKE-special chars ---
+
+    @pytest.mark.asyncio
+    async def test_boundary_scope_with_underscore(self) -> None:
+        """Scope containing _ must be escaped so 'a_b/' doesn't match 'aXb/'."""
+        services = _make_mock_services([[]])  # boundary returns whatever DB gives
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "boundary", "scope": "chunk_ound/"},
+        )
+
+        # Verify the escaped pattern was passed to execute_query
+        call_args = services.provider.execute_query.call_args_list[0]
+        params = call_args[0][1]
+        # First param should be the escaped scope pattern
+        assert "chunk\\_ound/" in params[0]
+
+    # --- overview: singular (one symbol, one edge) ---
+
+    @pytest.mark.asyncio
+    async def test_overview_single_symbol(self) -> None:
+        """Overview with a single connected symbol returns it."""
+        services = _make_mock_services([
+            [{"fqn": "mod::Only", "name": "Only", "kind": "Function", "file_path": "mod.py", "total_edges": 1}],
+            [{"fqn": "mod::Only", "edge_kind": "calls", "edge_count": 1}],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "overview"},
+        )
+
+        assert len(result["symbols"]) == 1
+        assert result["symbols"][0]["breakdown"] == {"calls": 1}
+
+    # --- overview: empty graph ---
+
+    @pytest.mark.asyncio
+    async def test_overview_empty_graph(self) -> None:
+        """Overview on empty graph returns no symbols."""
+        services = _make_mock_services([[]])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "overview"},
+        )
+
+        assert result["symbols"] == []
+        assert result["count"] == 0
+
+    # --- the "second run": idempotency ---
+
+    @pytest.mark.asyncio
+    async def test_walk_idempotent(self) -> None:
+        """Calling walk twice with same input returns same result (read-only)."""
+        mock_data = [
+            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        ]
+        services = _make_mock_services(mock_data + mock_data)  # 4 calls total
+
+        r1 = await execute_tool(
+            tool_name="graph", services=services, embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A"},
+        )
+        r2 = await execute_tool(
+            tool_name="graph", services=services, embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A"},
+        )
+
+        assert r1 == r2
+
+    # --- semantically hostile: FQN with SQL-like content ---
+
+    @pytest.mark.asyncio
+    async def test_walk_sql_injection_in_symbol(self) -> None:
+        """FQN containing SQL keywords is safe (parameterized)."""
+        services = _make_mock_services([[], []])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "'; DROP TABLE symbols; --"},
+        )
+
+        # Should return empty results, not error — SQL injection is parameterized
+        assert result["results"] == []
+        assert "error" not in result
+        # Verify the hostile string was passed as a param, not interpolated
+        call_args = services.provider.execute_query.call_args_list[0]
+        params = call_args[0][1]
+        assert "'; DROP TABLE symbols; --" in params
