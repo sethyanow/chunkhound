@@ -171,3 +171,7 @@
 {"timestamp":"2026-04-01T20:35:59.868708+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-dlx","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-01T20:35:59.931241+00:00","actor":"Seth","event_type":"updated","task_id":"ch-dlx","details":{"status":"active"}}
 {"timestamp":"2026-04-01T20:54:19.176783+00:00","actor":"Seth","event_type":"logged","task_id":"ch-8e7","details":{"message":"Adversarial finding (ch-dlx): _graph_reachability CTE has no depth limit — recursive UNION traversal until fixed point. Correct semantics but potential perf concern on large scopes (100K+ symbols). No fix needed now — could add optional depth param to reachability in future if profiling shows issues."}}
+{"timestamp":"2026-04-01T20:56:39.532703+00:00","actor":"Seth","event_type":"closed","task_id":"ch-dlx","details":{"notes":null}}
+{"timestamp":"2026-04-01T20:57:01.622848+00:00","actor":"Seth","event_type":"created","task_id":"ch-r4a","details":{}}
+{"timestamp":"2026-04-01T20:57:05.325916+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"parent-child","to":"ch-r4a"}}
+{"timestamp":"2026-04-01T20:57:05.326827+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"blocks","to":"ch-r4a"}}

@@ -4,9 +4,11 @@ title: 'Phase 3: Primitive MCP Tools'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-0um, ch-1ed, ch-dlx]
+depends_on: [ch-0um, ch-1ed, ch-dlx, ch-r4a]
 parent: ch-8e7
 ---
+
+
 
 
 
@@ -29,11 +31,11 @@ Scoped to parent epic R4, R5:
 - [x] `lsp` tool callable with all 7 operations (definition, references, implementations, callers, callees, hover, diagnostics)
 - [x] `lsp` tool returns clean structured responses (no raw JSON-RPC framing)
 - [x] `lsp` tool capability-gates: calling an unadvertised operation returns a clear error, not crash
-- [ ] `graph` tool supports walk, reachability, boundary, overview operations
-- [ ] `graph(walk)` returns symbols + edges traversed, respects depth and edge_kind filters
-- [ ] `graph(reachability)` identifies unreachable symbols from specified roots
-- [ ] `graph(boundary)` returns cross-scope violations
-- [ ] `graph(overview)` returns most-connected types with relationship summary
+- [x] `graph` tool supports walk, reachability, boundary, overview operations
+- [x] `graph(walk)` returns symbols + edges traversed, respects depth and edge_kind filters
+- [x] `graph(reachability)` identifies unreachable symbols from specified roots
+- [x] `graph(boundary)` returns cross-scope violations
+- [x] `graph(overview)` returns most-connected types with relationship summary
 - [ ] `symbol_context` returns hover + definition + callers + callees + graph neighborhood in one response
 - [x] `lsp_status` returns per-server state, capabilities, readiness
 - [ ] `search(type: symbols)` queries symbols table with kind, language, path, fqn pattern filters

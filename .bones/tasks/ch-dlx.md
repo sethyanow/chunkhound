@@ -1,12 +1,13 @@
 ---
 id: ch-dlx
 title: 'Task 2: graph MCP tool (walk, reachability, boundary, overview)'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-zyz
 ---
+
 
 
 
@@ -83,18 +84,18 @@ From parent epic R4: `graph(operation, ...)` unified graph queries — walk, rea
 - Commit and push
 
 ## Success Criteria
-- [ ] `graph` tool registered with @register_tool, callable via execute_tool
-- [ ] `graph(walk)` returns connected symbols + edges from a starting FQN, respects depth and edge_kind filters
-- [ ] `graph(walk)` with nonexistent FQN returns empty results (not error)
-- [ ] `graph(walk)` on cyclic graph (A→B→A) terminates without hanging, returns finite results
-- [ ] `graph(reachability)` returns symbols unreachable from scope roots
-- [ ] `graph(boundary)` returns edges crossing a scope boundary
-- [ ] `graph(overview)` returns most-connected symbols with edge_kind breakdown, respects limit
-- [ ] All operations return clean structured dicts (no raw DB column names)
-- [ ] Invalid operation returns structured error dict
-- [ ] Missing required params (walk without symbol, reachability/boundary without scope) return structured error dict
-- [ ] `uv run pytest tests/test_mcp_tools_lsp.py -v -m ""` → all pass (including prior lsp/lsp_status tests)
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
+- [x] `graph` tool registered with @register_tool, callable via execute_tool
+- [x] `graph(walk)` returns connected symbols + edges from a starting FQN, respects depth and edge_kind filters
+- [x] `graph(walk)` with nonexistent FQN returns empty results (not error)
+- [x] `graph(walk)` on cyclic graph (A→B→A) terminates without hanging, returns finite results
+- [x] `graph(reachability)` returns symbols unreachable from scope roots
+- [x] `graph(boundary)` returns edges crossing a scope boundary
+- [x] `graph(overview)` returns most-connected symbols with edge_kind breakdown, respects limit
+- [x] All operations return clean structured dicts (no raw DB column names)
+- [x] Invalid operation returns structured error dict
+- [x] Missing required params (walk without symbol, reachability/boundary without scope) return structured error dict
+- [x] `uv run pytest tests/test_mcp_tools_lsp.py -v -m ""` → all pass (including prior lsp/lsp_status tests)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
 
 ## Anti-Patterns
 - NO live LSP calls — graph tool is pure DuckDB
