@@ -573,3 +573,324 @@ class TestLspStatusTool:
         )
 
         assert result["error"] == "lsp_not_ready"
+
+
+# ---------------------------------------------------------------------------
+# Graph tool tests
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_services(
+    query_results: list[list[dict[str, Any]]] | None = None,
+) -> MagicMock:
+    """Create mock services with execute_query returning sequential results.
+
+    Each element in query_results is returned for successive execute_query calls.
+    """
+    services = MagicMock()
+    if query_results:
+        services.provider.execute_query.side_effect = query_results
+    else:
+        services.provider.execute_query.return_value = []
+    return services
+
+
+class TestGraphTool:
+    """Tests for the ``graph`` MCP tool — pure DuckDB queries against symbols/symbol_edges."""
+
+    @pytest.mark.asyncio
+    async def test_graph_walk(self) -> None:
+        """graph(walk) returns connected symbols + edges from a starting FQN."""
+        services = _make_mock_services([
+            # Call 1: recursive CTE returns reachable nodes
+            [
+                {"fqn": "mod::A", "name": "A", "kind": "Class", "file_path": "mod.py", "depth": 0},
+                {"fqn": "mod::A::foo", "name": "foo", "kind": "Function", "file_path": "mod.py", "depth": 1},
+                {"fqn": "util::helper", "name": "helper", "kind": "Function", "file_path": "util.py", "depth": 2},
+            ],
+            # Call 2: edges between discovered nodes
+            [
+                {"from_fqn": "mod::A", "to_fqn": "mod::A::foo", "edge_kind": "defines", "from_file": "mod.py", "to_file": "mod.py"},
+                {"from_fqn": "mod::A::foo", "to_fqn": "util::helper", "edge_kind": "calls", "from_file": "mod.py", "to_file": "util.py"},
+            ],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A", "depth": 2},
+        )
+
+        assert isinstance(result, dict)
+        assert "results" in result
+        assert "edges" in result
+        assert "count" in result
+        assert len(result["results"]) == 3
+        assert result["results"][0]["fqn"] == "mod::A"
+        assert result["results"][0]["kind"] == "Class"
+        assert len(result["edges"]) == 2
+        edge = result["edges"][0]
+        assert "from_symbol" in edge
+        assert "to_symbol" in edge
+        assert "edge_kind" in edge
+        assert "from_symbol_id" not in edge  # no raw DB column names
+        assert result["count"] == 3
+
+    @pytest.mark.asyncio
+    async def test_graph_walk_edge_filter(self) -> None:
+        """graph(walk, edge_kind='calls') returns only call edges."""
+        services = _make_mock_services([
+            [
+                {"fqn": "mod::A::foo", "name": "foo", "kind": "Function", "file_path": "mod.py", "depth": 0},
+                {"fqn": "util::helper", "name": "helper", "kind": "Function", "file_path": "util.py", "depth": 1},
+            ],
+            [
+                {"from_fqn": "mod::A::foo", "to_fqn": "util::helper", "edge_kind": "calls", "from_file": "mod.py", "to_file": "util.py"},
+            ],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "mod::A::foo", "depth": 2, "edge_kind": "calls"},
+        )
+
+        assert len(result["results"]) == 2
+        assert all(e["edge_kind"] == "calls" for e in result["edges"])
+
+    @pytest.mark.asyncio
+    async def test_graph_walk_empty(self) -> None:
+        """graph(walk) from nonexistent FQN returns empty results, not error."""
+        services = _make_mock_services([[], []])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": "nonexistent::Symbol"},
+        )
+
+        assert result["results"] == []
+        assert result["edges"] == []
+        assert result["count"] == 0
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_graph_walk_missing_symbol(self) -> None:
+        """graph(walk) without symbol returns structured error."""
+        services = _make_mock_services()
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk"},
+        )
+
+        assert result["error"] == "missing_parameter"
+        services.provider.execute_query.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_graph_walk_empty_string_symbol(self) -> None:
+        """graph(walk) with empty string symbol returns same error as None."""
+        services = _make_mock_services()
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "walk", "symbol": ""},
+        )
+
+        assert result["error"] == "missing_parameter"
+        services.provider.execute_query.assert_not_called()
+
+    @pytest.mark.asyncio
+    async def test_graph_walk_cycle(self) -> None:
+        """graph(walk) on cyclic graph terminates without hanging."""
+        import asyncio
+
+        services = _make_mock_services([
+            [
+                {"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0},
+                {"fqn": "mod::B", "name": "B", "kind": "Function", "file_path": "mod.py", "depth": 1},
+            ],
+            [
+                {"from_fqn": "mod::A", "to_fqn": "mod::B", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"},
+                {"from_fqn": "mod::B", "to_fqn": "mod::A", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"},
+            ],
+        ])
+
+        result = await asyncio.wait_for(
+            execute_tool(
+                tool_name="graph",
+                services=services,
+                embedding_manager=None,
+                arguments={"operation": "walk", "symbol": "mod::A", "depth": 5},
+            ),
+            timeout=5.0,
+        )
+
+        assert isinstance(result, dict)
+        assert "results" in result
+        assert len(result["results"]) <= 10
+
+    @pytest.mark.asyncio
+    async def test_graph_invalid_operation(self) -> None:
+        """graph with invalid operation returns structured error."""
+        services = _make_mock_services()
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "bogus"},
+        )
+
+        assert result["error"] == "invalid_operation"
+        services.provider.execute_query.assert_not_called()
+
+    # --- reachability tests ---
+
+    @pytest.mark.asyncio
+    async def test_graph_reachability(self) -> None:
+        """graph(reachability) returns symbols unreachable from scope entry points."""
+        services = _make_mock_services([
+            # Call 1: all symbols in scope
+            [
+                {"fqn": "pkg::main", "name": "main", "kind": "Function", "file_path": "pkg/main.py"},
+                {"fqn": "pkg::helper", "name": "helper", "kind": "Function", "file_path": "pkg/util.py"},
+                {"fqn": "pkg::orphan", "name": "orphan", "kind": "Function", "file_path": "pkg/dead.py"},
+            ],
+            # Call 2: reachable FQNs (from edge traversal)
+            [
+                {"fqn": "pkg::main"},
+                {"fqn": "pkg::helper"},
+            ],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "reachability", "scope": "pkg/"},
+        )
+
+        assert isinstance(result, dict)
+        assert "unreachable" in result
+        assert "count" in result
+        # orphan is not reachable
+        fqns = [s["fqn"] for s in result["unreachable"]]
+        assert "pkg::orphan" in fqns
+        assert "pkg::main" not in fqns
+        assert result["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_graph_reachability_missing_scope(self) -> None:
+        """graph(reachability) without scope returns structured error."""
+        services = _make_mock_services()
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "reachability"},
+        )
+
+        assert result["error"] == "missing_parameter"
+        services.provider.execute_query.assert_not_called()
+
+    # --- boundary tests ---
+
+    @pytest.mark.asyncio
+    async def test_graph_boundary(self) -> None:
+        """graph(boundary) returns edges crossing scope boundary."""
+        services = _make_mock_services([
+            # Edges where from is inside scope, to is outside (or vice versa)
+            [
+                {
+                    "from_fqn": "pkg::client", "from_name": "client", "from_kind": "Function",
+                    "from_file": "pkg/client.py",
+                    "to_fqn": "external::api", "to_name": "api", "to_kind": "Function",
+                    "to_file": "external/api.py",
+                    "edge_kind": "calls",
+                },
+            ],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "boundary", "scope": "pkg/"},
+        )
+
+        assert isinstance(result, dict)
+        assert "edges" in result
+        assert "count" in result
+        assert len(result["edges"]) == 1
+        edge = result["edges"][0]
+        assert "from_symbol" in edge
+        assert "to_symbol" in edge
+        assert edge["edge_kind"] == "calls"
+        assert result["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_graph_boundary_missing_scope(self) -> None:
+        """graph(boundary) without scope returns structured error."""
+        services = _make_mock_services()
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "boundary"},
+        )
+
+        assert result["error"] == "missing_parameter"
+        services.provider.execute_query.assert_not_called()
+
+    # --- overview tests ---
+
+    @pytest.mark.asyncio
+    async def test_graph_overview(self) -> None:
+        """graph(overview) returns most-connected symbols with edge_kind breakdown."""
+        services = _make_mock_services([
+            # Call 1: top symbols by total edge count
+            [
+                {"fqn": "mod::Hub", "name": "Hub", "kind": "Class", "file_path": "mod.py", "total_edges": 15},
+                {"fqn": "mod::Helper", "name": "Helper", "kind": "Function", "file_path": "mod.py", "total_edges": 8},
+            ],
+            # Call 2: per-symbol edge_kind breakdown
+            [
+                {"fqn": "mod::Hub", "edge_kind": "calls", "edge_count": 10},
+                {"fqn": "mod::Hub", "edge_kind": "defines", "edge_count": 5},
+                {"fqn": "mod::Helper", "edge_kind": "called_by", "edge_count": 6},
+                {"fqn": "mod::Helper", "edge_kind": "references", "edge_count": 2},
+            ],
+        ])
+
+        result = await execute_tool(
+            tool_name="graph",
+            services=services,
+            embedding_manager=None,
+            arguments={"operation": "overview", "limit": 10},
+        )
+
+        assert isinstance(result, dict)
+        assert "symbols" in result
+        assert "count" in result
+        assert len(result["symbols"]) == 2
+
+        hub = result["symbols"][0]
+        assert hub["fqn"] == "mod::Hub"
+        assert hub["total_edges"] == 15
+        assert "breakdown" in hub
+        assert hub["breakdown"]["calls"] == 10
+        assert hub["breakdown"]["defines"] == 5
+
+        helper = result["symbols"][1]
+        assert helper["breakdown"]["called_by"] == 6
+        assert result["count"] == 2

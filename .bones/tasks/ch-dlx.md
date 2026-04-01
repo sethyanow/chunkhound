@@ -1,11 +1,14 @@
 ---
 id: ch-dlx
 title: 'Task 2: graph MCP tool (walk, reachability, boundary, overview)'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-zyz
 ---
+
+
 
 
 
@@ -34,13 +37,16 @@ From parent epic R4: `graph(operation, ...)` unified graph queries — walk, rea
 
 ## Implementation
 
-### Step 1: Write failing tests — graph walk + edge filter
+### Step 1: Write failing tests — graph walk + edge filter + validation
 - File: `tests/test_mcp_tools_lsp.py` (extend with `TestGraphTool` class)
 - Mock `services.provider.execute_query` to return controlled row dicts
 - `test_graph_walk`: call `execute_tool("graph", ..., arguments={"operation": "walk", "symbol": "module::MyClass", "depth": 2})`. Assert result has `results` list with dicts containing `fqn`, `name`, `kind`, `file_path`, and `edges` containing `from_symbol`, `to_symbol`, `edge_kind`.
 - `test_graph_walk_edge_filter`: same but with `edge_kind="calls"`. Assert only call edges returned.
-- `test_graph_walk_empty`: walk from nonexistent FQN returns `{"results": [], "count": 0}`.
-- Run: `uv run pytest tests/test_mcp_tools_lsp.py::TestGraphTool -v -m "" -k "walk"` → fails
+- `test_graph_walk_empty`: walk from nonexistent FQN returns `{"results": [], "edges": [], "count": 0}`.
+- `test_graph_walk_missing_symbol`: walk with `symbol=None` returns `{"error": "missing_parameter", ...}`.
+- `test_graph_walk_cycle`: mock execute_query to simulate A→B→A cycle. Assert walk terminates and returns finite results without hanging.
+- `test_graph_invalid_operation`: operation="bogus" returns `{"error": "invalid_operation", ...}`.
+- Run: `uv run pytest tests/test_mcp_tools_lsp.py::TestGraphTool -v -m "" -k "walk or invalid"` → fails
 
 ### Step 2: Implement graph walk + edge filter
 - File: `chunkhound/mcp_server/tools.py`
@@ -51,9 +57,11 @@ From parent epic R4: `graph(operation, ...)` unified graph queries — walk, rea
 - Return `{"results": [{"fqn": ..., "name": ..., "kind": ..., "file_path": ..., "depth": N}], "edges": [{"from_symbol": ..., "to_symbol": ..., "edge_kind": ..., "from_file": ..., "to_file": ...}], "count": N}`
 - Run: `uv run pytest tests/test_mcp_tools_lsp.py::TestGraphTool -v -m "" -k "walk"` → passes
 
-### Step 3: Write failing tests — reachability + boundary
+### Step 3: Write failing tests — reachability + boundary + scope validation
 - `test_graph_reachability`: mock returns symbols reachable from scope roots. Assert result identifies unreachable symbols (complement).
+- `test_graph_reachability_missing_scope`: reachability with `scope=None` returns `{"error": "missing_parameter", ...}`.
 - `test_graph_boundary`: mock returns cross-scope edges. Assert result contains edges where `from_file` is inside scope but `to_file` is outside (or vice versa).
+- `test_graph_boundary_missing_scope`: boundary with `scope=None` returns `{"error": "missing_parameter", ...}`.
 - Run: `uv run pytest tests/test_mcp_tools_lsp.py::TestGraphTool -v -m "" -k "reachability or boundary"` → fails
 
 ### Step 4: Implement reachability + boundary
@@ -78,11 +86,13 @@ From parent epic R4: `graph(operation, ...)` unified graph queries — walk, rea
 - [ ] `graph` tool registered with @register_tool, callable via execute_tool
 - [ ] `graph(walk)` returns connected symbols + edges from a starting FQN, respects depth and edge_kind filters
 - [ ] `graph(walk)` with nonexistent FQN returns empty results (not error)
+- [ ] `graph(walk)` on cyclic graph (A→B→A) terminates without hanging, returns finite results
 - [ ] `graph(reachability)` returns symbols unreachable from scope roots
 - [ ] `graph(boundary)` returns edges crossing a scope boundary
 - [ ] `graph(overview)` returns most-connected symbols with edge_kind breakdown, respects limit
 - [ ] All operations return clean structured dicts (no raw DB column names)
 - [ ] Invalid operation returns structured error dict
+- [ ] Missing required params (walk without symbol, reachability/boundary without scope) return structured error dict
 - [ ] `uv run pytest tests/test_mcp_tools_lsp.py -v -m ""` → all pass (including prior lsp/lsp_status tests)
 - [ ] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
 
@@ -95,7 +105,14 @@ From parent epic R4: `graph(operation, ...)` unified graph queries — walk, rea
 
 ## Key Considerations
 - `execute_query` returns `list[dict]` — alias SQL columns for predictable keys
-- DuckDB recursive CTEs: `WITH RECURSIVE` syntax works but mind performance on large graphs — depth parameter bounds traversal
-- `edge_kind` values populated by Phase 2: expect "calls", "references", "definitions", "implementations" — verify during implementation
-- `scope` parameter is a file path prefix (e.g., "chunkhound/mcp_server/") — use LIKE with proper escaping
-- Parameterize all user inputs (`symbol`, `scope`, `edge_kind`) to prevent SQL injection
+- DuckDB recursive CTEs: `WITH RECURSIVE` syntax works but mind performance on large graphs — depth parameter bounds traversal. **Must track visited FQNs to prevent infinite loops on cyclic graphs** (e.g., A calls B, B calls A). The depth parameter alone is not sufficient — the CTE needs an explicit visited-set or anti-join on already-seen rows.
+- `edge_kind` values populated by Phase 2 (verified from `lsp_population.py:_edges_recursive`): `"defines"`, `"references"`, `"implements"`, `"called_by"`, `"calls"` — 5 values. Note: NOT "definitions"/"implementations" as originally estimated.
+- `scope` parameter is a file path prefix (e.g., "chunkhound/mcp_server/"). Uses LIKE with `?` placeholder. **Escape `%` and `_` in user-provided scope** before appending `%` for prefix match — otherwise `scope="chunk_ound"` matches `"chunkhound"`.
+- Parameterize all user inputs (`symbol`, `scope`, `edge_kind`) using `?` positional placeholders with `params` list — e.g., `execute_query("SELECT ... WHERE fqn = ?", [symbol])`. Never f-string user values into SQL.
+- **Parameter validation per operation:** `walk` requires `symbol` (return error if None or empty string). `reachability` and `boundary` require `scope` (return error if None or empty string). `overview` requires neither. Return structured `{"error": "missing_parameter", "message": "..."}` for missing required params. Treat `""` same as None.
+- **Limit/depth bounds:** Clamp `depth` to 1-20 range, `limit` to 1-100 range. Values outside range get clamped, not rejected.
+- **Walk cycle prevention (structural):** DuckDB `WITH RECURSIVE` has no built-in cycle detection. Accumulate visited FQNs in an array column within the CTE, add anti-join (`AND to_fqn NOT = ANY(visited)`) in the recursive term. Combined with depth limit, prevents infinite loops on mutual recursion (A→B→A) and redundant traversal.
+- **Walk result size:** `limit` parameter also applies to walk (max nodes returned). The recursive CTE should terminate early once limit is reached to prevent hub-symbol explosion (500 connections at depth=2 = 250K rows).
+- **LIKE escaping for scope:** Escape `%` → `\%` and `_` → `\_` in scope before appending `%`. Use `ESCAPE '\'` clause: `file_path LIKE ? ESCAPE '\'`.
+- **Overview OR-join performance:** `ON s.id = e.from_symbol_id OR s.id = e.to_symbol_id` performs poorly in DuckDB. Split into two subqueries (outgoing + incoming counts) combined with UNION ALL, then aggregate. Profile with EXPLAIN on non-trivial data.
+- **Empty graph signal:** If `symbols` table is empty (population never ran), all operations return empty results with no error. The `GRAPH_DESCRIPTION` should note this so agents know to check `lsp_status` or `get_stats` if results are unexpectedly empty.
