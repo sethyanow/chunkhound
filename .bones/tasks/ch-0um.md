@@ -1,12 +1,14 @@
 ---
 id: ch-0um
 title: 'Phase 2: Index-Time Population'
-status: open
+status: closed
 type: epic
 priority: 1
 depends_on: [ch-7j0, ch-5b3, ch-nvc, ch-zlg, ch-5a3, ch-yda, ch-91j, ch-ko4, ch-uny, ch-rym, ch-21f]
 parent: ch-8e7
 ---
+
+
 
 
 
@@ -54,7 +56,7 @@ Scoped to parent epic R3:
 - [x] All existing tests still pass (zero regression)
 - [x] `uv run pytest tests/test_lsp_population.py -v` → all pass (59 passed)
 - [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (17 passed)
-- [ ] `uv run scripts/demo_lsp.py` → Phase 2 sections all PASS (acceptance demo, not just unit tests)
+- [x] `uv run scripts/demo_lsp.py` → Phase 2 sections all PASS (acceptance demo, not just unit tests)
 
 ## Anti-Patterns
 Inherited from parent epic, plus:
@@ -80,3 +82,4 @@ Inherited from parent epic, plus:
 ## Log
 
 - [2026-03-31T14:38:46Z] [Seth] ACCEPTANCE DEMO FAILURE: LSPPopulationService has 0 references outside tests. Never wired into IndexingCoordinator.process_directory or RealtimeIndexingService. Criteria 1 and 6 unchecked — service works in isolation (52 tests pass) but is dead code in production. Need wiring task before acceptance can pass.
+- [2026-04-01T18:23:36Z] [Seth] Phase 2 complete. All 13 success criteria met. Acceptance demo 9/9 PASS. Sub-epic closed, unblocks Phase 3 (ch-zyz: Primitive MCP Tools).

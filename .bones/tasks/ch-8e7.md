@@ -47,18 +47,18 @@ R10. Infrastructure fixes — semantic search path scoping tightened to strict p
 
 ## Success Criteria
 
-- [ ] LSP client manager spawns, initializes, and queries pyright + at least 3 other language servers
-- [ ] `symbols` and `symbol_edges` tables populated for a multi-language codebase
+- [x] LSP client manager spawns, initializes, and queries pyright + at least 3 other language servers
+- [x] `symbols` and `symbol_edges` tables populated for a multi-language codebase
 - [ ] All 4 primitive MCP tools operational (lsp, graph, symbol_context, lsp_status)
 - [ ] search(type: symbols) and search(type: structural) return results with type_filter support
 - [ ] All 4 fusion tools return correct results (test_targeting, impact_cascade, cross_language_check, semantic_diff)
 - [ ] Graph walk expander produces chunks in code_research that semantic search alone misses
 - [ ] Prompt templates used by code_research BFS for structural sub-questions
 - [ ] All 5 skill scripts executable via workflow.py with SKILL.md discovery
-- [ ] Path scoping fix prevents semantic search result leakage across directories
+- [x] Path scoping fix prevents semantic search result leakage across directories
 - [ ] Git-aware indexing reflects staged state
-- [ ] Incremental population: file change triggers symbol/edge refresh for that file only
-- [ ] All existing tests still pass — zero regression
+- [x] Incremental population: file change triggers symbol/edge refresh for that file only
+- [x] All existing tests still pass — zero regression
 
 ## Anti-Patterns (FORBIDDEN)
 

@@ -1,13 +1,15 @@
 ---
 id: ch-yda
 title: 'Phase 2 Acceptance: Index-Time Population'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-91j, ch-ko4, ch-uny, ch-rym]
 parent: ch-0um
 ---
+
+
 
 
 
@@ -36,11 +38,11 @@ Extend `scripts/demo_lsp.py` with Phase 2 population scenarios covering:
 4. Check symbol_edges for calls, references, implements edge kinds
 
 ## Success Criteria
-- [ ] Scenario 1 PASS: symbols table has >0 rows after indexing, at least one known Python symbol verified by name
-- [ ] Scenario 2 PASS: file modification triggers symbol refresh — symbol count for that file changes appropriately
-- [ ] Scenario 3 PASS: symbols table contains entries with at least 2 distinct language values
-- [ ] Scenario 4 PASS: symbol_edges contains at least calls and references edge kinds
-- [ ] `uv run scripts/demo_lsp.py` runs Phase 2 sections and exits 0 on all-pass, 1 on any failure
+- [x] Scenario 1 PASS: symbols table has >0 rows after indexing, at least one known Python symbol verified by name
+- [x] Scenario 2 PASS: file modification triggers symbol refresh — symbol count for that file changes appropriately
+- [x] Scenario 3 PASS: symbols table contains entries with at least 2 distinct language values
+- [x] Scenario 4 PASS: symbol_edges contains at least calls and references edge kinds
+- [x] `uv run scripts/demo_lsp.py` runs Phase 2 sections and exits 0 on all-pass, 1 on any failure
 
 ## Key Considerations
 - **Scenario 2 sync gap:** Population is async/background. After file modification, script must poll or await population completion before asserting — immediate query returns stale data. Need a synchronization strategy (poll symbol count with timeout, or call population service directly).
@@ -57,3 +59,4 @@ Extend `scripts/demo_lsp.py` with Phase 2 population scenarios covering:
 
 - [2026-03-31T14:42:16Z] [Seth] BLOCKED: Demo reveals LSPPopulationService is dead code in production. Created ch-91j (wiring task). Acceptance cannot pass until ch-91j is done and demo re-run.
 - [2026-03-31T17:44:47Z] [Seth] ACCEPTANCE DEMO RESULT: 6/8 scenarios PASS, 2 new scenarios FAIL. live-vs-populated shows all live symbols matched in DB (51/51). Cross-file edge health FAILS — 1319/1323 edges self-referential, workspaceSymbol pass crashed. Two blocking bugs created: ch-ko4 (P0, loop crash on single failure) and ch-uny (P1, client degradation root cause). Demo script hardened with 6 new scenarios + 29 unit tests.
+- [2026-04-01T18:23:34Z] [Seth] Acceptance PASSED: 9/9 demo scenarios all PASS. Demo run showed 36372 symbols, 74720 edges, 4151 cross-file edges across 4 languages. All live LSP symbols matched in DB (52/52). Incremental refresh verified. Also found and fixed Python 3.13 rglob compat bug in polling monitor (3b9f26e6).
