@@ -1,11 +1,13 @@
 ---
 id: ch-21f
 title: 'LSP client hardening: notifications, async deletes, typed exceptions'
-status: open
+status: active
 type: task
 priority: 2
+owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -39,28 +41,36 @@ Discovered during ch-ko4 reindex investigation. code_research output + Python sk
 - Test report: send report with percentage → updated in dict
 - Test end: send end → token removed from dict
 - Test unknown token report: no KeyError
+- Test params=None: `_handle_notification("$/progress", None)` → no crash, no state change
+- Test params=None for logMessage: `_handle_notification("window/logMessage", None)` → no crash
+- Test missing token: `_handle_notification("$/progress", {"value": {"kind": "begin"}})` → no crash, no `_progress[None]` entry
 
 #### Step 3: Implement handlers (GREEN)
 - File: `chunkhound/lsp/client.py`
 - Add `self._progress: dict[str, dict[str, Any]] = {}` to `__init__` (line ~45)
-- Add `elif method == "window/logMessage"` in `_handle_notification` (line 461)
+- Add `elif method == "window/logMessage"` in `_handle_notification` (method at line 451, `else` branch at line 461)
   - Map type 1→ERROR, 2→WARNING, 3→INFO, default→DEBUG
+  - Use `params.get("type", 4)` — missing type defaults to Log (4) → DEBUG
+  - Use `params.get("message", "")` — defensive against missing message
   - `logger.log(level, "LSP [%s]: %s", self._config.language_id, message)`
 - Add `elif method == "$/progress"`
+  - Extract `token = params.get("token")` and `value = params.get("value", {})` — defensive access
+  - Extract `kind = value.get("kind")` — may be missing, skip if so
   - begin: store `{title, percentage: 0}` in `_progress[token]`
-  - report: update percentage if token exists
-  - end: pop token
+  - report: update percentage if token exists (use `.get()` on `_progress` to avoid KeyError)
+  - end: pop token (use `.pop(token, None)` to avoid KeyError)
 - Keep `else` branch for truly unknown methods
 
 ### Part B: Async deletes
 
 #### Step 4: Add execute_query_async (RED then GREEN)
 - File: `chunkhound/providers/database/serial_database_provider.py`
-- Add method following existing async pattern (e.g., `delete_file_completely_async`):
+- Add method following existing async pattern (e.g., `delete_file_completely_async` at line 292):
   ```
   async def execute_query_async(self, query, params=None):
       return await self._execute_in_db_thread("execute_query", query, params)
   ```
+- Note: `_executor_execute_query` already exists on `DuckDBProvider` (duckdb_provider.py:2798) — only the async wrapper is needed, not a new executor
 - Test: call `execute_query_async` with a simple SELECT, verify returns same as sync
 
 #### Step 5: Convert delete methods to async DB path
@@ -86,9 +96,21 @@ Discovered during ch-ko4 reindex investigation. code_research output + Python sk
 - [ ] `$/progress` notifications tracked in `_progress` dict (begin/report/end lifecycle)
 - [ ] `window/logMessage` routed to Python logger at correct severity (Error/Warn/Info/Debug)
 - [ ] No "unhandled" log lines for `$/progress` or `window/logMessage`
+- [ ] `_handle_notification` with `params=None` does not crash (guard before `.get()` access)
 - [ ] `delete_file_edges` and `delete_file_symbols` use async DB path
 - [ ] Per-file catch uses specific types: `(LSPError, OSError, UnicodeDecodeError, duckdb.Error)`
 - [ ] All existing tests pass
+
+## Key Considerations
+- **CRITICAL: `params` can be `None`** — `_handle_notification` signature is `(method: str, params: dict | None)`. Both new handlers MUST guard with `if not params: return` before calling `params.get()`, matching the existing `publishDiagnostics` pattern (`and params` at line 453). Without this guard, `AttributeError` crashes the transport read loop.
+- **`$/progress` token can be `None`** — `params.get("token")` returns `None` if missing. `_progress[None]` creates an un-cleanable garbage entry. Skip if `token is None`.
+- `window/logMessage` params may be missing `type` or `message` keys — use `.get()` with safe defaults (type=4→DEBUG, message="")
+- `$/progress` value dict may be missing `kind` key — skip processing if no kind
+- **Orphaned progress tokens** — if server crashes before sending `end`, token stays in `_progress`. Not critical (in-memory only, cleared on client restart). Document as known behavior.
+- `window/showMessage` is another common LSP notification (not in scope for this task) — it will still log as "unhandled," which is acceptable per criteria scoping to only `$/progress` and `window/logMessage`
+- Delete methods (`delete_file_edges`, `delete_file_symbols`) return DuckDB row-count results from `fetchall()` — the async path via `_executor_execute_query` handles this correctly
+- **Python 3.10 timeout note** — `asyncio.TimeoutError` is NOT a subclass of `OSError` on 3.10 (it is on 3.11+). Not actionable now (LSP client has no timeouts), but if timeouts are added later, they should use `LSPTimeoutError(LSPError)` which is in the catch list
+- Step 6 TDD note: the `duckdb.ConstraintException` test will be GREEN from the start (current `except Exception` already catches it). The RuntimeError test drives the change (it will be RED because current code catches it but it should escape)
 
 ## Anti-Patterns
 - NO observer/registry pattern for notification dispatch — KISS, just elif branches

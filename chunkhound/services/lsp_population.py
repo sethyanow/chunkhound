@@ -12,6 +12,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
+import duckdb
+
 from chunkhound.lsp.constants import symbol_kind_name
 from chunkhound.lsp.types import LSPCapability, LSPError, SymbolInfo
 
@@ -251,7 +253,7 @@ class LSPPopulationService:
                     populated += 1
                 elif result is PopulateResult.SKIPPED:
                     skipped += 1
-            except Exception as exc:
+            except (LSPError, OSError, UnicodeDecodeError, duckdb.Error) as exc:
                 failed += 1
                 logger.warning(
                     "Population failed for %s: %s: %s",
@@ -512,7 +514,7 @@ class LSPPopulationService:
 
     async def delete_file_edges(self, file_id: int) -> None:
         """Remove all edges that reference symbols belonging to this file."""
-        self._provider.execute_query(
+        await self._provider.execute_query_async(
             "DELETE FROM symbol_edges WHERE "
             "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
             "to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)",
@@ -521,6 +523,6 @@ class LSPPopulationService:
 
     async def delete_file_symbols(self, file_id: int) -> None:
         """Remove all symbols for a given file_id."""
-        self._provider.execute_query(
+        await self._provider.execute_query_async(
             "DELETE FROM symbols WHERE file_id = ?", [file_id]
         )

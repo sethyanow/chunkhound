@@ -43,6 +43,8 @@ class LSPClient:
         # Notification-collected diagnostics (push model)
         self._diagnostics: dict[str, list[dict[str, Any]]] = {}
         self._diagnostics_events: dict[str, asyncio.Event] = {}
+        # Progress token tracking ($/progress lifecycle)
+        self._progress: dict[str, dict[str, Any]] = {}
 
     @property
     def state(self) -> ServerState:
@@ -458,6 +460,29 @@ class LSPClient:
             event = self._diagnostics_events.get(uri)
             if event:
                 event.set()
+        elif method == "window/logMessage" and params:
+            msg_type = params.get("type", 4)
+            message = params.get("message", "")
+            level_map = {1: logging.ERROR, 2: logging.WARNING, 3: logging.INFO}
+            level = level_map.get(msg_type, logging.DEBUG)
+            logger.log(level, "LSP [%s]: %s", self._config.language_id, message)
+        elif method == "$/progress" and params:
+            token = params.get("token")
+            if token is None:
+                return
+            value = params.get("value", {})
+            kind = value.get("kind")
+            if kind == "begin":
+                self._progress[token] = {
+                    "title": value.get("title", ""),
+                    "percentage": 0,
+                }
+            elif kind == "report":
+                entry = self._progress.get(token)
+                if entry is not None:
+                    entry["percentage"] = value.get("percentage", entry["percentage"])
+            elif kind == "end":
+                self._progress.pop(token, None)
         else:
             logger.debug("LSP notification (unhandled): %s", method)
 

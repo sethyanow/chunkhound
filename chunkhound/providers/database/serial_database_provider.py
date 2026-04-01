@@ -285,6 +285,12 @@ class SerialDatabaseProvider(ABC):
             "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
         )
 
+    async def execute_query_async(
+        self, query: str, params: list[Any] | None = None
+    ) -> list[dict[str, Any]]:
+        """Async variant of execute_query."""
+        return await self._execute_in_db_thread("execute_query", query, params)
+
     async def get_stats_async(self) -> dict[str, int]:
         """Async variant of get_stats."""
         return await self._execute_in_db_thread("get_stats")

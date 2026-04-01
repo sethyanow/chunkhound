@@ -3299,6 +3299,66 @@ class TestPopulateFilesResilience:
         assert "Pipe broken" in failure_logs[0] or "LSPTransportError" in failure_logs[0]
 
 
+class TestPopulateFilesTypedCatch:
+    """Tests that populate_files catches only expected exception types."""
+
+    @pytest.mark.asyncio
+    async def test_runtime_error_escapes_the_loop(self, tmp_path: Path) -> None:
+        """RuntimeError is unexpected — must NOT be caught, should propagate."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+        (tmp_path / "src").mkdir(parents=True, exist_ok=True)
+        (tmp_path / "src" / "a.py").write_text("x = 1\n")
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        original = service.populate_file
+
+        async def exploding_populate(file_path, file_id, language):
+            raise RuntimeError("unexpected internal bug")
+
+        service.populate_file = exploding_populate  # type: ignore[assignment]
+
+        with pytest.raises(RuntimeError, match="unexpected internal bug"):
+            await service.populate_files()
+
+    @pytest.mark.asyncio
+    async def test_duckdb_error_is_caught(self, tmp_path: Path) -> None:
+        """duckdb.Error subclasses should be caught — loop continues."""
+        import duckdb
+
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+        _insert_file(provider, 2, "src/b.py")
+        for name in ("a.py", "b.py"):
+            f = tmp_path / "src" / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("class Foo:\n    def bar(self): ...\n")
+
+        pool, client = _make_mock_pool(_sample_symbols())
+        client.workspace_symbols = AsyncMock(return_value=[])
+        client.capabilities = {LSPCapability.DOCUMENT_SYMBOL, LSPCapability.WORKSPACE_SYMBOL}
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+        call_count = 0
+
+        async def patched(file_path, file_id, language):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                raise duckdb.ConstraintException("FK violation")
+            return await service._original_populate(file_path, file_id, language)
+
+        service._original_populate = service.populate_file  # type: ignore[attr-defined]
+        service.populate_file = patched  # type: ignore[assignment]
+
+        # Should NOT raise — duckdb.Error is caught
+        await service.populate_files()
+
+
 class TestPopulateFilesAdversarial:
     """Adversarial stress tests for populate_files error handling (ch-ko4)."""
 
@@ -3550,3 +3610,18 @@ class TestDeleteSymbolsWithCrossFileEdges:
         assert call_order == ["edges", "symbols"], (
             f"Expected edges-before-symbols ordering, got {call_order}"
         )
+
+
+class TestExecuteQueryAsync:
+    """Tests for execute_query_async behavioral equivalence with sync version."""
+
+    @pytest.mark.asyncio
+    async def test_async_returns_same_as_sync(self, tmp_path: Path) -> None:
+        provider = _make_provider(tmp_path)
+        try:
+            _insert_file(provider, 1, "src/hello.py")
+            sync_result = provider.execute_query("SELECT id, path FROM files WHERE id = ?", [1])
+            async_result = await provider.execute_query_async("SELECT id, path FROM files WHERE id = ?", [1])
+            assert async_result == sync_result
+        finally:
+            provider.close()
