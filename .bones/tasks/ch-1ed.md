@@ -13,6 +13,7 @@ parent: ch-zyz
 
 
 
+
 ## Context
 Parent epic ch-8e7, Phase 3 sub-epic ch-zyz. First task — no prior tasks in this phase.
 Phase 2 delivered: `LSPClient` with 8 operations + `LSPClientPool` (lazy, respawn-on-degraded) + `symbols`/`symbol_edges` DuckDB tables. `MCPServerBase._lsp_pool` already holds the pool instance.
@@ -167,3 +168,7 @@ From parent epic R4: Primitive MCP tools — `lsp(file, line, character, operati
 - NO tool params that expose LSP protocol details (textDocument, position objects)
 - NO changes to existing tool signatures
 - NO print() in MCP server code
+
+## Log
+
+- [2026-04-01T20:18:29Z] [Seth] Debrief: Clean implementation, no workarounds. _uri_to_path helper and lsp_client_pool wiring pattern reusable for all Phase 3 tools. Reflections: SRE caught workspace_root source error (services → config.target_dir) and missing language_id resolution spec. LSPCapability.value includes Provider suffix — documented in memory. from __future__ import annotations breaks inspect schema gen — documented.
