@@ -4,8 +4,10 @@ title: 'Task 4: search(type: symbols), type_filter parameter, get_stats MCP tool
 status: open
 type: task
 priority: 1
+depends_on: [ch-t3j]
 parent: ch-zyz
 ---
+
 
 
 
