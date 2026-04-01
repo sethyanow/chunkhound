@@ -13,6 +13,7 @@ parent: ch-zyz
 
 
 
+
 ## Context
 Parent epic ch-8e7, Phase 3 sub-epic ch-zyz. Third task — ch-1ed (lsp + lsp_status) and ch-dlx (graph) are closed.
 Phase 3 Task 1 delivered `lsp` and `lsp_status` tools with helpers `_uri_to_path`, `_location_to_dict`, `_call_item_to_dict` in `tools.py`. Task 2 delivered `graph` tool with `_graph_walk`, `_graph_reachability`, `_graph_boundary`, `_graph_overview`, `_escape_like` in `tools.py`.
@@ -143,3 +144,4 @@ From parent epic R4: `symbol_context(file, line, character)` compound symbol pro
 ## Log
 
 - [2026-04-01T21:23:51Z] [Seth] SRE refinement complete. Verified all architecture claims against current code (line numbers updated: _uri_to_path→518, _graph_walk→830, execute_tool→1178). Added 3 missing tests (partial LSP failure, file:// URI, graph_walk DB failure). Clarified asyncio.gather pattern (broad-catch wrappers, not return_exceptions). Added file:// URI handling + relative path conversion to Step 2. Added adversarial catalog with 4 findings. All existing test patterns reviewed — follows execute_tool-based integration tests with _make_mock_pool/_make_mock_services helpers.
+- [2026-04-01T21:36:26Z] [Seth] Debrief: Clean implementation. Composed existing primitives (helpers, _graph_walk) without new SQL. asyncio.gather with broad-catch wrappers chosen over return_exceptions. ChunkHound index stale for graph functions (ch-dlx additions not indexed). Reflections: Pyright documentSymbol misidentifies decorated functions with complex Literal params. Skeleton line numbers 3-10 lines stale but all functions found. asyncio.gather pattern contradiction was the only design issue in skeleton. No user corrections needed. Next task scoped: ch-lic (search extensions + get_stats).
