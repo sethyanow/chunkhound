@@ -1,12 +1,13 @@
 ---
 id: ch-uny
 title: LSP client degrades during batch population — investigate root cause
-status: open
+status: closed
 type: bug
 priority: 1
 depends_on: [ch-ko4]
 parent: ch-0um
 ---
+
 
 
 
