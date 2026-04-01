@@ -36,7 +36,7 @@ Scoped to parent epic R4, R5:
 - [x] `graph(reachability)` identifies unreachable symbols from specified roots
 - [x] `graph(boundary)` returns cross-scope violations
 - [x] `graph(overview)` returns most-connected types with relationship summary
-- [ ] `symbol_context` returns hover + definition + callers + callees + graph neighborhood in one response
+- [x] `symbol_context` returns hover + definition + callers + callees + graph neighborhood in one response
 - [x] `lsp_status` returns per-server state, capabilities, readiness
 - [ ] `search(type: symbols)` queries symbols table with kind, language, path, fqn pattern filters
 - [ ] `search(type: structural)` does semantic search + graph walk expansion + unified rerank

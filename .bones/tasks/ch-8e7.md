@@ -50,7 +50,7 @@ R10. Infrastructure fixes — semantic search path scoping tightened to strict p
 
 - [x] LSP client manager spawns, initializes, and queries pyright + at least 3 other language servers
 - [x] `symbols` and `symbol_edges` tables populated for a multi-language codebase
-- [ ] All 4 primitive MCP tools operational (lsp, graph, symbol_context, lsp_status)
+- [x] All 4 primitive MCP tools operational (lsp, graph, symbol_context, lsp_status)
 - [ ] search(type: symbols) and search(type: structural) return results with type_filter support
 - [ ] All 4 fusion tools return correct results (test_targeting, impact_cascade, cross_language_check, semantic_diff)
 - [ ] Graph walk expander produces chunks in code_research that semantic search alone misses

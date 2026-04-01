@@ -1,12 +1,13 @@
 ---
 id: ch-r4a
 title: 'Task 3: symbol_context MCP tool (compound symbol profile)'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-zyz
 ---
+
 
 
 
@@ -86,17 +87,17 @@ From parent epic R4: `symbol_context(file, line, character)` compound symbol pro
 - Commit and push
 
 ## Success Criteria
-- [ ] `symbol_context` tool registered with @register_tool, callable via execute_tool
-- [ ] Returns compound dict with `hover`, `definition`, `callers`, `callees`, `graph_neighborhood` keys
-- [ ] Graceful degradation: null hover when unavailable, null graph_neighborhood when FQN not in index
-- [ ] Pool not ready returns structured error (not crash)
-- [ ] Unsupported language returns structured error
-- [ ] Graph neighborhood uses 1-hop walk from resolved FQN
-- [ ] Partial LSP failure: one call raises, others still return data (not crash)
-- [ ] _graph_walk failure returns null graph_neighborhood (not crash)
-- [ ] file:// URI input handled correctly (converted before Language check)
-- [ ] `uv run pytest tests/test_mcp_tools_lsp.py -v -m ""` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
+- [x] `symbol_context` tool registered with @register_tool, callable via execute_tool
+- [x] Returns compound dict with `hover`, `definition`, `callers`, `callees`, `graph_neighborhood` keys
+- [x] Graceful degradation: null hover when unavailable, null graph_neighborhood when FQN not in index
+- [x] Pool not ready returns structured error (not crash)
+- [x] Unsupported language returns structured error
+- [x] Graph neighborhood uses 1-hop walk from resolved FQN
+- [x] Partial LSP failure: one call raises, others still return data (not crash)
+- [x] _graph_walk failure returns null graph_neighborhood (not crash)
+- [x] file:// URI input handled correctly (converted before Language check)
+- [x] `uv run pytest tests/test_mcp_tools_lsp.py -v -m ""` → all pass (62/62)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass (17/17)
 
 ## Anti-Patterns
 - NO new SQL patterns — reuse `_graph_walk` for graph neighborhood
