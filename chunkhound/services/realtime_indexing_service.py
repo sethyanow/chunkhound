@@ -601,7 +601,10 @@ class RealtimeIndexingService:
                             except (OSError, PermissionError):
                                 continue
                     finally:
-                        rglob_gen.close()
+                        # Python 3.13+: Path.rglob() returns map (no .close()).
+                        # Generators have .close(); map objects don't need it.
+                        if hasattr(rglob_gen, "close"):
+                            rglob_gen.close()
 
                     # Check for deleted files
                     deleted = set(known_files.keys()) - set(current_files.keys())
