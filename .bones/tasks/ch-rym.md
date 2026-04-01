@@ -10,6 +10,7 @@ parent: ch-0um
 
 
 
+
 ## Context
 `tests/test_lsp_population.py` — 3627 lines, 33 classes, 79 tests across unrelated concerns. Grew organically across ch-5b3, ch-nvc, ch-zlg, ch-ko4 without decomposition. Not just too big — the tests have accumulated quality issues that should be fixed during restructuring.
 
@@ -149,3 +150,4 @@ For each target file:
 ## Log
 
 - [2026-04-01T04:27:33Z] [Seth] Skeleton rewritten after test quality review. Key findings: TestBatchInsert tests impl detail not behavior, TestRealtimeWiring uses sleep(0.5), MCPServer/CLI wiring tests have ~200 lines of duplicated _TestServer boilerplate. Two LSP diagnostics in source (unused var L78, untyped callable L430). Restructure is a cleanup pass, not pure code motion.
+- [2026-04-01T12:54:26Z] [Seth] Session aborted by user. Agent wrote a Python AST extraction script to batch-move 33 test classes from monolith into 7 files instead of doing one-at-a-time TDD. Script had hardcoded import lists that were guessed wrong — 4 of 6 generated files had missing imports and were broken. Agent also rationalized skipping review of extracted files by calling it 'code motion' and treating skeleton's 'no quality fixes needed' as license to skip TDD and LSP diagnostic checks. User deleted all script-generated files (test_edges, test_resolve, test_type_signatures, test_workspace_symbols, test_resilience, test_wiring, _extract.py). Surviving work: test_core.py (manually created, 17 tests pass) and Step 1 source fixes (lsp_population.py diagnostics resolved with regression tests). Next session must redo extraction one file at a time with proper TDD — read each class, understand its imports and diagnostics, write file, verify, apply quality fixes.
