@@ -13,6 +13,7 @@ parent: ch-zyz
 
 
 
+
 ## Context
 Parent epic ch-8e7, Phase 3 sub-epic ch-zyz. Second task — ch-1ed (lsp + lsp_status) is closed.
 Phase 2 delivered `symbols` and `symbol_edges` DuckDB tables populated by LSP. Phase 3 Task 1 delivered `lsp_client_pool` wiring through `execute_tool`, the `lsp` and `lsp_status` tools, and helpers `_uri_to_path`, `_location_to_dict`, `_call_item_to_dict`, `_diagnostic_to_dict` in `tools.py`.
@@ -117,3 +118,7 @@ From parent epic R4: `graph(operation, ...)` unified graph queries — walk, rea
 - **LIKE escaping for scope:** Escape `%` → `\%` and `_` → `\_` in scope before appending `%`. Use `ESCAPE '\'` clause: `file_path LIKE ? ESCAPE '\'`.
 - **Overview OR-join performance:** `ON s.id = e.from_symbol_id OR s.id = e.to_symbol_id` performs poorly in DuckDB. Split into two subqueries (outgoing + incoming counts) combined with UNION ALL, then aggregate. Profile with EXPLAIN on non-trivial data.
 - **Empty graph signal:** If `symbols` table is empty (population never ran), all operations return empty results with no error. The `GRAPH_DESCRIPTION` should note this so agents know to check `lsp_status` or `get_stats` if results are unexpectedly empty.
+
+## Log
+
+- [2026-04-01T20:58:25Z] [Seth] Debrief: graph MCP tool delivered — 4 operations (walk/reachability/boundary/overview), 12 unit tests + 18 adversarial tests. All 2448 tests pass. Key decisions: 2-query pattern for walk (CTE nodes + edge query), list_concat/list_contains for CTE cycle detection, UNION ALL for overview to avoid OR-join. SRE caught wrong edge_kind values (defines/implements/called_by, not definitions/implementations). Reflections: skeleton accuracy good after SRE additions; edge_kind mismatch was the biggest surprise. User correction: load Python skills before TDD. Next task: ch-r4a (symbol_context).
