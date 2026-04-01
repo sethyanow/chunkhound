@@ -1,15 +1,17 @@
 ---
 id: ch-rym
 title: Restructure test_lsp_population.py into tests/lsp/ with quality fixes
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-0um
 ---
 
 
+
 ## Context
-`tests/test_lsp_population.py` — 3627 lines, 33 classes, 68+ tests across unrelated concerns. Grew organically across ch-5b3, ch-nvc, ch-zlg, ch-ko4 without decomposition. Not just too big — the tests have accumulated quality issues that should be fixed during restructuring.
+`tests/test_lsp_population.py` — 3627 lines, 33 classes, 79 tests across unrelated concerns. Grew organically across ch-5b3, ch-nvc, ch-zlg, ch-ko4 without decomposition. Not just too big — the tests have accumulated quality issues that should be fixed during restructuring.
 
 ## Requirements
 1. Create `tests/lsp/` module with cohesion-based test files
@@ -77,32 +79,33 @@ Current module-level helpers become proper fixtures where appropriate:
 - `tests/lsp/__init__.py` (empty)
 - `tests/lsp/conftest.py` with helpers, fixtures, shared imports, `pytestmark`
 
-### Step 3: Extract test files (one at a time, verify after each)
+### Step 3: Extract and improve each file (one at a time, verify after each)
 For each target file:
-1. Move relevant classes to new file with their imports
-2. Remove those classes from the original file
-3. Import helpers from conftest
-4. Run `uv run pytest tests/lsp/<file>.py -v` to verify
-5. Repeat for next file
+1. Create new file with its classes, imports, and conftest helper imports
+2. Apply quality fixes for classes in this file (see Design § Quality fixes)
+3. Add missing behavioral tests that belong to this file (see below)
+4. Remove extracted classes from the original file
+5. Run `uv run pytest tests/lsp/<file>.py -v` to verify
 
-Order: test_core → test_type_signatures → test_edges → test_resolve → test_workspace_symbols → test_wiring → test_resilience
+**test_core.py** — Revise TestBatchInsert: deeper/wider symbol tree, assert all 12 columns per row. Add didClose-under-failure test (mock `_batch_insert` to raise, verify `notify_did_close` still called).
 
-### Step 4: Fix quality issues in extracted files
-- Revise TestBatchInsert: deeper symbol tree, assert all 12 columns per row
-- Fix TestRealtimeWiring sleep
-- Extract _TestServer fixture for wiring tests
-- Deduplicate wiring test setup
+**test_type_signatures.py** — No quality fixes needed.
 
-### Step 5: Add missing behavioral tests
-- **test_resolve.py** — Overlapping symbols: class containing a method, both covering the same line. Verify `_resolve_symbol` returns the innermost (smallest range) via the ORDER BY clause.
-- **test_workspace_symbols.py** — Skip-existing path: run `populate_file` first, then `_populate_workspace_symbols`. Verify workspace symbols that overlap with documentSymbol results are skipped (the `SELECT id FROM symbols WHERE fqn = ? AND file_path = ?` guard).
-- **test_core.py** — didClose under failure: mock `_batch_insert` to raise after didOpen. Verify `notify_did_close` is still called (the `finally` block contract).
+**test_edges.py** — No quality fixes needed.
 
-### Step 6: Delete original and verify
-- Delete `tests/test_lsp_population.py` (should be empty after Step 3)
+**test_resolve.py** — Add overlapping-symbol test: class containing method both covering same line, verify `_resolve_symbol` returns innermost via ORDER BY.
+
+**test_workspace_symbols.py** — Add skip-existing test: `populate_file` then `_populate_workspace_symbols`, verify overlap skipped via the `SELECT id FROM symbols WHERE fqn = ? AND file_path = ?` guard.
+
+**test_wiring.py** — Extract `_TestServer` + Config setup into conftest fixture. Fix TestRealtimeWiring `asyncio.sleep(0.5)` → event/signal-based synchronization. Deduplicate wiring test setup.
+
+**test_resilience.py** — No quality fixes needed.
+
+### Step 4: Delete original and verify
+- `git rm tests/test_lsp_population.py`
 - `uv run pytest tests/lsp/ -v` — all tests pass
 
-### Step 7: Full suite and commit
+### Step 5: Full suite and commit
 - `uv run pytest -m "unit or integration or e2e" tests/ -v`
 - Commit and push
 
@@ -120,6 +123,22 @@ Order: test_core → test_type_signatures → test_edges → test_resolve → te
 - [ ] All tests pass: `uv run pytest tests/lsp/ -v`
 - [ ] Original file deleted
 - [ ] Full test suite passes
+
+## Key Considerations
+
+### File extraction
+- **Implicit ordering dependence:** Tests may pass in monolith due to discovery order but fail when split. After extracting ALL files, run full `tests/lsp/` directory to catch cross-file ordering bugs.
+- **Import completeness:** Each extracted file needs its own import set from the shared module-level imports. The Step 3 per-file `pytest -v` catches this at collection time.
+
+### conftest.py
+- **pytestmark inheritance:** Verify `pytestmark = pytest.mark.unit` in conftest applies to all directory tests via `--collect-only`.
+- **_TestServer fixture scope:** Must be `function`-scoped (default). Explicit annotation prevents accidental `session`/`module` escalation that would share dirty state.
+
+### TestBatchInsert revision
+- **Symbol tree must be heterogeneous:** At minimum: 3 levels deep, a node with 0 children, a node with 3+ children, siblings at different depths. Regular trees hide column-shift bugs in specific nesting patterns.
+
+### TestRealtimeWiring sleep fix
+- **Event must have timeout:** Use `asyncio.wait_for(event.wait(), timeout=5.0)` — catches "never called" and "deadlock" failures. Mock `side_effect` sets the event at exact call moment.
 
 ## Anti-Patterns
 - NO renaming test classes or methods (breaks git blame)

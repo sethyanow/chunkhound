@@ -150,3 +150,4 @@
 {"timestamp":"2026-04-01T02:32:36.095791+00:00","actor":"Seth","event_type":"closed","task_id":"ch-uny","details":{"notes":null}}
 {"timestamp":"2026-04-01T02:32:36.096563+00:00","actor":"Seth","event_type":"gate_bypass","task_id":"ch-uny","details":{"gate_type":"all_criteria_checked","param":null,"transition":"close"}}
 {"timestamp":"2026-04-01T04:27:33.407306+00:00","actor":"Seth","event_type":"logged","task_id":"ch-rym","details":{"message":"Skeleton rewritten after test quality review. Key findings: TestBatchInsert tests impl detail not behavior, TestRealtimeWiring uses sleep(0.5), MCPServer/CLI wiring tests have ~200 lines of duplicated _TestServer boilerplate. Two LSP diagnostics in source (unused var L78, untyped callable L430). Restructure is a cleanup pass, not pure code motion."}}
+{"timestamp":"2026-04-01T04:43:35.316162+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-rym","details":{"actor":"Seth"}}
