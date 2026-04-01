@@ -4,9 +4,11 @@ title: 'Phase 3: Primitive MCP Tools'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-0um, ch-1ed]
+depends_on: [ch-0um, ch-1ed, ch-dlx]
 parent: ch-8e7
 ---
+
+
 
 
 
