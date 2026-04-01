@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import asyncio
+import os
 from pathlib import Path
 from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock, patch
@@ -191,6 +192,14 @@ class TestMCPServerWiring:
     I want to create an LSPClientPool and LSPPopulationService at startup
     So that realtime and batch indexing populate the symbols table
     """
+
+    @pytest.fixture(autouse=True)
+    def _clean_mcp_mode(self):
+        """MCPServerBase.__init__ sets CHUNKHOUND_MCP_MODE=1 via os.environ (not
+        monkeypatch), which suppresses RichOutputFormatter.error() output globally.
+        Clean up after each test to prevent cross-test contamination."""
+        yield
+        os.environ.pop("CHUNKHOUND_MCP_MODE", None)
 
     @pytest.mark.asyncio
     async def test_deferred_connect_passes_lsp_population_to_realtime(
