@@ -2,6 +2,7 @@ import asyncio
 import json
 from argparse import Namespace
 from pathlib import Path
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -13,6 +14,8 @@ pytestmark = pytest.mark.integration
 async def test_timeout_prompt_adds_exclusions(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     # Prepare a fake coordinator that returns a timeout list
     class FakeCoordinator:
+        database = MagicMock()  # run_command accesses .database for LSP wiring
+
         async def get_stats(self):
             return {"files": 0, "chunks": 0, "embeddings": 0}
 
@@ -87,6 +90,8 @@ async def test_timeout_prompt_adds_exclusions(tmp_path: Path, monkeypatch: pytes
 async def test_timeout_prompt_skipped_in_mcp_mode(tmp_path: Path, monkeypatch: pytest.MonkeyPatch):
     """CHUNKHOUND_MCP_MODE=1 must prevent input() call and show info instead."""
     class FakeCoordinator:
+        database = MagicMock()  # run_command accesses .database for LSP wiring
+
         async def get_stats(self):
             return {"files": 0, "chunks": 0, "embeddings": 0}
 
