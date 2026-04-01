@@ -1,12 +1,13 @@
 ---
 id: ch-1ed
 title: 'Task 1: lsp + lsp_status MCP tools + infrastructure wiring'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-zyz
 ---
+
 
 
 
@@ -112,16 +113,16 @@ From parent epic R4: Primitive MCP tools — `lsp(file, line, character, operati
 - Commit and push
 
 ## Success Criteria
-- [ ] `lsp` tool registered and callable with all 7 operations (definition, references, implementations, callers, callees, hover, diagnostics)
-- [ ] `lsp` tool returns clean structured dicts (no raw JSON-RPC framing, no LSP protocol details)
-- [ ] `lsp` tool capability-gates: calling unsupported operation returns structured error, not crash
-- [ ] `lsp` tool returns structured error when pool is None (not ready), transport fails, or language unsupported
-- [ ] `lsp_status` tool returns per-server state, capabilities, readiness
-- [ ] Both tools follow existing `@register_tool` pattern with schema auto-generation
-- [ ] `lsp_client_pool` wired through execute_tool/handle_tool_call/schema skip list
-- [ ] All existing MCP tools unchanged in behavior (zero regression)
-- [ ] `uv run pytest tests/test_mcp_tools_lsp.py -v` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [x] `lsp` tool registered and callable with all 7 operations (definition, references, implementations, callers, callees, hover, diagnostics)
+- [x] `lsp` tool returns clean structured dicts (no raw JSON-RPC framing, no LSP protocol details)
+- [x] `lsp` tool capability-gates: calling unsupported operation returns structured error, not crash
+- [x] `lsp` tool returns structured error when pool is None (not ready), transport fails, or language unsupported
+- [x] `lsp_status` tool returns per-server state, capabilities, readiness
+- [x] Both tools follow existing `@register_tool` pattern with schema auto-generation
+- [x] `lsp_client_pool` wired through execute_tool/handle_tool_call/schema skip list
+- [x] All existing MCP tools unchanged in behavior (zero regression)
+- [x] `uv run pytest tests/test_mcp_tools_lsp.py -v` → all pass
+- [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
 
 ## Key Considerations
 - `config.target_dir` could be `None` if config resolution failed — guard with fallback to `Path.cwd()` or return error
