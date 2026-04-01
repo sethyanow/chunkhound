@@ -158,3 +158,6 @@
 {"timestamp":"2026-04-01T18:23:04.328549+00:00","actor":"Seth","event_type":"closed","task_id":"ch-0um","details":{"notes":null}}
 {"timestamp":"2026-04-01T18:23:34.308567+00:00","actor":"Seth","event_type":"logged","task_id":"ch-yda","details":{"message":"Acceptance PASSED: 9/9 demo scenarios all PASS. Demo run showed 36372 symbols, 74720 edges, 4151 cross-file edges across 4 languages. All live LSP symbols matched in DB (52/52). Incremental refresh verified. Also found and fixed Python 3.13 rglob compat bug in polling monitor (3b9f26e6)."}}
 {"timestamp":"2026-04-01T18:23:36.145663+00:00","actor":"Seth","event_type":"logged","task_id":"ch-0um","details":{"message":"Phase 2 complete. All 13 success criteria met. Acceptance demo 9/9 PASS. Sub-epic closed, unblocks Phase 3 (ch-zyz: Primitive MCP Tools)."}}
+{"timestamp":"2026-04-01T18:42:37.539245+00:00","actor":"Seth","event_type":"created","task_id":"ch-1ed","details":{}}
+{"timestamp":"2026-04-01T18:42:41.133015+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"parent-child","to":"ch-1ed"}}
+{"timestamp":"2026-04-01T18:42:41.133540+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"blocks","to":"ch-1ed"}}
