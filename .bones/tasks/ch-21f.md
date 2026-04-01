@@ -1,12 +1,13 @@
 ---
 id: ch-21f
 title: 'LSP client hardening: notifications, async deletes, typed exceptions'
-status: active
+status: closed
 type: task
 priority: 2
 owner: Seth
 parent: ch-0um
 ---
+
 
 
 
@@ -93,13 +94,13 @@ Discovered during ch-ko4 reindex investigation. code_research output + Python sk
 - Add `import duckdb` at top of file
 
 ## Success Criteria
-- [ ] `$/progress` notifications tracked in `_progress` dict (begin/report/end lifecycle)
-- [ ] `window/logMessage` routed to Python logger at correct severity (Error/Warn/Info/Debug)
-- [ ] No "unhandled" log lines for `$/progress` or `window/logMessage`
-- [ ] `_handle_notification` with `params=None` does not crash (guard before `.get()` access)
-- [ ] `delete_file_edges` and `delete_file_symbols` use async DB path
-- [ ] Per-file catch uses specific types: `(LSPError, OSError, UnicodeDecodeError, duckdb.Error)`
-- [ ] All existing tests pass
+- [x] `$/progress` notifications tracked in `_progress` dict (begin/report/end lifecycle)
+- [x] `window/logMessage` routed to Python logger at correct severity (Error/Warn/Info/Debug)
+- [x] No "unhandled" log lines for `$/progress` or `window/logMessage`
+- [x] `_handle_notification` with `params=None` does not crash (guard before `.get()` access)
+- [x] `delete_file_edges` and `delete_file_symbols` use async DB path
+- [x] Per-file catch uses specific types: `(LSPError, OSError, UnicodeDecodeError, duckdb.Error)`
+- [x] All existing tests pass
 
 ## Key Considerations
 - **CRITICAL: `params` can be `None`** — `_handle_notification` signature is `(method: str, params: dict | None)`. Both new handlers MUST guard with `if not params: return` before calling `params.get()`, matching the existing `publishDiagnostics` pattern (`and params` at line 453). Without this guard, `AttributeError` crashes the transport read loop.
