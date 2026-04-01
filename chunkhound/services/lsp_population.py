@@ -18,8 +18,17 @@ from chunkhound.lsp.constants import symbol_kind_name
 from chunkhound.lsp.types import LSPCapability, LSPError, SymbolInfo
 
 if TYPE_CHECKING:
+    from collections.abc import Callable, Coroutine
+    from typing import Any
+
     from chunkhound.lsp.client import LSPClient, LSPClientPool
+    from chunkhound.lsp.types import CallHierarchyItem, Location
     from chunkhound.providers.database.duckdb_provider import DuckDBProvider
+
+    _EdgeOp = Callable[
+        [str, int, int],
+        Coroutine[Any, Any, list[Location] | list[CallHierarchyItem]],
+    ]
 
 logger = logging.getLogger(__name__)
 
@@ -75,7 +84,6 @@ class LSPPopulationService:
             logger.debug("Cannot read %s, skipping LSP population", file_path)
             return PopulateResult.SKIPPED
 
-        edges: list[tuple] = []
         try:
             await client.notify_did_open(uri, content, language)
             symbols = await client.document_symbols(uri)
@@ -401,7 +409,7 @@ class LSPPopulationService:
     ) -> None:
         """Recursively walk symbols and collect edges from LSP operations."""
         # Build operation list gated by capabilities
-        ops: list[tuple[str, object]] = []
+        ops: list[tuple[str, _EdgeOp]] = []
         if LSPCapability.DEFINITION in client.capabilities:
             ops.append(("defines", client.go_to_definition))
         if LSPCapability.REFERENCES in client.capabilities:
