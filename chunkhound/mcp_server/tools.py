@@ -759,6 +759,139 @@ async def lsp_status_impl(
     }
 
 
+SYMBOL_CONTEXT_DESCRIPTION = (
+    "Get a compound profile for a symbol at a given file position. "
+    "Returns hover info, definition location, callers, callees, and "
+    "graph neighborhood in one call — avoids multiple round-trips. "
+    "Line and character are 0-based (LSP convention)."
+)
+
+
+@register_tool(
+    description=SYMBOL_CONTEXT_DESCRIPTION,
+    name="symbol_context",
+)
+async def symbol_context_impl(
+    lsp_client_pool: Any,
+    services: Any,
+    config: Any,
+    file: str,
+    line: int,
+    character: int,
+) -> dict[str, Any]:
+    """Compound symbol profile: hover + definition + callers + callees + graph neighborhood.
+
+    Args:
+        lsp_client_pool: LSPClientPool instance
+        services: DatabaseServices instance
+        config: Config instance (provides target_dir as workspace_root)
+        file: Path to the source file
+        line: 0-based line number
+        character: 0-based character offset
+    """
+    import asyncio
+    import os
+    from pathlib import Path
+
+    from chunkhound.core.types.common import Language
+
+    # Guard: pool not ready
+    if lsp_client_pool is None:
+        return {
+            "error": "lsp_not_ready",
+            "message": "LSP client pool not initialized yet. Server is still starting up.",
+        }
+
+    # Handle file:// URI input
+    resolved_file = file
+    if file.startswith("file://"):
+        resolved_file = _uri_to_path(file)
+
+    # Resolve language from file extension
+    lang = Language.from_file_extension(resolved_file)
+    if lang == Language.UNKNOWN:
+        return {
+            "error": "unsupported_language",
+            "message": f"No language server available for file: {file}",
+        }
+    language_id = lang.value
+
+    # Determine workspace root
+    workspace_root = str(
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir
+        else Path(".").resolve()
+    )
+
+    # Construct file URI for LSP calls
+    file_uri = Path(resolved_file).resolve().as_uri()
+
+    # Get LSP client
+    client = await lsp_client_pool.get(language_id, workspace_root)
+
+    # 4 async LSP calls with broad exception catching
+    async def _safe_hover():
+        try:
+            return await client.hover(file_uri, line, character)
+        except Exception:
+            return None
+
+    async def _safe_definition():
+        try:
+            return await client.go_to_definition(file_uri, line, character)
+        except Exception:
+            return []
+
+    async def _safe_incoming():
+        try:
+            return await client.incoming_calls(file_uri, line, character)
+        except Exception:
+            return []
+
+    async def _safe_outgoing():
+        try:
+            return await client.outgoing_calls(file_uri, line, character)
+        except Exception:
+            return []
+
+    hover_result, definitions, callers_raw, callees_raw = await asyncio.gather(
+        _safe_hover(), _safe_definition(), _safe_incoming(), _safe_outgoing()
+    )
+
+    # Format results using existing helpers
+    hover = hover_result.contents if hover_result is not None else None
+    definition = [_location_to_dict(loc) for loc in definitions]
+    callers = [_call_item_to_dict(item) for item in callers_raw]
+    callees = [_call_item_to_dict(item) for item in callees_raw]
+
+    # FQN lookup for graph neighborhood
+    relative_path = os.path.relpath(
+        str(Path(resolved_file).resolve()), workspace_root
+    )
+    fqn_rows = services.provider.execute_query(
+        "SELECT fqn FROM symbols WHERE file_path = ? "
+        "AND range_start <= ? AND range_end >= ? "
+        "ORDER BY (range_end - range_start) ASC LIMIT 1",
+        [relative_path, line, line],
+    )
+
+    graph_neighborhood = None
+    if fqn_rows:
+        try:
+            graph_neighborhood = _graph_walk(
+                services, fqn_rows[0]["fqn"], depth=1, edge_kind=None, limit=20
+            )
+        except Exception:
+            graph_neighborhood = None
+
+    return {
+        "hover": hover,
+        "definition": definition,
+        "callers": callers,
+        "callees": callees,
+        "graph_neighborhood": graph_neighborhood,
+    }
+
+
 GRAPH_DESCRIPTION = (
     "Query the pre-computed symbol dependency graph from the DuckDB database. "
     "All operations are deterministic DuckDB queries — no live LSP calls. "

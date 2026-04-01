@@ -1187,3 +1187,555 @@ class TestGraphToolAdversarial:
         call_args = services.provider.execute_query.call_args_list[0]
         params = call_args[0][1]
         assert "'; DROP TABLE symbols; --" in params
+
+
+# ---------------------------------------------------------------------------
+# symbol_context tool tests
+# ---------------------------------------------------------------------------
+
+
+class TestSymbolContextTool:
+    """Tests for the `symbol_context` MCP tool — compound symbol profile."""
+
+    @pytest.mark.asyncio
+    async def test_symbol_context(self) -> None:
+        """symbol_context returns hover + definition + callers + callees + graph neighborhood."""
+        client = AsyncMock()
+        client.hover = AsyncMock(
+            return_value=HoverResult(
+                contents="```python\ndef my_func(x: int) -> str\n```",
+                range_start_line=10,
+                range_start_char=0,
+                range_end_line=10,
+                range_end_char=7,
+            )
+        )
+        client.go_to_definition = AsyncMock(
+            return_value=[
+                Location("file:///workspace/module.py", 10, 4, 15, 0),
+            ]
+        )
+        client.incoming_calls = AsyncMock(
+            return_value=[
+                CallHierarchyItem(
+                    name="caller_func",
+                    kind=12,
+                    uri="file:///workspace/caller.py",
+                    range_start_line=20,
+                    range_start_char=0,
+                    range_end_line=30,
+                    range_end_char=0,
+                    selection_range_start_line=20,
+                    selection_range_start_char=4,
+                    selection_range_end_line=20,
+                    selection_range_end_char=15,
+                ),
+            ]
+        )
+        client.outgoing_calls = AsyncMock(
+            return_value=[
+                CallHierarchyItem(
+                    name="callee_func",
+                    kind=12,
+                    uri="file:///workspace/callee.py",
+                    range_start_line=5,
+                    range_start_char=0,
+                    range_end_line=10,
+                    range_end_char=0,
+                    selection_range_start_line=5,
+                    selection_range_start_char=4,
+                    selection_range_end_line=5,
+                    selection_range_end_char=15,
+                ),
+            ]
+        )
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        # Mock services for FQN lookup + graph walk queries
+        services = MagicMock()
+        services.provider.execute_query.side_effect = [
+            # Call 1: FQN lookup
+            [{"fqn": "module::my_func"}],
+            # Call 2: _graph_walk nodes (recursive CTE)
+            [
+                {"fqn": "module::my_func", "name": "my_func", "kind": "function",
+                 "file_path": "module.py", "depth": 0},
+                {"fqn": "module::callee_func", "name": "callee_func", "kind": "function",
+                 "file_path": "callee.py", "depth": 1},
+            ],
+            # Call 3: _graph_walk edges
+            [
+                {"from_fqn": "module::my_func", "to_fqn": "module::callee_func",
+                 "edge_kind": "calls", "from_file": "module.py", "to_file": "callee.py"},
+            ],
+        ]
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/module.py",
+                "line": 10,
+                "character": 4,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert isinstance(result, dict)
+        assert "error" not in result
+
+        # Hover: contents string
+        assert result["hover"] is not None
+        assert "def my_func" in result["hover"]
+
+        # Definition: list of location dicts
+        assert len(result["definition"]) == 1
+        assert result["definition"][0]["file_path"] == "/workspace/module.py"
+
+        # Callers: list of call item dicts
+        assert len(result["callers"]) == 1
+        assert result["callers"][0]["name"] == "caller_func"
+
+        # Callees: list of call item dicts
+        assert len(result["callees"]) == 1
+        assert result["callees"][0]["name"] == "callee_func"
+
+        # Graph neighborhood: dict with results/edges/count
+        assert result["graph_neighborhood"] is not None
+        assert len(result["graph_neighborhood"]["results"]) == 2
+        assert len(result["graph_neighborhood"]["edges"]) == 1
+        assert result["graph_neighborhood"]["count"] == 2
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_pool_not_ready(self) -> None:
+        """symbol_context with None pool returns structured error."""
+        config = _make_mock_config()
+        services = MagicMock()
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/foo.py",
+                "line": 10,
+                "character": 4,
+            },
+            lsp_client_pool=None,
+            config=config,
+        )
+
+        assert result["error"] == "lsp_not_ready"
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_unsupported_language(self) -> None:
+        """symbol_context with unknown extension returns structured error."""
+        pool = _make_mock_pool()
+        config = _make_mock_config()
+        services = MagicMock()
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/data.xyz",
+                "line": 1,
+                "character": 0,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert result["error"] == "unsupported_language"
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_no_hover(self) -> None:
+        """hover returns None → result has hover: null, other fields populated."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(
+            return_value=[Location("file:///workspace/foo.py", 10, 0, 10, 10)]
+        )
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        # FQN lookup returns nothing → graph_neighborhood will be null
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/foo.py",
+                "line": 10,
+                "character": 0,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert result["hover"] is None
+        assert len(result["definition"]) == 1
+        assert result["callers"] == []
+        assert result["callees"] == []
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_no_symbol_in_index(self) -> None:
+        """FQN lookup returns [] → LSP fields present but graph_neighborhood: null."""
+        client = AsyncMock()
+        client.hover = AsyncMock(
+            return_value=HoverResult(
+                contents="type info",
+                range_start_line=5,
+                range_start_char=0,
+                range_end_line=5,
+                range_end_char=4,
+            )
+        )
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/foo.py",
+                "line": 5,
+                "character": 0,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert result["hover"] == "type info"
+        assert result["graph_neighborhood"] is None
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_partial_lsp_failure(self) -> None:
+        """One LSP call fails, others succeed → partial results, not crash."""
+        client = AsyncMock()
+        client.hover = AsyncMock(
+            return_value=HoverResult(
+                contents="hover data",
+                range_start_line=10,
+                range_start_char=0,
+                range_end_line=10,
+                range_end_char=5,
+            )
+        )
+        client.go_to_definition = AsyncMock(
+            return_value=[Location("file:///workspace/foo.py", 10, 0, 10, 10)]
+        )
+        client.incoming_calls = AsyncMock(
+            side_effect=Exception("connection reset")
+        )
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/foo.py",
+                "line": 10,
+                "character": 0,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert "error" not in result
+        assert result["hover"] == "hover data"
+        assert len(result["definition"]) == 1
+        assert result["callers"] == []
+        assert result["callees"] == []
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_file_uri_input(self) -> None:
+        """file:// URI input is converted to path before Language check."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "file:///workspace/foo.py",
+                "line": 10,
+                "character": 0,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        # Should NOT return unsupported_language — URI was converted to path
+        assert "error" not in result
+        assert "hover" in result
+
+    @pytest.mark.asyncio
+    async def test_symbol_context_graph_walk_failure(self) -> None:
+        """_graph_walk raises → LSP fields present but graph_neighborhood: null."""
+        client = AsyncMock()
+        client.hover = AsyncMock(
+            return_value=HoverResult(
+                contents="hover data",
+                range_start_line=10,
+                range_start_char=0,
+                range_end_line=10,
+                range_end_char=5,
+            )
+        )
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        # FQN lookup succeeds, then graph walk queries raise
+        call_count = 0
+
+        def fqn_then_fail(*args, **kwargs):
+            nonlocal call_count
+            call_count += 1
+            if call_count == 1:
+                return [{"fqn": "module::my_func"}]
+            raise RuntimeError("DuckDB schema error")
+
+        services = MagicMock()
+        services.provider.execute_query.side_effect = fqn_then_fail
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={
+                "file": "/workspace/foo.py",
+                "line": 10,
+                "character": 0,
+            },
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert "error" not in result
+        assert result["hover"] == "hover data"
+        assert result["graph_neighborhood"] is None
+
+
+# ---------------------------------------------------------------------------
+# symbol_context adversarial tests
+# ---------------------------------------------------------------------------
+
+
+class TestSymbolContextAdversarial:
+    """Adversarial stress tests for symbol_context tool."""
+
+    @pytest.mark.asyncio
+    async def test_empty_file_path(self) -> None:
+        """Empty string file path → unsupported_language (no extension)."""
+        pool = _make_mock_pool()
+        config = _make_mock_config()
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=MagicMock(),
+            embedding_manager=None,
+            arguments={"file": "", "line": 0, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert result["error"] == "unsupported_language"
+
+    @pytest.mark.asyncio
+    async def test_zero_position(self) -> None:
+        """line=0, character=0 is valid LSP (first position in file)."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={"file": "/workspace/foo.py", "line": 0, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        # Should succeed — 0,0 is a valid position
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_large_line_number(self) -> None:
+        """Very large line number passed through to LSP (server decides validity)."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={"file": "/workspace/foo.py", "line": 999999, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        # Should succeed — we pass through to LSP, don't validate line range
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_self_referential_graph(self) -> None:
+        """Symbol with self-edge in graph → _graph_walk handles without infinite loop."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+
+        services = MagicMock()
+        services.provider.execute_query.side_effect = [
+            # FQN lookup
+            [{"fqn": "mod::recursive"}],
+            # _graph_walk nodes — includes self at depth 0 only (CTE cycle detection)
+            [{"fqn": "mod::recursive", "name": "recursive", "kind": "function",
+              "file_path": "mod.py", "depth": 0}],
+            # _graph_walk edges — self-edge
+            [{"from_fqn": "mod::recursive", "to_fqn": "mod::recursive",
+              "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"}],
+        ]
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={"file": "/workspace/mod.py", "line": 5, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert "error" not in result
+        assert result["graph_neighborhood"] is not None
+        assert result["graph_neighborhood"]["count"] == 1
+
+    @pytest.mark.asyncio
+    async def test_unicode_file_path(self) -> None:
+        """File path with unicode chars doesn't crash path resolution."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={"file": "/workspace/módulo.py", "line": 1, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        # .py extension recognized despite unicode in filename
+        assert "error" not in result
+
+    @pytest.mark.asyncio
+    async def test_all_lsp_calls_fail(self) -> None:
+        """Every LSP call raises → all fields null/empty, not crash."""
+        client = AsyncMock()
+        client.hover = AsyncMock(side_effect=Exception("fail"))
+        client.go_to_definition = AsyncMock(side_effect=Exception("fail"))
+        client.incoming_calls = AsyncMock(side_effect=Exception("fail"))
+        client.outgoing_calls = AsyncMock(side_effect=Exception("fail"))
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={"file": "/workspace/foo.py", "line": 5, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert "error" not in result
+        assert result["hover"] is None
+        assert result["definition"] == []
+        assert result["callers"] == []
+        assert result["callees"] == []
+        assert result["graph_neighborhood"] is None
+
+    @pytest.mark.asyncio
+    async def test_file_path_with_spaces(self) -> None:
+        """File path with spaces doesn't break path resolution or URI construction."""
+        client = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        client.go_to_definition = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        pool = _make_mock_pool(client)
+        config = _make_mock_config()
+        services = MagicMock()
+        services.provider.execute_query.return_value = []
+
+        result = await execute_tool(
+            tool_name="symbol_context",
+            services=services,
+            embedding_manager=None,
+            arguments={"file": "/workspace/my project/foo.py", "line": 1, "character": 0},
+            lsp_client_pool=pool,
+            config=config,
+        )
+
+        assert "error" not in result
