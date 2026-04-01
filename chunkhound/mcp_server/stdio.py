@@ -169,6 +169,7 @@ class StdioMCPServer(MCPServerBase):
                 scan_progress=self._scan_progress,
                 llm_manager=self.llm_manager,
                 config=self.config,
+                lsp_client_pool=self._lsp_pool,
             )
 
         self._register_list_tools()

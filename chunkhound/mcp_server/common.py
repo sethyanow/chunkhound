@@ -153,6 +153,7 @@ async def handle_tool_call(
     scan_progress: dict | None = None,
     llm_manager: LLMManager | None = None,
     config: Any = None,
+    lsp_client_pool: Any = None,
 ) -> list[types.TextContent]:
     """Unified tool call handler for all MCP servers.
 
@@ -211,6 +212,7 @@ async def handle_tool_call(
             scan_progress=scan_progress,
             llm_manager=llm_manager,
             config=config,
+            lsp_client_pool=lsp_client_pool,
         )
 
         # Format response based on result type

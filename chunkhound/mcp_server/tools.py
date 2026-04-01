@@ -177,6 +177,7 @@ def _generate_json_schema_from_signature(func: Callable) -> dict[str, Any]:
             "scan_progress",
             "progress",
             "config",
+            "lsp_client_pool",
         ):
             continue
 
@@ -501,6 +502,263 @@ async def search_impl(
     return limit_response_size(response)
 
 
+# =============================================================================
+# LSP Tools
+# =============================================================================
+
+LSP_DESCRIPTION = (
+    "Execute LSP (Language Server Protocol) operations on source files. "
+    "Provides code intelligence: go-to-definition, find references, "
+    "implementations, callers, callees, hover info, and diagnostics. "
+    "Line and character are 0-based (LSP convention). "
+    "First call for a language may be slow (server startup)."
+)
+
+
+def _uri_to_path(uri: str) -> str:
+    """Convert a file:// URI to a filesystem path."""
+    if uri.startswith("file://"):
+        from urllib.parse import unquote, urlparse
+
+        parsed = urlparse(uri)
+        return unquote(parsed.path)
+    return uri
+
+
+def _location_to_dict(loc: Any) -> dict[str, Any]:
+    """Convert a Location dataclass to a clean dict."""
+    return {
+        "file_path": _uri_to_path(loc.uri),
+        "line": loc.range_start_line,
+        "character": loc.range_start_char,
+        "end_line": loc.range_end_line,
+        "end_character": loc.range_end_char,
+    }
+
+
+def _call_item_to_dict(item: Any) -> dict[str, Any]:
+    """Convert a CallHierarchyItem to a clean dict."""
+    return {
+        "name": item.name,
+        "kind": item.kind,
+        "file_path": _uri_to_path(item.uri),
+        "line": item.range_start_line,
+        "character": item.range_start_char,
+        "end_line": item.range_end_line,
+        "end_character": item.range_end_char,
+        "detail": item.detail,
+    }
+
+
+def _diagnostic_to_dict(diag: Any) -> dict[str, Any]:
+    """Convert a Diagnostic to a clean dict."""
+    return {
+        "line": diag.range_start_line,
+        "character": diag.range_start_char,
+        "end_line": diag.range_end_line,
+        "end_character": diag.range_end_char,
+        "severity": diag.severity,
+        "message": diag.message,
+        "source": diag.source,
+        "code": diag.code,
+    }
+
+
+@register_tool(
+    description=LSP_DESCRIPTION,
+    name="lsp",
+)
+async def lsp_impl(
+    lsp_client_pool: Any,
+    services: Any,
+    config: Any,
+    file: str,
+    line: int,
+    character: int,
+    operation: Literal[
+        "definition",
+        "references",
+        "implementations",
+        "callers",
+        "callees",
+        "hover",
+        "diagnostics",
+    ],
+) -> dict[str, Any]:
+    """Unified LSP tool dispatching to 7 operations.
+
+    Args:
+        lsp_client_pool: LSPClientPool instance
+        services: DatabaseServices instance
+        config: Config instance (provides target_dir as workspace_root)
+        file: Path to the source file
+        line: 0-based line number
+        character: 0-based character offset
+        operation: LSP operation to perform
+    """
+    from pathlib import Path
+
+    from chunkhound.core.types.common import Language
+    from chunkhound.lsp.types import (
+        LSPCapabilityError,
+        LSPError,
+        LSPTransportError,
+    )
+
+    # Guard: pool not ready (server still starting up)
+    if lsp_client_pool is None:
+        return {
+            "error": "lsp_not_ready",
+            "message": "LSP client pool not initialized yet. Server is still starting up.",
+        }
+
+    # Resolve language from file extension
+    lang = Language.from_file_extension(file)
+    if lang == Language.UNKNOWN:
+        return {
+            "error": "unsupported_language",
+            "message": f"No language server available for file: {file}",
+        }
+    language_id = lang.value
+
+    # Determine workspace root
+    workspace_root = str(
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir
+        else Path(".").resolve()
+    )
+
+    # Handle file:// URI input
+    resolved_file = file
+    if file.startswith("file://"):
+        resolved_file = _uri_to_path(file)
+    file_uri = Path(resolved_file).resolve().as_uri()
+
+    try:
+        client = await lsp_client_pool.get(language_id, workspace_root)
+
+        if operation == "definition":
+            locations = await client.go_to_definition(file_uri, line, character)
+            return {"results": [_location_to_dict(loc) for loc in locations]}
+
+        elif operation == "references":
+            locations = await client.find_references(file_uri, line, character)
+            return {"results": [_location_to_dict(loc) for loc in locations]}
+
+        elif operation == "implementations":
+            locations = await client.go_to_implementation(file_uri, line, character)
+            return {"results": [_location_to_dict(loc) for loc in locations]}
+
+        elif operation == "callers":
+            items = await client.incoming_calls(file_uri, line, character)
+            return {"results": [_call_item_to_dict(item) for item in items]}
+
+        elif operation == "callees":
+            items = await client.outgoing_calls(file_uri, line, character)
+            return {"results": [_call_item_to_dict(item) for item in items]}
+
+        elif operation == "hover":
+            hover_result = await client.hover(file_uri, line, character)
+            if hover_result is None:
+                return {"contents": None, "range": None}
+            return {
+                "contents": hover_result.contents,
+                "range": {
+                    "start_line": hover_result.range_start_line,
+                    "start_character": hover_result.range_start_char,
+                    "end_line": hover_result.range_end_line,
+                    "end_character": hover_result.range_end_char,
+                }
+                if hover_result.range_start_line is not None
+                else None,
+            }
+
+        elif operation == "diagnostics":
+            diagnostics = await client.get_diagnostics(file_uri)
+            return {"results": [_diagnostic_to_dict(d) for d in diagnostics]}
+
+        else:
+            return {"error": "invalid_operation", "message": f"Unknown operation: {operation}"}
+
+    except LSPCapabilityError as e:
+        return {
+            "error": "capability_not_supported",
+            "message": str(e),
+            "operation": operation,
+        }
+    except LSPTransportError as e:
+        return {
+            "error": "server_not_available",
+            "message": str(e),
+        }
+    except LSPError as e:
+        return {
+            "error": "lsp_error",
+            "message": str(e),
+        }
+
+
+LSP_STATUS_DESCRIPTION = (
+    "Get health and readiness status of all active LSP language servers. "
+    "Returns per-server state, capabilities, and any degradation reasons. "
+    "No parameters required."
+)
+
+
+@register_tool(
+    description=LSP_STATUS_DESCRIPTION,
+    name="lsp_status",
+)
+async def lsp_status_impl(
+    lsp_client_pool: Any,
+) -> dict[str, Any]:
+    """Query health/readiness of all active LSP servers.
+
+    Args:
+        lsp_client_pool: LSPClientPool instance
+    """
+    from chunkhound.lsp.types import ServerState
+
+    if lsp_client_pool is None:
+        return {
+            "error": "lsp_not_ready",
+            "message": "LSP client pool not initialized yet. Server is still starting up.",
+        }
+
+    # Snapshot to avoid RuntimeError from concurrent dict mutation
+    clients = list(lsp_client_pool._clients.items())
+
+    servers = []
+    ready_count = 0
+    degraded_count = 0
+
+    for (language_id, workspace_root), client in clients:
+        state = client.state
+        if state == ServerState.READY:
+            ready_count += 1
+        elif state == ServerState.DEGRADED:
+            degraded_count += 1
+
+        capabilities = [cap.value for cap in client.capabilities]
+
+        servers.append(
+            {
+                "language_id": language_id,
+                "workspace_root": workspace_root,
+                "state": state.value,
+                "capabilities": capabilities,
+                "server_info": client.server_info,
+                "degraded_reason": client.degraded_reason,
+            }
+        )
+
+    return {
+        "servers": servers,
+        "total": len(servers),
+        "ready": ready_count,
+        "degraded": degraded_count,
+    }
+
+
 @register_tool(
     description=CODE_RESEARCH_DESCRIPTION,
     requires_embeddings=True,
@@ -590,6 +848,7 @@ async def execute_tool(
     scan_progress: dict | None = None,
     llm_manager: Any = None,
     config: Config | None = None,
+    lsp_client_pool: Any = None,
 ) -> dict[str, Any] | str:
     """Execute a tool from the registry with proper argument handling.
 
@@ -630,6 +889,8 @@ async def execute_tool(
             kwargs["scan_progress"] = scan_progress
         elif param_name == "config":
             kwargs["config"] = config
+        elif param_name == "lsp_client_pool":
+            kwargs["lsp_client_pool"] = lsp_client_pool
         elif param_name == "progress":
             # Progress parameter for terminal UI (None for MCP mode)
             kwargs["progress"] = None
