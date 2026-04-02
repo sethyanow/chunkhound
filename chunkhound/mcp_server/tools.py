@@ -366,11 +366,18 @@ TYPE — choose one:
   Examples: "def authenticate", "class.*Handler", "import.*pandas", "TODO:.*refactor"
 - **semantic**: Find code by meaning via embedding similarity. Use for concepts or when exact identifiers are unknown.
   Examples: "authentication logic", "retry with exponential backoff", "database connection pooling"
+- **symbols**: Search indexed symbol names and FQNs from LSP analysis. Returns symbol metadata (kind, type_signature, location).
+  Examples: "parse", "auth::validate", "Handler"
 
 DECISION GUIDE:
 - Known symbol or pattern → regex
 - Concept or behavior → semantic
+- Symbol by name/type → symbols
 - Cross-file architecture question → call code_research first
+
+OPTIONAL FILTERS:
+- **path**: Restrict to a subdirectory (e.g. "src/auth")
+- **type_filter**: Filter by type signature substring (e.g. "Result", "int"). Works with all search types.
 
 OUTPUT: {results: [{file_path, content, start_line, end_line}], pagination}"""
 
@@ -381,10 +388,17 @@ TYPE — choose one:
   Examples: "def authenticate", "class.*Handler", "import.*pandas", "TODO:.*refactor"
 - **semantic**: Find code by meaning via embedding similarity. Use for concepts or when exact identifiers are unknown.
   Examples: "authentication logic", "retry with exponential backoff", "database connection pooling"
+- **symbols**: Search indexed symbol names and FQNs from LSP analysis. Returns symbol metadata (kind, type_signature, location).
+  Examples: "parse", "auth::validate", "Handler"
 
 DECISION GUIDE:
 - Known symbol or pattern → regex
 - Concept or behavior → semantic
+- Symbol by name/type → symbols
+
+OPTIONAL FILTERS:
+- **path**: Restrict to a subdirectory (e.g. "src/auth")
+- **type_filter**: Filter by type signature substring (e.g. "Result", "int"). Works with all search types.
 
 OUTPUT: {results: [{file_path, content, start_line, end_line}], pagination}"""
 
@@ -421,23 +435,25 @@ One call replaces 5-10 manual searches. Call it liberally — understanding firs
 async def search_impl(
     services: DatabaseServices,
     embedding_manager: EmbeddingManager | None,
-    type: Literal["regex", "semantic"],
+    type: Literal["regex", "semantic", "symbols"],
     query: str,
     path: str | None = None,
     page_size: int = 10,
     offset: int = 0,
     fuzzy_path: bool = False,
+    type_filter: str | None = None,
 ) -> SearchResponse:
-    """Unified search dispatching to regex or semantic based on type.
+    """Unified search dispatching to regex, semantic, or symbols based on type.
 
     Args:
         services: Database services bundle
         embedding_manager: Embedding manager (required for semantic type)
-        type: Search mode — "regex" for exact pattern matching, "semantic" for meaning-based similarity
-        query: For regex: a regex pattern like "def authenticate" or "class.*Handler". For semantic: a natural language concept like "retry logic" or "database connection pooling"
-        path: Optional relative subdirectory to restrict search scope, e.g. "src/auth" or "lib/payments" (no leading slash)
+        type: Search mode — "regex" for pattern matching, "semantic" for meaning-based, "symbols" for indexed symbol name/FQN search
+        query: For regex: a regex pattern. For semantic: a natural language concept. For symbols: a name or FQN substring like "parse"
+        path: Optional relative subdirectory to restrict search scope (no leading slash)
         page_size: Number of results per page (1-100)
         offset: Starting offset for pagination
+        type_filter: Optional type signature substring filter, e.g. "Result" or "int". Applies to all search types.
 
     Returns:
         Dict with 'results' and 'pagination' keys
@@ -446,14 +462,19 @@ async def search_impl(
         ValueError: If type is invalid or semantic search lacks embedding provider
     """
     # Validate type parameter
-    if type not in ("semantic", "regex"):
+    if type not in ("semantic", "regex", "symbols"):
         raise ValueError(
-            f"Invalid search type: '{type}'. Must be 'semantic' or 'regex'."
+            f"Invalid search type: '{type}'. Must be 'semantic', 'regex', or 'symbols'."
         )
 
     # Validate and constrain parameters
     page_size = max(1, min(page_size, 100))
     offset = max(0, offset)
+
+    if type == "symbols":
+        return await _search_symbols(
+            services, query, path, page_size, offset, type_filter,
+        )
 
     if type == "semantic":
         # Validate embedding manager for semantic search
@@ -492,12 +513,142 @@ async def search_impl(
             fuzzy_path=fuzzy_path,
         )
 
+    # Apply type_filter post-filter for regex/semantic results
+    if type_filter and results:
+        results = _apply_type_filter(services, results, type_filter)
+
     # Convert file paths to native platform format
     native_results = _convert_paths_to_native(results)
 
     # Apply response size limiting
     response = cast(
         SearchResponse, {"results": native_results, "pagination": pagination}
+    )
+    return limit_response_size(response)
+
+
+def _apply_type_filter(
+    services: Any, results: list[dict], type_filter: str,
+) -> list[dict]:
+    """Post-filter chunk results by matching symbols with type_signature.
+
+    Batches the lookup into a single SQL query to avoid N+1 round-trips.
+    """
+    if not results:
+        return results
+
+    escaped_filter = _escape_like(type_filter)
+
+    # Build batch query — one OR clause per chunk result
+    conditions = []
+    params: list[Any] = []
+    for r in results:
+        conditions.append(
+            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
+        )
+        params.extend([r["file_path"], r["end_line"], r["start_line"]])
+
+    where_clause = " OR ".join(conditions)
+    params.append(f"%{escaped_filter}%")
+
+    query = (
+        "SELECT DISTINCT s.file_path, s.range_start, s.range_end "
+        "FROM symbols s "
+        f"WHERE ({where_clause}) AND s.type_signature LIKE ?"
+    )
+
+    matches = services.provider.execute_query(query, params)
+
+    # Build a set of matching (file_path, start, end) for fast lookup
+    match_set = {
+        (m["file_path"], m["range_start"], m["range_end"]) for m in matches
+    }
+
+    # Keep results where any matching symbol overlaps
+    return [
+        r for r in results
+        if any(
+            fp == r["file_path"]
+            and rs <= r["end_line"]
+            and re >= r["start_line"]
+            for fp, rs, re in match_set
+        )
+    ]
+
+
+async def _search_symbols(
+    services: Any,
+    query: str,
+    path: str | None,
+    page_size: int,
+    offset: int,
+    type_filter: str | None,
+) -> SearchResponse:
+    """Search the symbols table directly by name/FQN substring."""
+    conditions = []
+    params: list[Any] = []
+
+    # Name/FQN filter — empty query matches all
+    if query:
+        escaped_query = _escape_like(query)
+        like_pattern = f"%{escaped_query}%"
+        conditions.append("(name LIKE ? OR fqn LIKE ?)")
+        params.extend([like_pattern, like_pattern])
+
+    # Path filter
+    if path:
+        escaped_path = _escape_like(path)
+        conditions.append("file_path LIKE ?")
+        params.append(f"{escaped_path}%")
+
+    # Type signature filter
+    if type_filter:
+        escaped_type = _escape_like(type_filter)
+        conditions.append("type_signature LIKE ?")
+        params.append(f"%{escaped_type}%")
+
+    where_clause = " AND ".join(conditions) if conditions else "1=1"
+
+    # Query symbols
+    symbol_query = (
+        "SELECT fqn, name, kind, language, file_path, range_start, range_end, type_signature "
+        f"FROM symbols WHERE {where_clause} "
+        "ORDER BY name LIMIT ? OFFSET ?"
+    )
+    params.extend([page_size, offset])
+
+    symbol_rows = services.provider.execute_query(symbol_query, params)
+
+    # Count query for pagination
+    count_params = params[:-2]  # Exclude LIMIT/OFFSET
+    count_query = f"SELECT COUNT(*) as total FROM symbols WHERE {where_clause}"
+    count_rows = services.provider.execute_query(count_query, count_params)
+    total = count_rows[0]["total"] if count_rows else 0
+
+    # Format results
+    results = [
+        {
+            "fqn": row["fqn"],
+            "name": row["name"],
+            "kind": row["kind"],
+            "language": row.get("language"),
+            "file_path": row["file_path"],
+            "range_start": row["range_start"],
+            "range_end": row["range_end"],
+            "type_signature": row.get("type_signature"),
+        }
+        for row in symbol_rows
+    ]
+
+    pagination = {
+        "offset": offset,
+        "page_size": page_size,
+        "has_more": offset + page_size < total,
+        "total": total,
+    }
+
+    response = cast(
+        SearchResponse, {"results": results, "pagination": pagination}
     )
     return limit_response_size(response)
 
@@ -1301,6 +1452,71 @@ async def deep_research_impl(
     )
 
     return await research_service.deep_research(query)
+
+
+# =============================================================================
+# Stats Tool
+# =============================================================================
+
+GET_STATS_DESCRIPTION = """Get database and index statistics — file, chunk, symbol, and edge counts with per-language breakdown and optional LSP server status. No parameters required."""
+
+
+@register_tool(
+    description=GET_STATS_DESCRIPTION,
+    name="get_stats",
+)
+async def get_stats_impl(
+    services: Any,
+    lsp_client_pool: Any = None,
+) -> dict[str, Any]:
+    """Return database and LSP statistics summary.
+
+    Args:
+        services: Database services bundle
+        lsp_client_pool: Optional LSP client pool for server status
+    """
+    # Query counts from each table
+    file_rows = services.provider.execute_query(
+        "SELECT COUNT(*) as count FROM files", []
+    )
+    chunk_rows = services.provider.execute_query(
+        "SELECT COUNT(*) as count FROM chunks", []
+    )
+    symbol_rows = services.provider.execute_query(
+        "SELECT COUNT(*) as count FROM symbols", []
+    )
+    edge_rows = services.provider.execute_query(
+        "SELECT COUNT(*) as count FROM symbol_edges", []
+    )
+
+    # Per-language breakdown
+    lang_rows = services.provider.execute_query(
+        "SELECT language, COUNT(*) as count FROM symbols "
+        "GROUP BY language ORDER BY count DESC",
+        [],
+    )
+
+    result: dict[str, Any] = {
+        "files": file_rows[0]["count"] if file_rows else 0,
+        "chunks": chunk_rows[0]["count"] if chunk_rows else 0,
+        "symbols": symbol_rows[0]["count"] if symbol_rows else 0,
+        "symbol_edges": edge_rows[0]["count"] if edge_rows else 0,
+        "languages": [
+            {"language": row["language"], "count": row["count"]}
+            for row in lang_rows
+        ],
+        "lsp_servers": None,
+    }
+
+    # Add LSP server status if pool available
+    if lsp_client_pool is not None:
+        clients = list(lsp_client_pool._clients.items())
+        result["lsp_servers"] = {
+            "total": len(clients),
+            "languages": [lang for (lang, _ws), _client in clients],
+        }
+
+    return result
 
 
 # =============================================================================

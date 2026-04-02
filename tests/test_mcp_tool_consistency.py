@@ -20,12 +20,13 @@ def test_tool_registry_populated():
     expected_tools = [
         "search",
         "code_research",
+        "get_stats",
     ]
     for tool_name in expected_tools:
         assert tool_name in TOOL_REGISTRY, f"Tool '{tool_name}' should be in registry"
 
     # Verify old tools are removed
-    removed_tools = ["get_stats", "health_check", "search_regex", "search_semantic"]
+    removed_tools = ["health_check", "search_regex", "search_semantic"]
     for tool_name in removed_tools:
         assert tool_name not in TOOL_REGISTRY, f"Tool '{tool_name}' should be removed"
 
@@ -208,14 +209,17 @@ def test_search_enum_restricted_without_embeddings():
 
     # Verify the type enum is restricted to regex only
     type_schema = search_tool.inputSchema["properties"]["type"]
-    assert type_schema["enum"] == ["regex"], (
-        f"Expected ['regex'] without embeddings, got {type_schema['enum']}"
+    assert type_schema["enum"] == ["regex", "symbols"], (
+        f"Expected ['regex', 'symbols'] without embeddings, got {type_schema['enum']}"
     )
 
     # Verify the original TOOL_REGISTRY was NOT mutated
     original_enum = TOOL_REGISTRY["search"].parameters["properties"]["type"]["enum"]
     assert "semantic" in original_enum, (
         "TOOL_REGISTRY should not be mutated - 'semantic' should still be in enum"
+    )
+    assert "symbols" in original_enum, (
+        "TOOL_REGISTRY should not be mutated - 'symbols' should still be in enum"
     )
 
 

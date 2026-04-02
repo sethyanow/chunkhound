@@ -86,6 +86,36 @@ async def call_graph_tool(
     )
 
 
+async def call_search_tool(
+    *,
+    services: MagicMock,
+    embedding_manager: MagicMock | None = None,
+    **arguments: Any,
+) -> dict[str, Any] | str:
+    """Call the search tool with common defaults."""
+    return await execute_tool(
+        tool_name="search",
+        services=services,
+        embedding_manager=embedding_manager,
+        arguments=arguments,
+    )
+
+
+async def call_get_stats_tool(
+    *,
+    services: MagicMock,
+    lsp_client_pool: MagicMock | None = None,
+) -> dict[str, Any] | str:
+    """Call the get_stats tool with common defaults."""
+    return await execute_tool(
+        tool_name="get_stats",
+        services=services,
+        embedding_manager=None,
+        arguments={},
+        lsp_client_pool=lsp_client_pool,
+    )
+
+
 async def call_symbol_context_tool(
     *,
     pool: MagicMock | None,

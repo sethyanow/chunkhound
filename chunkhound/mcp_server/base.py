@@ -431,7 +431,10 @@ class MCPServerBase(ABC):
                     or not self.embedding_manager.list_providers()
                 ):
                     if "type" in tool_params.get("properties", {}):
-                        tool_params["properties"]["type"]["enum"] = ["regex"]
+                        tool_params["properties"]["type"]["enum"] = [
+                            "regex",
+                            "symbols",
+                        ]
                 if not self.llm_manager:
                     from .tools import SEARCH_DESCRIPTION_NO_RESEARCH
 
