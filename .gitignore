@@ -302,3 +302,6 @@ cluster_eval.json
 .chunkhound.json
 .chunkhound/
 skills-lock.json
+.bones/cache/
+.claude/settings*
+.mcp.json
