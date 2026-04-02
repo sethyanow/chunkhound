@@ -1,13 +1,14 @@
 ---
 id: ch-bcw
 title: 'Registry extraction: Tool, TOOL_REGISTRY, execute_tool, response limiting'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-e6v]
 parent: ch-mtq
 ---
+
 
 
 ## Context
@@ -109,12 +110,12 @@ from .response import PaginationInfo, SearchResponse, estimate_tokens, limit_res
 
 ## Success Criteria
 
-- [ ] `registry.py` contains Tool, TOOL_REGISTRY, register_tool, execute_tool
-- [ ] `response.py` contains PaginationInfo, SearchResponse, estimate_tokens, limit_response_size
-- [ ] `from chunkhound.mcp_server.tools import TOOL_REGISTRY` works (re-export)
-- [ ] `from chunkhound.mcp_server.tools import execute_tool` works (re-export)
-- [ ] All existing tests pass unchanged
-- [ ] Committed and pushed
+- [x] `registry.py` contains Tool, TOOL_REGISTRY, register_tool, execute_tool
+- [x] `response.py` contains PaginationInfo, SearchResponse, estimate_tokens, limit_response_size
+- [x] `from chunkhound.mcp_server.tools import TOOL_REGISTRY` works (re-export)
+- [x] `from chunkhound.mcp_server.tools import execute_tool` works (re-export)
+- [x] All existing tests pass unchanged (268 → 301 with new tests)
+- [x] Committed and pushed (755e775b)
 
 ## Key Considerations
 

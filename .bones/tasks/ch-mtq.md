@@ -46,7 +46,7 @@ The fix exposed a design gap: agent-built code was never decomposed for testabil
 - [ ] `tools.py` replaced by `tools/` package — no file over 500 lines
 - [x] `queries/common.py` provides `bidirectional_edges()`, `scope_filter()`, `visited_tracking()` as tested sqlglot fragments
 - [x] `validation.py` and `formatters.py` extracted with tests
-- [ ] `registry.py` extracted; `from chunkhound.mcp_server.tools import TOOL_REGISTRY, execute_tool` still works
+- [x] `registry.py` extracted; `from chunkhound.mcp_server.tools import TOOL_REGISTRY, execute_tool` still works
 - [ ] Graph query builders are pure functions returning `(sql, params)` via sqlglot
 - [ ] Search query builders are pure functions; structural search walks bidirectionally
 - [ ] LSP dispatch chain cleaned up; stats ported to sqlglot
