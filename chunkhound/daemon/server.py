@@ -336,6 +336,7 @@ class ChunkHoundDaemon(MCPServerBase):
             scan_progress=self._scan_progress,
             llm_manager=self.llm_manager,
             config=self.config,
+            lsp_client_pool=self._lsp_pool,
         )
 
         content = [{"type": tc.type, "text": tc.text} for tc in text_contents]

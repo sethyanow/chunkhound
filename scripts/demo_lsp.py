@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Phase 1+2 Demo — LSP Client, Registry, Schema, Path Scoping, Population.
+"""Phase 1+2+3 Demo — LSP Client, Registry, Schema, Path Scoping, Population, MCP Tools.
 
 USER ACCEPTANCE WALKTHROUGH — not for implementation tasks to touch.
 Updates happen between epics so each phase's delta is visible.
 
-Dogfood ChunkHound's Phase 1+2 deliverables against the live codebase.
+Dogfood ChunkHound's Phase 1+2+3 deliverables against the live codebase.
 Run from project root:
 
     uv run scripts/demo_lsp.py                          # default file
@@ -632,6 +632,248 @@ def demo_cross_file_edge_health(conn) -> bool:
     return True
 
 
+# ── 11. Search Symbols (Phase 3) ─────────────────────────────
+
+
+def demo_search_symbols(conn, query: str = "parse") -> bool:
+    """Phase 3: search(type=symbols) — query the indexed symbols table.
+
+    Uses the same SQL pattern as the MCP search tool's symbols mode.
+    Verifies the symbols table is queryable and returns meaningful results.
+    """
+    rows = conn.execute(
+        "SELECT fqn, name, kind, language, file_path, range_start, range_end "
+        "FROM symbols WHERE name ILIKE '%' || ? || '%' "
+        "ORDER BY name LIMIT 10",
+        [query],
+    ).fetchall()
+
+    print(f"  Query: {query!r}")
+    print(f"  Results: {len(rows)}\n")
+
+    if not rows:
+        print(f"  No symbols matching {query!r}")
+        return False
+
+    _row("Name", "Kind", "File", widths=(28, 12))
+    _sep(widths=(28, 12))
+    for fqn, name, kind, lang, fpath, rs, re in rows:
+        _row(name, kind or "?", f"{fpath}:{rs}-{re}", widths=(28, 12))
+
+    return True
+
+
+# ── 12. Graph Walk (Phase 3) ────────────────────────────────
+
+
+def demo_graph_walk(conn, symbol: str = "LSPClient") -> bool:
+    """Phase 3: graph(walk) — traverse symbol dependencies from a starting FQN.
+
+    Uses the same recursive CTE as the MCP graph tool's walk operation.
+    Returns True if the walk finds edges (connected symbols), False if isolated.
+    """
+    # Recursive CTE matching tools.py::_graph_walk
+    nodes_sql = """
+        WITH RECURSIVE reachable AS (
+            SELECT s.fqn, s.name, s.kind, s.file_path, 0 AS depth,
+                   [s.fqn] AS visited
+            FROM symbols s
+            WHERE s.fqn = ?
+
+            UNION ALL
+
+            SELECT s2.fqn, s2.name, s2.kind, s2.file_path,
+                   r.depth + 1,
+                   list_concat(r.visited, [s2.fqn])
+            FROM reachable r
+            JOIN symbol_edges e ON e.from_fqn = r.fqn
+            JOIN symbols s2 ON s2.fqn = e.to_fqn
+            WHERE r.depth < ?
+              AND NOT list_contains(r.visited, s2.fqn)
+        )
+        SELECT DISTINCT fqn, name, kind, file_path, depth
+        FROM reachable
+        ORDER BY depth, name
+        LIMIT ?
+    """
+    nodes = conn.execute(nodes_sql, [symbol, 2, 15]).fetchall()
+
+    edges_sql = """
+        SELECT e.from_fqn, e.to_fqn, e.edge_kind, e.from_file, e.to_file
+        FROM symbol_edges e
+        WHERE e.from_fqn IN (
+            SELECT DISTINCT fqn FROM (
+                WITH RECURSIVE reachable AS (
+                    SELECT s.fqn, 0 AS depth, [s.fqn] AS visited
+                    FROM symbols s WHERE s.fqn = ?
+                    UNION ALL
+                    SELECT s2.fqn, r.depth + 1,
+                           list_concat(r.visited, [s2.fqn])
+                    FROM reachable r
+                    JOIN symbol_edges e2 ON e2.from_fqn = r.fqn
+                    JOIN symbols s2 ON s2.fqn = e2.to_fqn
+                    WHERE r.depth < ?
+                      AND NOT list_contains(r.visited, s2.fqn)
+                )
+                SELECT fqn FROM reachable
+            )
+        )
+        LIMIT ?
+    """
+    edges = conn.execute(edges_sql, [symbol, 2, 50]).fetchall()
+
+    print(f"  Start symbol: {symbol}")
+    print(f"  Nodes found:  {len(nodes)}")
+    print(f"  Edges found:  {len(edges)}\n")
+
+    if nodes:
+        _row("Symbol", "Kind", "Depth", widths=(32, 12))
+        _sep(widths=(32, 12))
+        for fqn, name, kind, fpath, depth in nodes:
+            _row(name, kind or "?", str(depth), widths=(32, 12))
+
+    if edges:
+        print(f"\n  Edges:")
+        for frm, to, ek, ff, tf in edges[:10]:
+            print(f"    {ek:<12} {frm} → {to}")
+
+    if not edges:
+        print(f"\n  No edges found — symbol may be isolated or edge data sparse")
+        return False
+
+    return True
+
+
+# ── 13. Graph Boundary (Phase 3) ────────────────────────────
+
+
+def demo_graph_boundary(conn, scope: str = "chunkhound/lsp/") -> bool:
+    """Phase 3: graph(boundary) — find edges crossing a scope boundary.
+
+    Uses the same SQL as the MCP graph tool's boundary operation.
+    Returns True if cross-scope edges exist.
+    """
+    sql = """
+        SELECT e.from_fqn, e.to_fqn, e.edge_kind, e.from_file, e.to_file
+        FROM symbol_edges e
+        WHERE (
+            (e.from_file LIKE ? || '%' AND NOT e.to_file LIKE ? || '%')
+            OR
+            (NOT e.from_file LIKE ? || '%' AND e.to_file LIKE ? || '%')
+        )
+        LIMIT ?
+    """
+    edges = conn.execute(sql, [scope, scope, scope, scope, 20]).fetchall()
+
+    print(f"  Scope: {scope}")
+    print(f"  Boundary edges: {len(edges)}\n")
+
+    if not edges:
+        print(f"  No edges cross the {scope} boundary")
+        return False
+
+    for frm_fqn, to_fqn, ek, ff, tf in edges[:10]:
+        direction = "→" if ff.startswith(scope) else "←"
+        print(f"    {ek:<12} {ff} {direction} {tf}")
+
+    return True
+
+
+# ── 14. LSP Definition (Phase 3) ────────────────────────────
+
+
+async def demo_lsp_definition(result: dict) -> bool:
+    """Phase 3: lsp(definition) — verify definition lookup returns a location.
+
+    Takes the pre-fetched result dict from execute_tool("lsp", ..., operation="definition").
+    The live MCP call is made in main(); this function evaluates the result.
+    """
+    if "error" in result:
+        print(f"  ERROR: {result.get('message', result['error'])}")
+        return False
+
+    locations = result.get("results", [])
+    print(f"  Definitions found: {len(locations)}")
+
+    if not locations:
+        print("  No definition locations returned")
+        return False
+
+    for loc in locations:
+        fpath = loc.get("file_path", "?")
+        line = loc.get("line", "?")
+        end_line = loc.get("end_line", "?")
+        print(f"    {fpath}:{line}-{end_line}")
+
+    return True
+
+
+# ── 15. LSP References (Phase 3) ────────────────────────────
+
+
+async def demo_lsp_references(result: dict) -> bool:
+    """Phase 3: lsp(references) — verify reference lookup returns call sites.
+
+    Takes the pre-fetched result dict from execute_tool("lsp", ..., operation="references").
+    """
+    if "error" in result:
+        print(f"  ERROR: {result.get('message', result['error'])}")
+        return False
+
+    refs = result.get("results", [])
+    print(f"  References found: {len(refs)}")
+
+    if not refs:
+        print("  No references returned")
+        return False
+
+    for ref in refs[:10]:
+        fpath = ref.get("file_path", "?")
+        line = ref.get("line", "?")
+        print(f"    {fpath}:{line}")
+
+    return True
+
+
+# ── 16. Symbol Context (Phase 3) ────────────────────────────
+
+
+async def demo_symbol_context(result: dict) -> bool:
+    """Phase 3: symbol_context — verify compound profile has content.
+
+    Takes the pre-fetched result dict from execute_tool("symbol_context", ...).
+    Returns True if at least hover or definition is non-empty.
+    """
+    if "error" in result:
+        print(f"  ERROR: {result.get('message', result['error'])}")
+        return False
+
+    hover = result.get("hover")
+    definition = result.get("definition", [])
+    callers = result.get("callers", [])
+    callees = result.get("callees", [])
+    neighborhood = result.get("graph_neighborhood", {})
+
+    print(f"  Hover:        {'yes' if hover else 'no'}")
+    print(f"  Definition:   {len(definition)} location(s)")
+    print(f"  Callers:      {len(callers)}")
+    print(f"  Callees:      {len(callees)}")
+    print(f"  Graph nodes:  {neighborhood.get('count', 0)}")
+
+    if hover:
+        # Show first 2 lines of hover content
+        lines = hover.strip().split("\n")
+        for line in lines[:2]:
+            print(f"    {line}")
+
+    has_content = bool(hover) or len(definition) > 0
+    if not has_content:
+        print("\n  Empty profile — no hover or definition data")
+        return False
+
+    return True
+
+
 # ── Main ──────────────────────────────────────────────────────
 
 
@@ -642,7 +884,7 @@ async def main() -> int:
         print(f"File not found: {target}")
         return 1
 
-    print(f"\n  ChunkHound Phase 1+2 Demo")
+    print(f"\n  ChunkHound Phase 1+2+3 Demo")
     print(f"  Target: {target}\n")
 
     results: dict[str, bool] = {}
@@ -712,16 +954,81 @@ async def main() -> int:
     else:
         print("\n  No DuckDB found — skipping Phase 2 demos. Run: chunkhound index .")
 
+    # ── Phase 3 (MCP tool layer shakedown) ──
+    if db_path:
+        conn = _open_db(db_path)
+        try:
+            _hdr(11, "SEARCH SYMBOLS — Phase 3")
+            results["search_symbols"] = demo_search_symbols(conn, query="parse")
+
+            _hdr(12, "GRAPH WALK — Phase 3")
+            results["graph_walk"] = demo_graph_walk(conn)
+
+            _hdr(13, "GRAPH BOUNDARY — Phase 3")
+            results["graph_boundary"] = demo_graph_boundary(conn)
+        finally:
+            conn.close()
+
+        # LSP-dependent Phase 3 demos — need a live LSP client pool
+        from chunkhound.lsp.client import LSPClientPool
+
+        lsp_pool = LSPClientPool()
+        try:
+            _hdr(14, "LSP DEFINITION — Phase 3")
+            print(f"  Target: {target}, line 50, char 10")
+            try:
+                from chunkhound.mcp_server.tools import execute_tool
+                lsp_result = await execute_tool(
+                    "lsp", None, None,
+                    {"file": target, "line": 50, "character": 10, "operation": "definition"},
+                    lsp_client_pool=lsp_pool,
+                    config=None,
+                )
+                results["lsp_definition"] = await demo_lsp_definition(lsp_result)
+            except Exception as e:
+                print(f"  ERROR: {e}")
+                results["lsp_definition"] = False
+
+            _hdr(15, "LSP REFERENCES — Phase 3")
+            print(f"  Target: {target}, line 50, char 10")
+            try:
+                lsp_result = await execute_tool(
+                    "lsp", None, None,
+                    {"file": target, "line": 50, "character": 10, "operation": "references"},
+                    lsp_client_pool=lsp_pool,
+                    config=None,
+                )
+                results["lsp_references"] = await demo_lsp_references(lsp_result)
+            except Exception as e:
+                print(f"  ERROR: {e}")
+                results["lsp_references"] = False
+
+            _hdr(16, "SYMBOL CONTEXT — Phase 3")
+            print(f"  Target: {target}, line 50, char 10")
+            try:
+                ctx_result = await execute_tool(
+                    "symbol_context", None, None,
+                    {"file": target, "line": 50, "character": 10},
+                    lsp_client_pool=lsp_pool,
+                    config=None,
+                )
+                results["symbol_context"] = await demo_symbol_context(ctx_result)
+            except Exception as e:
+                print(f"  ERROR: {e}")
+                results["symbol_context"] = False
+        finally:
+            await lsp_pool.stop_all()
+
     # Summary
-    section_num = 11 if db_path else 5
+    section_num = 17 if db_path else 5
     _hdr(section_num, "SUMMARY")
     for name, passed in results.items():
         icon = "PASS" if passed else "FAIL"
         print(f"  [{icon}]  {name}")
 
     all_pass = all(results.values())
-    phase = "Phase 1+2" if db_path else "Phase 1"
-    print(f"\n  {'All ' + phase + ' deliverables verified.' if all_pass else 'Some checks failed — see above.'}")
+    max_phase = "Phase 1+2+3" if db_path else "Phase 1"
+    print(f"\n  {'All ' + max_phase + ' deliverables verified.' if all_pass else 'Some checks failed — see above.'}")
 
     # Clean up temp DB snapshot
     if _temp_db and _temp_db.exists():

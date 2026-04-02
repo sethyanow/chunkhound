@@ -204,3 +204,4 @@
 {"timestamp":"2026-04-02T02:50:15.519867+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"parent-child","to":"ch-tox"}}
 {"timestamp":"2026-04-02T02:50:15.520735+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"blocks","to":"ch-tox"}}
 {"timestamp":"2026-04-02T02:50:22.101191+00:00","actor":"Seth","event_type":"logged","task_id":"ch-nlz","details":{"message":"Closed. Implementation: _search_structural in tools.py (semantic→symbol lookup→multi-seed graph walk CTE depth 2→chunk resolution→dedup→type_filter→paginate). 11 tests (6 core + 5 adversarial). All criteria checked, committed c94d8e2a, pushed."}}
+{"timestamp":"2026-04-02T03:03:34.153177+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-tox","details":{"actor":"Seth"}}

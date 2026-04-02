@@ -519,6 +519,210 @@ class TestDemoCrossFileEdgeHealth:
         conn.close()
 
 
+# ── Phase 3: MCP tool demo scenarios ──────────────────────────
+
+
+class TestDemoSearchSymbols:
+    """Phase 3 Scenario: search(type=symbols) via execute_tool."""
+
+    def test_pass_when_symbols_found(self, demo_db: Path) -> None:
+        """Returns True when search returns matching symbols."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # demo_db fixture has symbols with "LSPClient", "start", "SymbolInfo", "main"
+            result = demo_search_symbols(conn, query="LSP")
+            assert result is True
+        finally:
+            conn.close()
+
+    def test_fail_when_no_matches(self, demo_db: Path) -> None:
+        """Returns False when query matches nothing."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            result = demo_search_symbols(conn, query="zzz_nonexistent_zzz")
+            assert result is False
+        finally:
+            conn.close()
+
+
+class TestDemoGraphWalk:
+    """Phase 3 Scenario: graph(walk) via execute_tool."""
+
+    def test_pass_when_edges_found(self, demo_db: Path) -> None:
+        """Returns True when walk finds connected symbols with edges."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # demo_db has edges: LSPClient::start -> SymbolInfo (references),
+            #                    LSPClient -> SymbolInfo (defines),
+            #                    main -> LSPClient (calls)
+            result = demo_graph_walk(conn, symbol="main")
+            assert result is True
+        finally:
+            conn.close()
+
+    def test_returns_false_when_no_edges(self, demo_db: Path) -> None:
+        """Returns False when walk finds the symbol but no outbound edges."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # SymbolInfo has no outbound edges in fixture
+            result = demo_graph_walk(conn, symbol="SymbolInfo")
+            assert result is False
+        finally:
+            conn.close()
+
+    def test_returns_false_when_symbol_not_found(self, demo_db: Path) -> None:
+        """Returns False when the starting symbol doesn't exist."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            result = demo_graph_walk(conn, symbol="NonexistentSymbol")
+            assert result is False
+        finally:
+            conn.close()
+
+
+class TestDemoGraphBoundary:
+    """Phase 3 Scenario: graph(boundary) via execute_tool."""
+
+    def test_pass_when_cross_scope_edges_found(self, demo_db: Path) -> None:
+        """Returns True when boundary finds edges crossing the scope."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # demo_db has edge: main (src/main.ts) -> LSPClient (chunkhound/lsp/client.py)
+            # Scope "src/" should show this as a boundary edge
+            result = demo_graph_boundary(conn, scope="src/")
+            assert result is True
+        finally:
+            conn.close()
+
+    def test_returns_false_when_no_boundary_edges(self, demo_db: Path) -> None:
+        """Returns False when no edges cross the scope boundary."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        conn = duckdb.connect(str(demo_db), read_only=True)
+        try:
+            # Scope "nonexistent/" has no symbols, so no boundary edges
+            result = demo_graph_boundary(conn, scope="nonexistent/")
+            assert result is False
+        finally:
+            conn.close()
+
+
+class TestDemoLspDefinition:
+    """Phase 3 Scenario: lsp(definition) through the demo's async wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_pass_when_definition_found(self) -> None:
+        """Returns True when definition returns a valid location."""
+        from scripts.demo_lsp import demo_lsp_definition
+
+        fake_result = {
+            "results": [{"file_path": "/src/client.py", "line": 32, "character": 4,
+                         "end_line": 32, "end_character": 13}]
+        }
+        result = await demo_lsp_definition(fake_result)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_fail_when_error_returned(self) -> None:
+        """Returns False when LSP returns an error."""
+        from scripts.demo_lsp import demo_lsp_definition
+
+        fake_result = {"error": "lsp_not_ready", "message": "not initialized"}
+        result = await demo_lsp_definition(fake_result)
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_fail_when_no_results(self) -> None:
+        """Returns False when definition returns empty results."""
+        from scripts.demo_lsp import demo_lsp_definition
+
+        fake_result = {"results": []}
+        result = await demo_lsp_definition(fake_result)
+        assert result is False
+
+
+class TestDemoLspReferences:
+    """Phase 3 Scenario: lsp(references) through the demo's async wrapper."""
+
+    @pytest.mark.asyncio
+    async def test_pass_when_references_found(self) -> None:
+        """Returns True when references returns call sites."""
+        from scripts.demo_lsp import demo_lsp_references
+
+        fake_result = {
+            "results": [
+                {"file_path": "/src/a.py", "line": 10, "character": 0,
+                 "end_line": 10, "end_character": 5},
+                {"file_path": "/src/b.py", "line": 20, "character": 0,
+                 "end_line": 20, "end_character": 5},
+            ]
+        }
+        result = await demo_lsp_references(fake_result)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_fail_when_error(self) -> None:
+        """Returns False when LSP returns an error."""
+        from scripts.demo_lsp import demo_lsp_references
+
+        result = await demo_lsp_references({"error": "lsp_error", "message": "timeout"})
+        assert result is False
+
+
+class TestDemoSymbolContext:
+    """Phase 3 Scenario: symbol_context compound profile."""
+
+    @pytest.mark.asyncio
+    async def test_pass_when_profile_returned(self) -> None:
+        """Returns True when symbol_context returns at least hover or definition."""
+        from scripts.demo_lsp import demo_symbol_context
+
+        fake_result = {
+            "hover": "```python\n(class) LSPClient\n```",
+            "definition": [{"file_path": "/src/client.py", "line": 32}],
+            "callers": [],
+            "callees": [{"name": "start", "file_path": "/src/client.py"}],
+            "graph_neighborhood": {"results": [], "edges": [], "count": 0},
+        }
+        result = await demo_symbol_context(fake_result)
+        assert result is True
+
+    @pytest.mark.asyncio
+    async def test_fail_when_error(self) -> None:
+        """Returns False on error."""
+        from scripts.demo_lsp import demo_symbol_context
+
+        result = await demo_symbol_context({"error": "lsp_not_ready"})
+        assert result is False
+
+    @pytest.mark.asyncio
+    async def test_fail_when_empty_profile(self) -> None:
+        """Returns False when all profile fields are empty/None."""
+        from scripts.demo_lsp import demo_symbol_context
+
+        fake_result = {
+            "hover": None,
+            "definition": [],
+            "callers": [],
+            "callees": [],
+            "graph_neighborhood": {"results": [], "edges": [], "count": 0},
+        }
+        result = await demo_symbol_context(fake_result)
+        assert result is False
+
+
 class TestPhase2ConnectionManagement:
     """Regression: read-only + read-write connections to same DuckDB file conflict."""
 

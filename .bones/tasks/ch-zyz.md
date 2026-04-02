@@ -75,9 +75,12 @@ Inherited from parent epic, plus:
 
 **User Walkthrough Must Cover:**
 - Call `lsp` with definition operation on a known symbol → returns correct file + range
-- Call `graph(walk)` from a function → returns callers/callees with edge kinds
+- Call `graph(walk)` from a function (e.g. `execute_tool`) → returns callers/callees with edge kinds
+- Call `graph(walk)` with `edge_kind` filter → demonstrates relationship-type filtering
+- Call `graph(boundary)` on a module scope (e.g. `chunkhound/mcp_server/`) → shows cross-scope dependencies
+- Call `lsp(references)` on a central function → shows impact analysis
 - Call `search(type: symbols, query="parse")` → returns matching symbols
-- Call `search(type: structural, query="error handling", type_filter="Result")` → returns type-filtered results
+- Call `search(type: structural, query="error handling", type_filter="str")` → returns type-filtered results
 - Call `symbol_context` on a function → returns compound profile in one call
 
 ## Log
