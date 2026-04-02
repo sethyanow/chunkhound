@@ -1,12 +1,15 @@
 ---
 id: ch-nlz
 title: 'Task 5: search(type: structural) — semantic + graph walk expansion'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 depends_on: [ch-lic]
 parent: ch-zyz
 ---
+
+
 
 
 
@@ -65,7 +68,7 @@ Phase 3 builds the MCP tool surface (`_search_structural` in tools.py). Phase 5 
   1. Validate embedding_manager (same check as semantic branch)
   2. Run semantic search: `services.search_service.search_semantic(query=query, ...)` with `page_size=page_size * 2` to get broader seed pool
   3. Symbol lookup: batch query `SELECT DISTINCT fqn, file_id FROM symbols WHERE (file_path = ? AND range_start <= ? AND range_end >= ?) OR ...` for each semantic result
-  4. Multi-seed graph walk: recursive CTE starting from ALL seed FQNs, depth 2, all edge kinds. Adapted from `_graph_walk` but with `WHERE s.fqn IN (...)` seed instead of single FQN
+  4. Multi-seed graph walk: recursive CTE starting from ALL seed FQNs, depth 2, all edge kinds. Adapted from `_graph_walk` but with `WHERE s.fqn IN (...)` seed instead of single FQN. MUST include LIMIT on walked nodes (carry over from `_graph_walk`'s limit parameter) — cap at `page_size * 3` to bound fan-out from dense symbol files
   5. Chunk resolution: `SELECT DISTINCT f.path as file_path, c.code as content, c.start_line, c.end_line FROM chunks c JOIN files f ON c.file_id = f.id JOIN symbols s ON s.file_id = f.id AND s.range_start >= c.start_line AND s.range_end <= c.end_line WHERE s.fqn IN (walked_fqns)`
   6. Deduplicate: build set of `(file_path, start_line, end_line)` from semantic results, skip graph chunks already present
   7. Combine: semantic results first (preserve relevance order), then graph-discovered chunks
@@ -109,3 +112,6 @@ Phase 3 builds the MCP tool surface (`_search_structural` in tools.py). Phase 5 
 - The `_build_filtered_tool_dicts` enum restriction already excludes both "semantic" and "structural" when embeddings unavailable — "structural" is not in the enum at all when it's `["regex", "symbols"]`, because the Literal generates the full enum and the restriction replaces it. No code change needed.
 - Consistency tests in `test_mcp_tool_consistency.py` may need updating: the search enum with embeddings now has 4 values, and the test for without-embeddings already expects `["regex", "symbols"]`.
 - Phase 5 will extract the graph walk + chunk resolution into a reusable `GraphWalkExpander` in `chunkhound/services/search/`. Phase 3 keeps it inline in tools.py for now.
+- **[Adversarial: Input Hostility]** Dense symbol files (e.g., `__init__.py` re-exporting 200 names) can produce hundreds of seed FQNs from a few semantic results. The multi-seed CTE must carry a LIMIT on walked nodes (cap at `page_size * 3`) to bound fan-out. Without this, depth-2 walk from 200 seeds produces thousands of walked symbols.
+- **[Adversarial: Dependency Treachery]** Graph chunk dicts from chunk resolution (step 2.5) MUST use identical keys to semantic result dicts: `file_path`, `content`, `start_line`, `end_line`. Key name mismatches cause `_apply_type_filter` and deduplication to silently fail (filter drops all graph chunks, dedup sees no overlaps).
+- **[Adversarial: Temporal Betrayal]** Symbol/chunk staleness during background population lag is expected by design (R3). Semantic returns fresh chunks, symbols table may be stale. Graceful degradation handles the extreme case (no symbols → semantic only). Do NOT add synchronization — the staleness window is bounded and the design accounts for it.

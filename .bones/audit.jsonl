@@ -197,3 +197,5 @@
 {"timestamp":"2026-04-02T02:12:59.506434+00:00","actor":"Seth","event_type":"created","task_id":"ch-nlz","details":{}}
 {"timestamp":"2026-04-02T02:13:03.440879+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"parent-child","to":"ch-nlz"}}
 {"timestamp":"2026-04-02T02:13:03.441325+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"blocks","to":"ch-nlz"}}
+{"timestamp":"2026-04-02T02:37:07.168897+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-nlz","details":{"actor":"Seth"}}
+{"timestamp":"2026-04-02T02:37:07.239792+00:00","actor":"Seth","event_type":"updated","task_id":"ch-nlz","details":{"status":"active"}}

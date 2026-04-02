@@ -368,11 +368,14 @@ TYPE — choose one:
   Examples: "authentication logic", "retry with exponential backoff", "database connection pooling"
 - **symbols**: Search indexed symbol names and FQNs from LSP analysis. Returns symbol metadata (kind, type_signature, location).
   Examples: "parse", "auth::validate", "Handler"
+- **structural**: Semantic search enriched with graph walk expansion. Finds code by meaning, then discovers structurally-related chunks (callers, callees, type references) via the symbol dependency graph. Returns both semantic matches and graph-discovered code.
+  Examples: "error handling" (finds handlers + their callers), "database queries" (finds query functions + their call sites)
 
 DECISION GUIDE:
 - Known symbol or pattern → regex
 - Concept or behavior → semantic
 - Symbol by name/type → symbols
+- Concept + structural context (callers, dependencies) → structural
 - Cross-file architecture question → call code_research first
 
 OPTIONAL FILTERS:
@@ -390,11 +393,14 @@ TYPE — choose one:
   Examples: "authentication logic", "retry with exponential backoff", "database connection pooling"
 - **symbols**: Search indexed symbol names and FQNs from LSP analysis. Returns symbol metadata (kind, type_signature, location).
   Examples: "parse", "auth::validate", "Handler"
+- **structural**: Semantic search enriched with graph walk expansion. Finds code by meaning, then discovers structurally-related chunks (callers, callees, type references) via the symbol dependency graph. Returns both semantic matches and graph-discovered code.
+  Examples: "error handling" (finds handlers + their callers), "database queries" (finds query functions + their call sites)
 
 DECISION GUIDE:
 - Known symbol or pattern → regex
 - Concept or behavior → semantic
 - Symbol by name/type → symbols
+- Concept + structural context (callers, dependencies) → structural
 
 OPTIONAL FILTERS:
 - **path**: Restrict to a subdirectory (e.g. "src/auth")
@@ -435,7 +441,7 @@ One call replaces 5-10 manual searches. Call it liberally — understanding firs
 async def search_impl(
     services: DatabaseServices,
     embedding_manager: EmbeddingManager | None,
-    type: Literal["regex", "semantic", "symbols"],
+    type: Literal["regex", "semantic", "symbols", "structural"],
     query: str,
     path: str | None = None,
     page_size: int = 10,
@@ -462,9 +468,9 @@ async def search_impl(
         ValueError: If type is invalid or semantic search lacks embedding provider
     """
     # Validate type parameter
-    if type not in ("semantic", "regex", "symbols"):
+    if type not in ("semantic", "regex", "symbols", "structural"):
         raise ValueError(
-            f"Invalid search type: '{type}'. Must be 'semantic', 'regex', or 'symbols'."
+            f"Invalid search type: '{type}'. Must be 'semantic', 'regex', 'symbols', or 'structural'."
         )
 
     # Validate and constrain parameters
@@ -474,6 +480,12 @@ async def search_impl(
     if type == "symbols":
         return await _search_symbols(
             services, query, path, page_size, offset, type_filter,
+        )
+
+    if type == "structural":
+        return await _search_structural(
+            services, embedding_manager, query, path,
+            page_size, offset, fuzzy_path, type_filter,
         )
 
     if type == "semantic":
@@ -523,6 +535,191 @@ async def search_impl(
     # Apply response size limiting
     response = cast(
         SearchResponse, {"results": native_results, "pagination": pagination}
+    )
+    return limit_response_size(response)
+
+
+async def _search_structural(
+    services: Any,
+    embedding_manager: Any,
+    query: str,
+    path: str | None,
+    page_size: int,
+    offset: int,
+    fuzzy_path: bool,
+    type_filter: str | None,
+) -> SearchResponse:
+    """Structural search: semantic search + graph walk expansion.
+
+    Runs semantic search first, then enriches with graph-discovered chunks
+    by looking up symbols overlapping semantic results and walking the
+    symbol_edges graph.
+    """
+    # Validate embedding manager (structural requires semantic as first stage)
+    if not embedding_manager or not embedding_manager.list_providers():
+        raise ValueError(
+            "Structural search requires embedding provider. "
+            "Configure via .chunkhound.json or CHUNKHOUND_EMBEDDING__API_KEY. "
+            "Use type='regex' for pattern-based search without embeddings."
+        )
+
+    # Get default provider/model
+    try:
+        provider_obj = embedding_manager.get_provider()
+        provider_name = provider_obj.name
+        model_name = provider_obj.model
+    except ValueError:
+        raise ValueError("No default embedding provider configured.")
+
+    # Stage 1: Semantic search with broader seed pool
+    results, pagination = await services.search_service.search_semantic(
+        query=query,
+        page_size=page_size * 2,
+        offset=0,
+        provider=provider_name,
+        model=model_name,
+        path_filter=path,
+        fuzzy_path=fuzzy_path,
+    )
+
+    if not results:
+        response = cast(
+            SearchResponse, {"results": [], "pagination": pagination}
+        )
+        return limit_response_size(response)
+
+    # Stage 2: Symbol lookup — find symbols overlapping semantic results
+    conditions = []
+    params: list[Any] = []
+    for r in results:
+        conditions.append(
+            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
+        )
+        params.extend([r["file_path"], r["end_line"], r["start_line"]])
+
+    where_clause = " OR ".join(conditions)
+    symbol_sql = (
+        f"SELECT DISTINCT s.fqn, s.file_id FROM symbols s "
+        f"WHERE {where_clause}"
+    )
+    seed_symbols = services.provider.execute_query(symbol_sql, params)
+    seed_fqns = [s["fqn"] for s in seed_symbols]
+
+    if not seed_fqns:
+        # No symbols found — return semantic results unchanged
+        native_results = _convert_paths_to_native(results[:page_size])
+        total = len(results)
+        response = cast(
+            SearchResponse,
+            {
+                "results": native_results,
+                "pagination": {
+                    "offset": offset,
+                    "page_size": page_size,
+                    "has_more": total > page_size,
+                    "total": total,
+                    "next_offset": offset + page_size if total > page_size else None,
+                },
+            },
+        )
+        return limit_response_size(response)
+
+    # Stage 3: Multi-seed graph walk — depth 2, all edge kinds
+    walk_limit = page_size * 3
+    fqn_placeholders = ", ".join(["?"] * len(seed_fqns))
+    walk_params: list[Any] = seed_fqns + [2, walk_limit]
+
+    walk_sql = f"""
+        WITH RECURSIVE reachable AS (
+            SELECT s.fqn, 0 AS depth, [s.fqn] AS visited
+            FROM symbols s
+            WHERE s.fqn IN ({fqn_placeholders})
+
+            UNION ALL
+
+            SELECT s2.fqn, r.depth + 1,
+                   list_concat(r.visited, [s2.fqn])
+            FROM reachable r
+            JOIN symbol_edges e ON e.from_fqn = r.fqn
+            JOIN symbols s2 ON s2.fqn = e.to_fqn
+            WHERE r.depth < ?
+              AND NOT list_contains(r.visited, s2.fqn)
+        )
+        SELECT DISTINCT fqn FROM reachable
+        ORDER BY fqn
+        LIMIT ?
+    """
+    walked = services.provider.execute_query(walk_sql, walk_params)
+    walked_fqns = [w["fqn"] for w in walked]
+
+    if not walked_fqns:
+        # Graph walk found nothing — return semantic results only
+        native_results = _convert_paths_to_native(results[:page_size])
+        total = len(results)
+        response = cast(
+            SearchResponse,
+            {
+                "results": native_results,
+                "pagination": {
+                    "offset": offset,
+                    "page_size": page_size,
+                    "has_more": total > page_size,
+                    "total": total,
+                    "next_offset": offset + page_size if total > page_size else None,
+                },
+            },
+        )
+        return limit_response_size(response)
+
+    # Stage 4: Chunk resolution — walked symbols → chunks
+    walked_placeholders = ", ".join(["?"] * len(walked_fqns))
+    chunk_sql = (
+        "SELECT DISTINCT f.path AS file_path, c.code AS content, "
+        "c.start_line, c.end_line "
+        "FROM chunks c "
+        "JOIN files f ON c.file_id = f.id "
+        "JOIN symbols s ON s.file_id = f.id "
+        "  AND s.range_start >= c.start_line "
+        "  AND s.range_end <= c.end_line "
+        f"WHERE s.fqn IN ({walked_placeholders})"
+    )
+    graph_chunks = services.provider.execute_query(chunk_sql, walked_fqns)
+
+    # Stage 5: Deduplicate — semantic results take priority
+    seen = {
+        (r["file_path"], r["start_line"], r["end_line"]) for r in results
+    }
+    unique_graph_chunks = []
+    for gc in graph_chunks:
+        key = (gc["file_path"], gc["start_line"], gc["end_line"])
+        if key not in seen:
+            seen.add(key)
+            unique_graph_chunks.append(gc)
+
+    # Stage 6: Combine — semantic first, then graph-discovered
+    combined = results + unique_graph_chunks
+
+    # Stage 7: Apply type_filter if present
+    if type_filter and combined:
+        combined = _apply_type_filter(services, combined, type_filter)
+
+    # Stage 8: Paginate combined pool
+    total = len(combined)
+    paginated = combined[offset : offset + page_size]
+    native_results = _convert_paths_to_native(paginated)
+
+    response = cast(
+        SearchResponse,
+        {
+            "results": native_results,
+            "pagination": {
+                "offset": offset,
+                "page_size": page_size,
+                "has_more": total > offset + page_size,
+                "total": total,
+                "next_offset": offset + page_size if total > offset + page_size else None,
+            },
+        },
     )
     return limit_response_size(response)
 
