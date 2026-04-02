@@ -1,12 +1,13 @@
 ---
 id: ch-e6v
 title: 'Shared foundations: validation, formatters, query fragments'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-mtq
 ---
+
 
 
 ## Context
@@ -101,12 +102,12 @@ Current patterns to extract from (tools.py):
 
 ## Success Criteria
 
-- [ ] `validation.py` exists with `require_param`, `clamp`, tested
-- [ ] `formatters.py` exists with `format_node`, `format_edge`, LSP formatters, tested
-- [ ] `queries/common.py` exists with `bidirectional_edges`, `scope_filter`, `visited_tracking_columns`, `escape_like`, tested
-- [ ] `tools/` package directory created with `__init__.py`
-- [ ] Existing tests unaffected
-- [ ] Committed and pushed
+- [x] `validation.py` exists with `require_param`, `clamp`, tested
+- [x] `formatters.py` exists with `format_node`, `format_edge`, LSP formatters, tested
+- [x] `queries/common.py` exists with `bidirectional_edges`, `scope_filter`, `visited_tracking_columns`, `escape_like`, tested
+- [x] `tools/` package directory created with `__init__.py`
+- [x] Existing tests unaffected
+- [x] Committed and pushed
 
 ## Anti-Patterns
 

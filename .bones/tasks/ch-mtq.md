@@ -44,13 +44,13 @@ The fix exposed a design gap: agent-built code was never decomposed for testabil
 ## Success Criteria
 
 - [ ] `tools.py` replaced by `tools/` package — no file over 500 lines
-- [ ] `queries/common.py` provides `bidirectional_edges()`, `scope_filter()`, `visited_tracking()` as tested sqlglot fragments
-- [ ] `validation.py` and `formatters.py` extracted with tests
+- [x] `queries/common.py` provides `bidirectional_edges()`, `scope_filter()`, `visited_tracking()` as tested sqlglot fragments
+- [x] `validation.py` and `formatters.py` extracted with tests
 - [ ] `registry.py` extracted; `from chunkhound.mcp_server.tools import TOOL_REGISTRY, execute_tool` still works
 - [ ] Graph query builders are pure functions returning `(sql, params)` via sqlglot
 - [ ] Search query builders are pure functions; structural search walks bidirectionally
 - [ ] LSP dispatch chain cleaned up; stats ported to sqlglot
-- [ ] Query builder tests use sqlglot parse round-trip for structural assertions
+- [x] Query builder tests use sqlglot parse round-trip for structural assertions
 - [ ] `uv run pytest tests/lsp/ -v` — all pass
 - [ ] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` — all pass
 - [ ] ch-s0x closed (SQL fix committed, verified via live MCP)
