@@ -272,3 +272,4 @@
 {"timestamp":"2026-04-02T20:48:55.707782+00:00","actor":"Seth","event_type":"closed","task_id":"ch-ei8","details":{"notes":null}}
 {"timestamp":"2026-04-02T20:50:08.048345+00:00","actor":"Seth","event_type":"logged","task_id":"ch-ei8","details":{"message":"Debrief: Dual-TOOL_REGISTRY transition wiring discovered — __init__.py shadows registry.py, domain modules need copy loop. Reachability split to 2 builders for mock test compat. sqlglot NOT LIKE normalization. Reflections: skeleton had wrong file reference (_legacy_tools.py → __init__.py), corrected during SRE. Next: ch-p1r follows same pattern, inherits dual-registry wiring."}}
 {"timestamp":"2026-04-02T21:05:53.724317+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-p1r","details":{"actor":"Seth"}}
+{"timestamp":"2026-04-02T21:47:03.263478+00:00","actor":"Seth","event_type":"closed","task_id":"ch-p1r","details":{"notes":null}}

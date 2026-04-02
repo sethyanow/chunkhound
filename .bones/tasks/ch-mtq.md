@@ -48,7 +48,7 @@ The fix exposed a design gap: agent-built code was never decomposed for testabil
 - [x] `validation.py` and `formatters.py` extracted with tests
 - [x] `registry.py` extracted; `from chunkhound.mcp_server.tools import TOOL_REGISTRY, execute_tool` still works
 - [x] Graph query builders are pure functions returning `(sql, params)` via sqlglot
-- [ ] Search query builders are pure functions; structural search walks bidirectionally
+- [x] Search query builders are pure functions; structural search walks bidirectionally
 - [ ] LSP dispatch chain cleaned up; stats ported to sqlglot
 - [x] Query builder tests use sqlglot parse round-trip for structural assertions
 - [ ] `uv run pytest tests/lsp/ -v` — all pass

@@ -1,13 +1,14 @@
 ---
 id: ch-p1r
 title: 'Search tools: query builder tests + sqlglot rebuild + structural walk fix'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-bcw]
 parent: ch-mtq
 ---
+
 
 
 ## Context
@@ -91,13 +92,13 @@ Search has four modes: regex (delegated to service, no SQL in tools.py), semanti
 
 ## Success Criteria
 
-- [ ] `queries/search.py` has builders for all search SQL operations
-- [ ] Structural walk builder uses `bidirectional_edges()` (outbound-only bug FIXED)
-- [ ] Query builder tests assert bidirectional edge pattern (both directions in subquery, not just UNION ALL string)
-- [ ] Symbol search uses LIKE ESCAPE via shared `scope_filter()`
-- [ ] 8-stage structural pipeline preserved with SQL stages using builders
-- [ ] Existing search tests pass
-- [ ] Committed and pushed
+- [x] `queries/search.py` has builders for all search SQL operations
+- [x] Structural walk builder uses `bidirectional_edges()` (outbound-only bug FIXED)
+- [x] Query builder tests assert bidirectional edge pattern (both directions in subquery, not just UNION ALL string)
+- [x] Symbol search uses LIKE ESCAPE via shared `scope_filter()`
+- [x] 8-stage structural pipeline preserved with SQL stages using builders
+- [x] Existing search tests pass
+- [x] Committed and pushed
 
 ## Key Considerations
 
