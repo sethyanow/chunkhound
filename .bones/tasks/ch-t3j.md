@@ -1,22 +1,25 @@
 ---
 id: ch-t3j
 title: Decompose test_mcp_tools_lsp.py into per-tool test files
-status: open
+status: active
 type: task
 priority: 0
+owner: Seth
 parent: ch-zyz
 ---
 
 
 
+
+
 ## Context
-Parent epic ch-8e7, Phase 3 sub-epic ch-zyz. `tests/lsp/test_mcp_tools_lsp.py` is 1741 lines with 7 classes / 62 tests covering 4 different MCP tools + infrastructure wiring. Violates the 500-line file limit and prevents clean test ownership as new tools are added.
+Parent epic ch-8e7, Phase 3 sub-epic ch-zyz. `tests/lsp/test_mcp_tools_lsp.py` is too large with 7 classes / 62 tests covering 4 different MCP tools + infrastructure wiring.
 
 **Blocked by:** None
 **Unlocks:** ch-lic (search extensions need to add tests to the right files from the start)
 
 ## Requirements
-Pure code motion — split the monolithic test file into per-tool files with zero behavior changes. All 62 tests must pass before and after.
+Split the monolithic test file into per-tool files, review the tests for quality and improve as needed. All 62 tests must pass before and after.
 
 ## Design
 **Decomposition by tool concern.** Each MCP tool gets its own test file. Shared mock helpers extracted to a helper module (NOT conftest.py — existing conftest already has `_make_mock_pool` with different signature for population tests).
@@ -75,22 +78,19 @@ Pure code motion — split the monolithic test file into per-tool files with zer
 - Import LSP types: `Location`, `CallHierarchyItem`, `HoverResult`
 - Import `execute_tool`
 
-### Step 7: Delete test_mcp_tools_lsp.py and verify
-- Delete: `tests/lsp/test_mcp_tools_lsp.py`
+### Step 7: Remove test_mcp_tools_lsp.py and verify
+- run: `git rm tests/lsp/test_mcp_tools_lsp.py`
 - Run: `uv run pytest tests/lsp/test_tool_wiring.py tests/lsp/test_tool_lsp.py tests/lsp/test_tool_lsp_status.py tests/lsp/test_tool_graph.py tests/lsp/test_tool_symbol_context.py -v -m ""` → 62 pass
 - Run: `uv run pytest tests/lsp/ -v -m ""` → all lsp tests pass (no import errors from removal)
 - Commit and push
 
 ## Success Criteria
-- [ ] `test_mcp_tools_lsp.py` deleted — no monolithic test file
-- [ ] 5 new test files, each under 600 lines, each focused on one tool
+- [ ] `test_mcp_tools_lsp.py` removed — no monolithic test file
+- [ ] 5 new test files, each focused on one tool
 - [ ] Shared helpers in `mcp_tool_helpers.py` (no conftest name collision)
-- [ ] All 62 tests pass: `uv run pytest tests/lsp/test_tool_*.py -v -m ""`
+- [ ] All tests pass: `uv run pytest tests/lsp/test_tool_*.py -v -m ""`
 - [ ] All other lsp tests unaffected: `uv run pytest tests/lsp/ -v -m ""`
-- [ ] Zero behavior changes — pure code motion
 
-## Anti-Patterns
-- NO merging helpers into conftest.py (name collision with existing `_make_mock_pool`)
-- NO modifying test logic during decomposition — pure move
-- NO renaming test methods or classes
-- NO changing imports in non-test files
+## Log
+
+- [2026-04-02T00:51:01Z] [Seth] User directive: full behavioral rewrite, not mechanical code motion. Improve assertions, add response contract tests, add fixtures to kill boilerplate. Keep adversarial tests that are already good.
