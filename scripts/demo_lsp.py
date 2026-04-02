@@ -969,20 +969,28 @@ async def main() -> int:
         finally:
             conn.close()
 
-        # LSP-dependent Phase 3 demos — need a live LSP client pool
+        # LSP-dependent Phase 3 demos — need a live LSP client pool + services
         from chunkhound.lsp.client import LSPClientPool
+        from chunkhound.mcp_server.tools import execute_tool
 
         lsp_pool = LSPClientPool()
+
+        # Minimal services wrapper for tools that need services.provider.execute_query
+        demo_services = _build_demo_services(db_path)
+
+        # Pick a known symbol position from Phase 1 output (LSPClient class def)
+        demo_line = 31  # LSPClient class definition (0-based for LSP)
+        demo_char = 6   # "class LSPClient" — the name
+
         try:
             _hdr(14, "LSP DEFINITION — Phase 3")
-            print(f"  Target: {target}, line 50, char 10")
+            print(f"  Target: {target}, line {demo_line}, char {demo_char}")
             try:
-                from chunkhound.mcp_server.tools import execute_tool
                 lsp_result = await execute_tool(
-                    "lsp", None, None,
-                    {"file": target, "line": 50, "character": 10, "operation": "definition"},
+                    "lsp", demo_services, None,
+                    {"file": target, "line": demo_line, "character": demo_char,
+                     "operation": "definition"},
                     lsp_client_pool=lsp_pool,
-                    config=None,
                 )
                 results["lsp_definition"] = await demo_lsp_definition(lsp_result)
             except Exception as e:
@@ -990,13 +998,13 @@ async def main() -> int:
                 results["lsp_definition"] = False
 
             _hdr(15, "LSP REFERENCES — Phase 3")
-            print(f"  Target: {target}, line 50, char 10")
+            print(f"  Target: {target}, line {demo_line}, char {demo_char}")
             try:
                 lsp_result = await execute_tool(
-                    "lsp", None, None,
-                    {"file": target, "line": 50, "character": 10, "operation": "references"},
+                    "lsp", demo_services, None,
+                    {"file": target, "line": demo_line, "character": demo_char,
+                     "operation": "references"},
                     lsp_client_pool=lsp_pool,
-                    config=None,
                 )
                 results["lsp_references"] = await demo_lsp_references(lsp_result)
             except Exception as e:
@@ -1004,13 +1012,12 @@ async def main() -> int:
                 results["lsp_references"] = False
 
             _hdr(16, "SYMBOL CONTEXT — Phase 3")
-            print(f"  Target: {target}, line 50, char 10")
+            print(f"  Target: {target}, line {demo_line}, char {demo_char}")
             try:
                 ctx_result = await execute_tool(
-                    "symbol_context", None, None,
-                    {"file": target, "line": 50, "character": 10},
+                    "symbol_context", demo_services, None,
+                    {"file": target, "line": demo_line, "character": demo_char},
                     lsp_client_pool=lsp_pool,
-                    config=None,
                 )
                 results["symbol_context"] = await demo_symbol_context(ctx_result)
             except Exception as e:
