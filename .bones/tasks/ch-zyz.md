@@ -4,9 +4,12 @@ title: 'Phase 3: Primitive MCP Tools'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-0um, ch-1ed, ch-dlx, ch-r4a, ch-lic, ch-t3j]
+depends_on: [ch-0um, ch-1ed, ch-dlx, ch-r4a, ch-lic, ch-t3j, ch-nlz]
 parent: ch-8e7
 ---
+
+
+
 
 
 
@@ -74,3 +77,7 @@ Inherited from parent epic, plus:
 - Call `search(type: symbols, query="parse")` → returns matching symbols
 - Call `search(type: structural, query="error handling", type_filter="Result")` → returns type-filtered results
 - Call `symbol_context` on a function → returns compound profile in one call
+
+## Log
+
+- [2026-04-02T02:06:23Z] [Seth] ch-lic closed. Phase 3 status: 15/16 criteria checked. Remaining: search(type: structural) — semantic search + graph walk expansion + unified rerank. Need writing-plans to scope this task.

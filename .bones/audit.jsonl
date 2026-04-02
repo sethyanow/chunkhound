@@ -193,3 +193,7 @@
 {"timestamp":"2026-04-02T01:44:42.213395+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-lic","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-02T02:05:49.735580+00:00","actor":"Seth","event_type":"closed","task_id":"ch-lic","details":{"notes":null}}
 {"timestamp":"2026-04-02T02:05:56.208274+00:00","actor":"Seth","event_type":"logged","task_id":"ch-lic","details":{"message":"Closed. Delivered search(type: symbols), type_filter (all types), get_stats MCP tool. 20 tests (9 functional + 8 adversarial + 3 stats). Consistency tests updated. Full unit suite 1635/1635 pass."}}
+{"timestamp":"2026-04-02T02:06:23.795322+00:00","actor":"Seth","event_type":"logged","task_id":"ch-zyz","details":{"message":"ch-lic closed. Phase 3 status: 15/16 criteria checked. Remaining: search(type: structural) — semantic search + graph walk expansion + unified rerank. Need writing-plans to scope this task."}}
+{"timestamp":"2026-04-02T02:12:59.506434+00:00","actor":"Seth","event_type":"created","task_id":"ch-nlz","details":{}}
+{"timestamp":"2026-04-02T02:13:03.440879+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"parent-child","to":"ch-nlz"}}
+{"timestamp":"2026-04-02T02:13:03.441325+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-zyz","details":{"kind":"blocks","to":"ch-nlz"}}
