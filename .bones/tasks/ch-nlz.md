@@ -15,6 +15,7 @@ parent: ch-zyz
 
 
 
+
 ## Context
 Parent epic ch-8e7, Phase 3 sub-epic ch-zyz. Fifth task — ch-lic (symbols + type_filter + get_stats) just closed.
 Phase 3's final implementation criterion: `search(type: structural)` does semantic search + graph walk expansion + unified rerank.
@@ -116,3 +117,7 @@ Phase 3 builds the MCP tool surface (`_search_structural` in tools.py). Phase 5 
 - **[Adversarial: Input Hostility]** Dense symbol files (e.g., `__init__.py` re-exporting 200 names) can produce hundreds of seed FQNs from a few semantic results. The multi-seed CTE must carry a LIMIT on walked nodes (cap at `page_size * 3`) to bound fan-out. Without this, depth-2 walk from 200 seeds produces thousands of walked symbols.
 - **[Adversarial: Dependency Treachery]** Graph chunk dicts from chunk resolution (step 2.5) MUST use identical keys to semantic result dicts: `file_path`, `content`, `start_line`, `end_line`. Key name mismatches cause `_apply_type_filter` and deduplication to silently fail (filter drops all graph chunks, dedup sees no overlaps).
 - **[Adversarial: Temporal Betrayal]** Symbol/chunk staleness during background population lag is expected by design (R3). Semantic returns fresh chunks, symbols table may be stale. Graceful degradation handles the extreme case (no symbols → semantic only). Do NOT add synchronization — the staleness window is bounded and the design accounts for it.
+
+## Log
+
+- [2026-04-02T02:50:22Z] [Seth] Closed. Implementation: _search_structural in tools.py (semantic→symbol lookup→multi-seed graph walk CTE depth 2→chunk resolution→dedup→type_filter→paginate). 11 tests (6 core + 5 adversarial). All criteria checked, committed c94d8e2a, pushed.

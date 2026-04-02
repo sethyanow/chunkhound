@@ -4,9 +4,11 @@ title: 'Phase 3: Primitive MCP Tools'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-0um, ch-1ed, ch-dlx, ch-r4a, ch-lic, ch-t3j, ch-nlz]
+depends_on: [ch-0um, ch-1ed, ch-dlx, ch-r4a, ch-lic, ch-t3j, ch-nlz, ch-tox]
 parent: ch-8e7
 ---
+
+
 
 
 
