@@ -42,14 +42,14 @@ Scoped to parent epic R4, R5:
 - [x] `graph(overview)` returns most-connected types with relationship summary
 - [x] `symbol_context` returns hover + definition + callers + callees + graph neighborhood in one response
 - [x] `lsp_status` returns per-server state, capabilities, readiness
-- [ ] `search(type: symbols)` queries symbols table with kind, language, path, fqn pattern filters
+- [x] `search(type: symbols)` queries symbols table with kind, language, path, fqn pattern filters
 - [ ] `search(type: structural)` does semantic search + graph walk expansion + unified rerank
-- [ ] `search` `type_filter` parameter filters results by type_signature content
-- [ ] `get_stats` includes symbol count, edge count, per-language breakdown, LSP server status
-- [ ] All tools follow existing `@register_tool` pattern with proper schema generation
-- [ ] All existing MCP tools unchanged in behavior (zero regression)
-- [ ] `uv run pytest tests/test_mcp_tools_lsp.py -v` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [x] `search` `type_filter` parameter filters results by type_signature content
+- [x] `get_stats` includes symbol count, edge count, per-language breakdown, LSP server status
+- [x] All tools follow existing `@register_tool` pattern with proper schema generation
+- [x] All existing MCP tools unchanged in behavior (zero regression)
+- [x] `uv run pytest tests/lsp/ -v -m ""` → all pass
+- [x] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
 
 ## Anti-Patterns
 Inherited from parent epic, plus:

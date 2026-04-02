@@ -1,13 +1,15 @@
 ---
 id: ch-lic
 title: 'Task 4: search(type: symbols), type_filter parameter, get_stats MCP tool'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-t3j]
 parent: ch-zyz
 ---
+
+
 
 
 
@@ -97,18 +99,18 @@ This task covers: `type: symbols`, `type_filter`, and `get_stats` MCP tool regis
 - Commit and push
 
 ## Success Criteria
-- [ ] `search(type: symbols, query="parse")` returns matching symbols from symbols table
-- [ ] `search(type: symbols, type_filter="Result")` filters by type_signature substring
-- [ ] `search(type: symbols, path="src/auth")` filters by file_path prefix
-- [ ] `type_filter` works with regex and semantic search types (post-filter via symbols join)
-- [ ] `get_stats` tool registered with @register_tool, callable via execute_tool
-- [ ] `get_stats` returns file, chunk, symbol, edge counts + per-language breakdown
-- [ ] `get_stats` includes LSP server status when pool available, null when not
-- [ ] All existing search behavior unchanged (zero regression on regex/semantic without type_filter)
-- [ ] `_build_filtered_tool_dicts` includes "symbols" in type enum when embeddings unavailable
-- [ ] `_escape_like` applied to type_filter and path LIKE patterns — no LIKE metacharacter injection
-- [ ] `uv run pytest tests/lsp/test_tool_search_extensions.py tests/lsp/test_tool_get_stats.py -v -m ""` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
+- [x] `search(type: symbols, query="parse")` returns matching symbols from symbols table
+- [x] `search(type: symbols, type_filter="Result")` filters by type_signature substring
+- [x] `search(type: symbols, path="src/auth")` filters by file_path prefix
+- [x] `type_filter` works with regex and semantic search types (post-filter via symbols join)
+- [x] `get_stats` tool registered with @register_tool, callable via execute_tool
+- [x] `get_stats` returns file, chunk, symbol, edge counts + per-language breakdown
+- [x] `get_stats` includes LSP server status when pool available, null when not
+- [x] All existing search behavior unchanged (zero regression on regex/semantic without type_filter)
+- [x] `_build_filtered_tool_dicts` includes "symbols" in type enum when embeddings unavailable
+- [x] `_escape_like` applied to type_filter and path LIKE patterns — no LIKE metacharacter injection
+- [x] `uv run pytest tests/lsp/test_tool_search_extensions.py tests/lsp/test_tool_get_stats.py -v -m ""` → all pass (20/20)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass (17/17)
 
 ## Anti-Patterns
 - NO changes to existing search behavior — type_filter is additive, symbols is a new branch
@@ -133,3 +135,7 @@ This task covers: `type: symbols`, `type_filter`, and `get_stats` MCP tool regis
 - **Adversarial: type_filter N+1 queries.** Post-filtering regex/semantic results MUST batch the symbols-join into a single SQL query covering all result `(file_path, start_line, end_line)` tuples. Do NOT iterate per-result with separate execute_query calls — 100 results = 100 DB round-trips = unacceptable.
 - **Adversarial: chunk result field contract.** type_filter post-filter depends on chunk results having `file_path`, `start_line`, `end_line` fields. SEARCH_DESCRIPTION documents these. Test mocks MUST include these fields, and the post-filter code must use the exact field names from search results (not assumed names).
 - **Adversarial: path filter also needs `_escape_like`.** The `path` param used in `AND file_path LIKE '{path}%'` also needs `_escape_like` — directory names could contain `_`.
+
+## Log
+
+- [2026-04-02T02:05:56Z] [Seth] Closed. Delivered search(type: symbols), type_filter (all types), get_stats MCP tool. 20 tests (9 functional + 8 adversarial + 3 stats). Consistency tests updated. Full unit suite 1635/1635 pass.
