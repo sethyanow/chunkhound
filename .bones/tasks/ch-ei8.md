@@ -1,13 +1,15 @@
 ---
 id: ch-ei8
 title: 'Graph tools: query builder tests + sqlglot rebuild'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-bcw]
 parent: ch-mtq
 ---
+
+
 
 
 ## Context
@@ -98,16 +100,16 @@ Full walk query spike completed and verified during planning — see conversatio
 
 ## Success Criteria
 
-- [ ] `queries/graph.py` has builders for walk, reachability, boundary, overview
-- [ ] All builders return `(sql, params)` via sqlglot DuckDB dialect
-- [ ] Walk builder uses `bidirectional_edges()` from common.py
-- [ ] Reachability stays outbound-only (directional by design)
-- [ ] Overview uses bidirectional edge counting
-- [ ] `graph.py` tool functions are thin: validate → build → execute → format
-- [ ] Query builder tests validate structure via round-trip parsing
-- [ ] Existing graph tests pass
-- [ ] Smoke tests pass
-- [ ] Committed and pushed
+- [x] `queries/graph.py` has builders for walk, reachability, boundary, overview
+- [x] All builders return `(sql, params)` via sqlglot DuckDB dialect
+- [x] Walk builder uses `bidirectional_edges()` from common.py
+- [x] Reachability stays outbound-only (directional by design)
+- [x] Overview uses bidirectional edge counting
+- [x] `graph.py` tool functions are thin: validate → build → execute → format
+- [x] Query builder tests validate structure via round-trip parsing
+- [x] Existing graph tests pass
+- [x] Smoke tests pass
+- [x] Committed and pushed
 
 ## Key Considerations
 
@@ -120,3 +122,7 @@ Full walk query spike completed and verified during planning — see conversatio
 - Don't change reachability to bidirectional — it's intentionally directional
 - Don't inline SQL in the tool functions — that's what we're fixing
 - Don't skip the round-trip parse in tests — string matching is fragile
+
+## Log
+
+- [2026-04-02T20:48:55Z] [Seth] Completed. 7 query builders (walk, walk_edges, reachability_all_symbols, reachability_reachable, boundary, overview, overview_breakdown) in queries/graph.py. Thin tools in graph.py. __init__.py 1832→1505 lines. Dual-TOOL_REGISTRY transition wiring discovered and handled. 35 new tests, all 1819 pass.
