@@ -1,11 +1,13 @@
 ---
 id: ch-e6v
 title: 'Shared foundations: validation, formatters, query fragments'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-mtq
 ---
+
 
 ## Context
 

@@ -150,7 +150,7 @@ def test_no_duplicate_tool_dataclass():
     """
     from pathlib import Path
 
-    tools_path = Path(__file__).parent.parent / "chunkhound" / "mcp_server" / "tools.py"
+    tools_path = Path(__file__).parent.parent / "chunkhound" / "mcp_server" / "tools" / "__init__.py"
     content = tools_path.read_text()
 
     # Count occurrences of "@dataclass\nclass Tool:"
@@ -170,7 +170,7 @@ def test_no_tool_definitions_list():
     """
     from pathlib import Path
 
-    tools_path = Path(__file__).parent.parent / "chunkhound" / "mcp_server" / "tools.py"
+    tools_path = Path(__file__).parent.parent / "chunkhound" / "mcp_server" / "tools" / "__init__.py"
     content = tools_path.read_text()
 
     # Check that TOOL_DEFINITIONS list doesn't exist
