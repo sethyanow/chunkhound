@@ -335,3 +335,133 @@ class TestBuildTypeFilterQuery:
     def test_empty_results_raises(self) -> None:
         with pytest.raises(ValueError):
             build_type_filter_query(results=[], type_filter="int")
+
+
+# ---------------------------------------------------------------------------
+# Adversarial stress tests
+# ---------------------------------------------------------------------------
+
+
+class TestAdversarialSymbolSearch:
+    """Adversarial battery for build_symbol_search_query."""
+
+    def test_unicode_query(self) -> None:
+        """Multi-byte characters in query produce valid SQL."""
+        sql, params = build_symbol_search_query(
+            query="函数", path=None, type_filter=None, limit=10, offset=0
+        )
+        _roundtrip(sql)
+        assert any("函数" in str(p) for p in params)
+
+    def test_sql_injection_in_query(self) -> None:
+        """SQL injection attempt is safely parameterized, not interpolated."""
+        sql, params = build_symbol_search_query(
+            query="'; DROP TABLE symbols; --",
+            path=None,
+            type_filter=None,
+            limit=10,
+            offset=0,
+        )
+        _roundtrip(sql)
+        # Injection string is in params, not in SQL text
+        assert "DROP" not in sql
+        assert any("DROP" in str(p) for p in params)
+
+    def test_limit_zero(self) -> None:
+        """limit=0 produces valid SQL (caller is responsible for clamping)."""
+        sql, params = build_symbol_search_query(
+            query="x", path=None, type_filter=None, limit=0, offset=0
+        )
+        _roundtrip(sql)
+        assert 0 in params
+
+    def test_very_large_offset(self) -> None:
+        """Offset beyond any realistic total produces valid SQL."""
+        sql, params = build_symbol_search_query(
+            query="x", path=None, type_filter=None, limit=10, offset=999999
+        )
+        _roundtrip(sql)
+        assert 999999 in params
+
+    def test_like_wildcard_in_query_escaped(self) -> None:
+        """LIKE wildcards in query are escaped — % doesn't match everything."""
+        sql, params = build_symbol_search_query(
+            query="%", path=None, type_filter=None, limit=10, offset=0
+        )
+        _roundtrip(sql)
+        name_param = params[0]
+        assert r"\%" in name_param
+
+
+class TestAdversarialSymbolOverlap:
+    """Adversarial battery for build_symbol_overlap_query."""
+
+    def test_duplicate_chunks(self) -> None:
+        """Same chunk twice produces valid SQL with duplicate conditions."""
+        chunk = {"file_path": "a.py", "start_line": 1, "end_line": 10}
+        sql, params = build_symbol_overlap_query([chunk, chunk])
+        _roundtrip(sql)
+        assert _count_placeholders(sql) == 6
+
+    def test_inverted_range(self) -> None:
+        """start_line > end_line (semantically hostile) still produces valid SQL."""
+        chunk = {"file_path": "a.py", "start_line": 100, "end_line": 1}
+        sql, params = build_symbol_overlap_query([chunk])
+        _roundtrip(sql)
+        # Params are in order: file_path, end_line, start_line
+        assert params == ["a.py", 1, 100]
+
+
+class TestAdversarialStructuralWalk:
+    """Adversarial battery for build_structural_walk_query."""
+
+    def test_duplicate_seed_fqns(self) -> None:
+        """Duplicate FQNs in seed list produce valid SQL (IN allows duplicates)."""
+        sql, params = build_structural_walk_query(
+            seed_fqns=["a::X", "a::X", "a::X"], depth=2, limit=20
+        )
+        _roundtrip(sql)
+        assert _count_placeholders(sql) == 5  # 3 seeds + depth + limit
+        assert params[:3] == ["a::X", "a::X", "a::X"]
+
+    def test_depth_zero(self) -> None:
+        """depth=0 produces valid SQL — base case only, no recursion."""
+        sql, params = build_structural_walk_query(seed_fqns=["a::X"], depth=0, limit=20)
+        _roundtrip(sql)
+        assert params == ["a::X", 0, 20]
+
+    def test_fqn_with_special_chars(self) -> None:
+        """FQNs with dots, colons, underscores as params (not interpolated)."""
+        fqn = "my.module::MyClass.__init__"
+        sql, params = build_structural_walk_query(seed_fqns=[fqn], depth=2, limit=10)
+        _roundtrip(sql)
+        assert params[0] == fqn
+
+    def test_large_seed_list(self) -> None:
+        """100 seeds produce valid SQL with large IN clause."""
+        fqns = [f"mod::sym_{i}" for i in range(100)]
+        sql, params = build_structural_walk_query(seed_fqns=fqns, depth=2, limit=50)
+        _roundtrip(sql)
+        assert _count_placeholders(sql) == 102  # 100 seeds + depth + limit
+
+
+class TestAdversarialTypeFilter:
+    """Adversarial battery for build_type_filter_query."""
+
+    def test_like_wildcards_in_filter_escaped(self) -> None:
+        """LIKE wildcards in type_filter are escaped."""
+        results = [{"file_path": "a.py", "start_line": 1, "end_line": 10}]
+        sql, params = build_type_filter_query(results=results, type_filter="Result[%]")
+        _roundtrip(sql)
+        # The type_filter param should have escaped %
+        filter_param = params[-1]
+        assert r"\%" in filter_param
+
+    def test_identical_result_entries(self) -> None:
+        """Duplicate results produce valid SQL with duplicate OR conditions."""
+        result = {"file_path": "a.py", "start_line": 1, "end_line": 10}
+        sql, params = build_type_filter_query(
+            results=[result, result], type_filter="int"
+        )
+        _roundtrip(sql)
+        assert _count_placeholders(sql) == 7  # 3*2 + 1
