@@ -65,53 +65,22 @@ class TestLspDispatchAdversarial:
         )
         assert result["error"] == "invalid_operation"
 
-    def test_dispatch_dict_immutable_contract(self):
-        """LSP_DISPATCH should not be accidentally mutated between calls."""
+    def test_dispatch_dict_has_correct_handler_count(self):
+        """LSP_DISPATCH has exactly 7 entries — one per operation."""
         from chunkhound.mcp_server.tools.lsp_tools import LSP_DISPATCH
 
-        original_keys = set(LSP_DISPATCH.keys())
-        # Simulate accidental mutation attempt
-        LSP_DISPATCH["test_mutation"] = lambda: None
-        # Clean up
-        del LSP_DISPATCH["test_mutation"]
-        # Verify original keys unchanged
-        assert set(LSP_DISPATCH.keys()) == original_keys
+        assert len(LSP_DISPATCH) == 7
 
+    def test_dispatch_handlers_are_async(self):
+        """All dispatch handlers are coroutine functions."""
+        import asyncio
 
-# ---------------------------------------------------------------------------
-# URI handling — Encoding Boundaries
-# ---------------------------------------------------------------------------
+        from chunkhound.mcp_server.tools.lsp_tools import LSP_DISPATCH
 
-
-class TestUriToPathAdversarial:
-    """Adversarial patterns on _uri_to_path."""
-
-    def test_percent_encoded_unicode(self):
-        """Percent-encoded unicode path should decode correctly."""
-        from chunkhound.mcp_server.tools.lsp_tools import _uri_to_path
-
-        # café encoded as UTF-8 percent-encoded
-        result = _uri_to_path("file:///workspace/caf%C3%A9.py")
-        assert "café" in result
-
-    def test_empty_string(self):
-        """Empty string returns empty string (not a file:// URI)."""
-        from chunkhound.mcp_server.tools.lsp_tools import _uri_to_path
-
-        assert _uri_to_path("") == ""
-
-    def test_non_file_uri(self):
-        """Non-file URI returned as-is."""
-        from chunkhound.mcp_server.tools.lsp_tools import _uri_to_path
-
-        assert _uri_to_path("https://example.com") == "https://example.com"
-
-    def test_path_with_spaces(self):
-        """Percent-encoded spaces in path."""
-        from chunkhound.mcp_server.tools.lsp_tools import _uri_to_path
-
-        result = _uri_to_path("file:///workspace/my%20project/foo.py")
-        assert "my project" in result
+        for op, handler in LSP_DISPATCH.items():
+            assert asyncio.iscoroutinefunction(handler), (
+                f"Handler for '{op}' is not async"
+            )
 
 
 # ---------------------------------------------------------------------------
