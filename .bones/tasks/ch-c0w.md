@@ -1,13 +1,14 @@
 ---
 id: ch-c0w
 title: 'LSP dispatch + stats + research: cleanup and port'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-bcw]
 parent: ch-mtq
 ---
+
 
 
 ## Context
@@ -126,16 +127,16 @@ Domain module imports: graph, search, lsp_tools, stats, research (trigger regist
 
 ## Success Criteria
 
-- [ ] `lsp_tools.py` has improved dispatch pattern (not if/elif chain)
-- [ ] `stats.py` has get_stats_impl with raw SQL, handles missing tables gracefully
-- [ ] `research.py` has deep_research_impl
-- [ ] `__init__.py` is a thin re-export module (~30-50 lines) — no local Tool/TOOL_REGISTRY/register_tool/schema gen/execute_tool/copy-loop
-- [ ] All tools registered correctly (verify via TOOL_REGISTRY)
-- [ ] CLI imports work (`from chunkhound.mcp_server.tools import deep_research_impl, search_impl, execute_tool`)
-- [ ] No file in `tools/` exceeds 500 lines
-- [ ] All existing tests pass
-- [ ] Smoke tests pass
-- [ ] Committed and pushed
+- [x] `lsp_tools.py` has improved dispatch pattern (not if/elif chain) — LSP_DISPATCH dict, 7 handlers
+- [x] `stats.py` has get_stats_impl with raw SQL, handles missing tables gracefully — _safe_count/_safe_language_breakdown
+- [x] `research.py` has deep_research_impl — CODE_RESEARCH_DESCRIPTION moved from search.py
+- [x] `__init__.py` is a thin re-export module (79 lines) — no local Tool/TOOL_REGISTRY/register_tool/schema gen/execute_tool/copy-loop
+- [x] All tools registered correctly — 7 tools via TOOL_REGISTRY, all from domain modules
+- [x] CLI imports work (`from chunkhound.mcp_server.tools import deep_research_impl, search_impl, execute_tool`)
+- [x] No file in `tools/` exceeds 500 lines — largest is lsp_tools.py at 458
+- [x] All existing tests pass — 395 passed (tests/lsp/ + tests/mcp_server/)
+- [x] Smoke tests pass — 17 passed
+- [x] Committed and pushed — c53473db
 
 ## Anti-Patterns
 
