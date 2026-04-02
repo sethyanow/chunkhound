@@ -46,7 +46,7 @@ Scoped to parent epic R4, R5:
 - [x] `symbol_context` returns hover + definition + callers + callees + graph neighborhood in one response
 - [x] `lsp_status` returns per-server state, capabilities, readiness
 - [x] `search(type: symbols)` queries symbols table with kind, language, path, fqn pattern filters
-- [ ] `search(type: structural)` does semantic search + graph walk expansion + unified rerank
+- [x] `search(type: structural)` does semantic search + graph walk expansion + unified rerank
 - [x] `search` `type_filter` parameter filters results by type_signature content
 - [x] `get_stats` includes symbol count, edge count, per-language breakdown, LSP server status
 - [x] All tools follow existing `@register_tool` pattern with proper schema generation

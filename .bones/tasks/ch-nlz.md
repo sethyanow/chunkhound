@@ -1,13 +1,14 @@
 ---
 id: ch-nlz
 title: 'Task 5: search(type: structural) — semantic + graph walk expansion'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-lic]
 parent: ch-zyz
 ---
+
 
 
 
@@ -86,16 +87,16 @@ Phase 3 builds the MCP tool surface (`_search_structural` in tools.py). Phase 5 
 - Commit and push
 
 ## Success Criteria
-- [ ] `search(type: structural, query="error handling")` returns semantic results + graph-discovered chunks
-- [ ] Graph walk finds chunks that semantic search alone misses (the defining behavior)
-- [ ] Deduplication: chunks found by both semantic and graph paths appear once
-- [ ] `type_filter` works with structural search (post-filter via `_apply_type_filter`)
-- [ ] Structural search requires embeddings — raises ValueError when unavailable
-- [ ] Graceful degradation: empty symbols table → returns semantic results only, no crash
-- [ ] Empty graph (symbols but no edges) → returns semantic results only
-- [ ] Zero regression on existing search types (regex, semantic, symbols unchanged)
-- [ ] `uv run pytest tests/lsp/test_tool_search_structural.py -v -m ""` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
+- [x] `search(type: structural, query="error handling")` returns semantic results + graph-discovered chunks
+- [x] Graph walk finds chunks that semantic search alone misses (the defining behavior)
+- [x] Deduplication: chunks found by both semantic and graph paths appear once
+- [x] `type_filter` works with structural search (post-filter via `_apply_type_filter`)
+- [x] Structural search requires embeddings — raises ValueError when unavailable
+- [x] Graceful degradation: empty symbols table → returns semantic results only, no crash
+- [x] Empty graph (symbols but no edges) → returns semantic results only
+- [x] Zero regression on existing search types (regex, semantic, symbols unchanged)
+- [x] `uv run pytest tests/lsp/test_tool_search_structural.py -v -m ""` → all pass
+- [x] `uv run pytest tests/test_smoke.py -v -n auto -m e2e` → all pass
 
 ## Anti-Patterns
 - NO blocking the semantic search on graph availability — structural degrades gracefully to semantic-only
