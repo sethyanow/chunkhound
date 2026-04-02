@@ -11,6 +11,7 @@ parent: ch-mtq
 
 
 
+
 ## Context
 
 Extract the tool framework from tools.py into its own module. This is the skeleton everything hangs off — `@register_tool`, the Tool dataclass, `execute_tool` dispatch, and response size management.
@@ -162,3 +163,7 @@ from .response import PaginationInfo, SearchResponse, estimate_tokens, limit_res
 - Don't duplicate TOOL_REGISTRY — one source of truth in registry.py (during transition, `__init__.py`'s old copy is the active one; `registry.py`'s becomes authoritative after domain tasks)
 - Don't make registry.py import from `__init__.py` — that creates circular imports
 - Don't modify `execute_tool`'s error behavior — it raises `ValueError` for unknown tools, don't change to error dict
+
+## Log
+
+- [2026-04-02T20:01:00Z] [Seth] Completed: registry.py + response.py extracted from __init__.py. 52 new tests (11+8 functional, 33 adversarial). TYPE_CHECKING guard for Config import in registry.py. SRE caught execute_tool error behavior mismatch (ValueError, not error dict). All 301 tests pass. Commit 755e775b.
