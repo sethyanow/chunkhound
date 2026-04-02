@@ -7,32 +7,63 @@ The registry pattern ensures consistent tool metadata and behavior.
 """
 
 # Re-exports from extracted modules — shadowed by local definitions during
-# transition. Domain tasks (ch-ei8, ch-p1r, ch-c0w) will delete the local
-# copies, making these re-exports authoritative.
+# transition. Domain task ch-c0w will delete the remaining local copies,
+# making these re-exports authoritative.
+import inspect
+import json
+import types
+from collections.abc import Callable
+from dataclasses import dataclass
+from typing import Any, Literal, TypedDict, Union, get_args, get_origin
+
+# Extracted domain modules — import triggers @register_tool registration
+from . import graph as graph  # noqa: F811, F401
+from . import search as _search_module  # noqa: F401
+from .registry import (
+    TOOL_REGISTRY as TOOL_REGISTRY,
+)
 from .registry import (  # noqa: F811
     Tool as Tool,
-    TOOL_REGISTRY as TOOL_REGISTRY,
+)
+from .registry import (
     execute_tool as execute_tool,
+)
+from .registry import (
     register_tool as register_tool,
 )
 from .response import (  # noqa: F811
     MAX_ALLOWED_TOKENS as MAX_ALLOWED_TOKENS,
+)
+from .response import (
     MAX_RESPONSE_TOKENS as MAX_RESPONSE_TOKENS,
+)
+from .response import (
     MIN_RESPONSE_TOKENS as MIN_RESPONSE_TOKENS,
+)
+from .response import (
     PaginationInfo as PaginationInfo,
+)
+from .response import (
     SearchResponse as SearchResponse,
+)
+from .response import (
     estimate_tokens as estimate_tokens,
+)
+from .response import (
     limit_response_size as limit_response_size,
 )
-
-import inspect
-import json
-import types
-
-from .queries.common import escape_like as _escape_like
-from collections.abc import Callable
-from dataclasses import dataclass
-from typing import Any, Literal, TypedDict, Union, cast, get_args, get_origin
+from .search import (  # noqa: F811
+    CODE_RESEARCH_DESCRIPTION as CODE_RESEARCH_DESCRIPTION,
+)
+from .search import (
+    SEARCH_DESCRIPTION as SEARCH_DESCRIPTION,
+)
+from .search import (
+    SEARCH_DESCRIPTION_NO_RESEARCH as SEARCH_DESCRIPTION_NO_RESEARCH,
+)
+from .search import (
+    search_impl as search_impl,
+)
 
 try:
     from typing import NotRequired  # type: ignore[attr-defined]
@@ -288,17 +319,6 @@ def register_tool(
 # =============================================================================
 
 
-def _convert_paths_to_native(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
-    """Convert file paths in search results to native platform format."""
-    from pathlib import Path
-
-    for result in results:
-        if "file_path" in result and result["file_path"]:
-            # Use Path for proper native conversion
-            result["file_path"] = str(Path(result["file_path"]))
-    return results
-
-
 # Type definitions for return values
 class PaginationInfo(TypedDict):
     """Pagination metadata for search results."""
@@ -377,500 +397,8 @@ def limit_response_size(
 
 
 # =============================================================================
-# Tool Descriptions (optimized for LLM consumption)
+# Tool Implementations (remaining: LSP, graph, research, stats — ch-c0w will extract)
 # =============================================================================
-
-SEARCH_DESCRIPTION = """Pinpoint specific code locations after building understanding with code_research. Returns structurally-parsed code chunks (functions, classes) — large definitions may span multiple results.
-
-TYPE — choose one:
-- **regex**: Match exact patterns against code content. Use for known identifiers, imports, or string literals.
-  Examples: "def authenticate", "class.*Handler", "import.*pandas", "TODO:.*refactor"
-- **semantic**: Find code by meaning via embedding similarity. Use for concepts or when exact identifiers are unknown.
-  Examples: "authentication logic", "retry with exponential backoff", "database connection pooling"
-- **symbols**: Search indexed symbol names and FQNs from LSP analysis. Returns symbol metadata (kind, type_signature, location).
-  Examples: "parse", "auth::validate", "Handler"
-- **structural**: Semantic search enriched with graph walk expansion. Finds code by meaning, then discovers structurally-related chunks (callers, callees, type references) via the symbol dependency graph. Returns both semantic matches and graph-discovered code.
-  Examples: "error handling" (finds handlers + their callers), "database queries" (finds query functions + their call sites)
-
-DECISION GUIDE:
-- Known symbol or pattern → regex
-- Concept or behavior → semantic
-- Symbol by name/type → symbols
-- Concept + structural context (callers, dependencies) → structural
-- Cross-file architecture question → call code_research first
-
-OPTIONAL FILTERS:
-- **path**: Restrict to a subdirectory (e.g. "src/auth")
-- **type_filter**: Filter by type signature substring (e.g. "Result", "int"). Works with all search types.
-
-OUTPUT: {results: [{file_path, content, start_line, end_line}], pagination}"""
-
-SEARCH_DESCRIPTION_NO_RESEARCH = """Pinpoint specific code locations — find exact symbols, patterns, or concepts in the indexed codebase. Returns structurally-parsed code chunks (functions, classes) — large definitions may span multiple results.
-
-TYPE — choose one:
-- **regex**: Match exact patterns against code content. Use for known identifiers, imports, or string literals.
-  Examples: "def authenticate", "class.*Handler", "import.*pandas", "TODO:.*refactor"
-- **semantic**: Find code by meaning via embedding similarity. Use for concepts or when exact identifiers are unknown.
-  Examples: "authentication logic", "retry with exponential backoff", "database connection pooling"
-- **symbols**: Search indexed symbol names and FQNs from LSP analysis. Returns symbol metadata (kind, type_signature, location).
-  Examples: "parse", "auth::validate", "Handler"
-- **structural**: Semantic search enriched with graph walk expansion. Finds code by meaning, then discovers structurally-related chunks (callers, callees, type references) via the symbol dependency graph. Returns both semantic matches and graph-discovered code.
-  Examples: "error handling" (finds handlers + their callers), "database queries" (finds query functions + their call sites)
-
-DECISION GUIDE:
-- Known symbol or pattern → regex
-- Concept or behavior → semantic
-- Symbol by name/type → symbols
-- Concept + structural context (callers, dependencies) → structural
-
-OPTIONAL FILTERS:
-- **path**: Restrict to a subdirectory (e.g. "src/auth")
-- **type_filter**: Filter by type signature substring (e.g. "Result", "int"). Works with all search types.
-
-OUTPUT: {results: [{file_path, content, start_line, end_line}], pagination}"""
-
-CODE_RESEARCH_DESCRIPTION = """Start here for any coding task. Call code_research first to understand the relevant code area before writing or modifying code.
-
-WORKFLOW:
-1. **Understand** — call code_research to map architecture, components, and data flow
-2. **Deepen** — call again with focused queries on specific subsystems discovered in step 1
-3. **Pinpoint** — switch to search (regex/semantic) for exact file locations and symbol references
-4. **Inspect** — use Explore/grep/read for granular line-level follow-up
-
-WHAT IT RETURNS: Cited markdown report covering architecture overview, key code locations, component relationships, and cross-file data flows.
-
-EXAMPLES:
-- "How does authentication work?" — traces the full auth flow across files
-- "What happens when a request hits /api/users?" — maps the request lifecycle
-- "Explain error handling patterns" — identifies cross-cutting concerns
-
-SCOPE: Use the path parameter to restrict analysis to a subdirectory for faster, focused results.
-
-One call replaces 5-10 manual searches. Call it liberally — understanding first, coding second."""
-
-
-# =============================================================================
-# Tool Implementations
-# =============================================================================
-
-
-@register_tool(
-    description=SEARCH_DESCRIPTION,
-    requires_embeddings=False,
-    name="search",
-)
-async def search_impl(
-    services: DatabaseServices,
-    embedding_manager: EmbeddingManager | None,
-    type: Literal["regex", "semantic", "symbols", "structural"],
-    query: str,
-    path: str | None = None,
-    page_size: int = 10,
-    offset: int = 0,
-    fuzzy_path: bool = False,
-    type_filter: str | None = None,
-) -> SearchResponse:
-    """Unified search dispatching to regex, semantic, or symbols based on type.
-
-    Args:
-        services: Database services bundle
-        embedding_manager: Embedding manager (required for semantic type)
-        type: Search mode — "regex" for pattern matching, "semantic" for meaning-based, "symbols" for indexed symbol name/FQN search
-        query: For regex: a regex pattern. For semantic: a natural language concept. For symbols: a name or FQN substring like "parse"
-        path: Optional relative subdirectory to restrict search scope (no leading slash)
-        page_size: Number of results per page (1-100)
-        offset: Starting offset for pagination
-        type_filter: Optional type signature substring filter, e.g. "Result" or "int". Applies to all search types.
-
-    Returns:
-        Dict with 'results' and 'pagination' keys
-
-    Raises:
-        ValueError: If type is invalid or semantic search lacks embedding provider
-    """
-    # Validate type parameter
-    if type not in ("semantic", "regex", "symbols", "structural"):
-        raise ValueError(
-            f"Invalid search type: '{type}'. Must be 'semantic', 'regex', 'symbols', or 'structural'."
-        )
-
-    # Validate and constrain parameters
-    page_size = max(1, min(page_size, 100))
-    offset = max(0, offset)
-
-    if type == "symbols":
-        return await _search_symbols(
-            services, query, path, page_size, offset, type_filter,
-        )
-
-    if type == "structural":
-        return await _search_structural(
-            services, embedding_manager, query, path,
-            page_size, offset, fuzzy_path, type_filter,
-        )
-
-    if type == "semantic":
-        # Validate embedding manager for semantic search
-        if not embedding_manager or not embedding_manager.list_providers():
-            raise ValueError(
-                "Semantic search requires embedding provider. "
-                "Configure via .chunkhound.json or CHUNKHOUND_EMBEDDING__API_KEY. "
-                "Use type='regex' for pattern-based search without embeddings."
-            )
-
-        # Get default provider/model
-        try:
-            provider_obj = embedding_manager.get_provider()
-            provider_name = provider_obj.name
-            model_name = provider_obj.model
-        except ValueError:
-            raise ValueError("No default embedding provider configured.")
-
-        # Perform semantic search
-        results, pagination = await services.search_service.search_semantic(
-            query=query,
-            page_size=page_size,
-            offset=offset,
-            provider=provider_name,
-            model=model_name,
-            path_filter=path,
-            fuzzy_path=fuzzy_path,
-        )
-    else:  # regex
-        # Perform regex search
-        results, pagination = await services.search_service.search_regex_async(
-            pattern=query,
-            page_size=page_size,
-            offset=offset,
-            path_filter=path,
-            fuzzy_path=fuzzy_path,
-        )
-
-    # Apply type_filter post-filter for regex/semantic results
-    if type_filter and results:
-        results = _apply_type_filter(services, results, type_filter)
-
-    # Convert file paths to native platform format
-    native_results = _convert_paths_to_native(results)
-
-    # Apply response size limiting
-    response = cast(
-        SearchResponse, {"results": native_results, "pagination": pagination}
-    )
-    return limit_response_size(response)
-
-
-async def _search_structural(
-    services: Any,
-    embedding_manager: Any,
-    query: str,
-    path: str | None,
-    page_size: int,
-    offset: int,
-    fuzzy_path: bool,
-    type_filter: str | None,
-) -> SearchResponse:
-    """Structural search: semantic search + graph walk expansion.
-
-    Runs semantic search first, then enriches with graph-discovered chunks
-    by looking up symbols overlapping semantic results and walking the
-    symbol_edges graph.
-    """
-    # Validate embedding manager (structural requires semantic as first stage)
-    if not embedding_manager or not embedding_manager.list_providers():
-        raise ValueError(
-            "Structural search requires embedding provider. "
-            "Configure via .chunkhound.json or CHUNKHOUND_EMBEDDING__API_KEY. "
-            "Use type='regex' for pattern-based search without embeddings."
-        )
-
-    # Get default provider/model
-    try:
-        provider_obj = embedding_manager.get_provider()
-        provider_name = provider_obj.name
-        model_name = provider_obj.model
-    except ValueError:
-        raise ValueError("No default embedding provider configured.")
-
-    # Stage 1: Semantic search with broader seed pool
-    results, pagination = await services.search_service.search_semantic(
-        query=query,
-        page_size=page_size * 2,
-        offset=0,
-        provider=provider_name,
-        model=model_name,
-        path_filter=path,
-        fuzzy_path=fuzzy_path,
-    )
-
-    if not results:
-        response = cast(
-            SearchResponse, {"results": [], "pagination": pagination}
-        )
-        return limit_response_size(response)
-
-    # Stage 2: Symbol lookup — find symbols overlapping semantic results
-    conditions = []
-    params: list[Any] = []
-    for r in results:
-        conditions.append(
-            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-        )
-        params.extend([r["file_path"], r["end_line"], r["start_line"]])
-
-    where_clause = " OR ".join(conditions)
-    symbol_sql = (
-        f"SELECT DISTINCT s.fqn, s.file_id FROM symbols s "
-        f"WHERE {where_clause}"
-    )
-    seed_symbols = services.provider.execute_query(symbol_sql, params)
-    seed_fqns = [s["fqn"] for s in seed_symbols]
-
-    if not seed_fqns:
-        # No symbols found — return semantic results unchanged
-        native_results = _convert_paths_to_native(results[:page_size])
-        total = len(results)
-        response = cast(
-            SearchResponse,
-            {
-                "results": native_results,
-                "pagination": {
-                    "offset": offset,
-                    "page_size": page_size,
-                    "has_more": total > page_size,
-                    "total": total,
-                    "next_offset": offset + page_size if total > page_size else None,
-                },
-            },
-        )
-        return limit_response_size(response)
-
-    # Stage 3: Multi-seed graph walk — depth 2, all edge kinds
-    walk_limit = page_size * 3
-    fqn_placeholders = ", ".join(["?"] * len(seed_fqns))
-    walk_params: list[Any] = seed_fqns + [2, walk_limit]
-
-    walk_sql = f"""
-        WITH RECURSIVE reachable AS (
-            SELECT s.fqn, 0 AS depth, [s.fqn] AS visited
-            FROM symbols s
-            WHERE s.fqn IN ({fqn_placeholders})
-
-            UNION ALL
-
-            SELECT s2.fqn, r.depth + 1,
-                   list_concat(r.visited, [s2.fqn])
-            FROM reachable r
-            JOIN symbol_edges e ON e.from_fqn = r.fqn
-            JOIN symbols s2 ON s2.fqn = e.to_fqn
-            WHERE r.depth < ?
-              AND NOT list_contains(r.visited, s2.fqn)
-        )
-        SELECT DISTINCT fqn FROM reachable
-        ORDER BY fqn
-        LIMIT ?
-    """
-    walked = services.provider.execute_query(walk_sql, walk_params)
-    walked_fqns = [w["fqn"] for w in walked]
-
-    if not walked_fqns:
-        # Graph walk found nothing — return semantic results only
-        native_results = _convert_paths_to_native(results[:page_size])
-        total = len(results)
-        response = cast(
-            SearchResponse,
-            {
-                "results": native_results,
-                "pagination": {
-                    "offset": offset,
-                    "page_size": page_size,
-                    "has_more": total > page_size,
-                    "total": total,
-                    "next_offset": offset + page_size if total > page_size else None,
-                },
-            },
-        )
-        return limit_response_size(response)
-
-    # Stage 4: Chunk resolution — walked symbols → chunks
-    walked_placeholders = ", ".join(["?"] * len(walked_fqns))
-    chunk_sql = (
-        "SELECT DISTINCT f.path AS file_path, c.code AS content, "
-        "c.start_line, c.end_line "
-        "FROM chunks c "
-        "JOIN files f ON c.file_id = f.id "
-        "JOIN symbols s ON s.file_id = f.id "
-        "  AND s.range_start >= c.start_line "
-        "  AND s.range_end <= c.end_line "
-        f"WHERE s.fqn IN ({walked_placeholders})"
-    )
-    graph_chunks = services.provider.execute_query(chunk_sql, walked_fqns)
-
-    # Stage 5: Deduplicate — semantic results take priority
-    seen = {
-        (r["file_path"], r["start_line"], r["end_line"]) for r in results
-    }
-    unique_graph_chunks = []
-    for gc in graph_chunks:
-        key = (gc["file_path"], gc["start_line"], gc["end_line"])
-        if key not in seen:
-            seen.add(key)
-            unique_graph_chunks.append(gc)
-
-    # Stage 6: Combine — semantic first, then graph-discovered
-    combined = results + unique_graph_chunks
-
-    # Stage 7: Apply type_filter if present
-    if type_filter and combined:
-        combined = _apply_type_filter(services, combined, type_filter)
-
-    # Stage 8: Paginate combined pool
-    total = len(combined)
-    paginated = combined[offset : offset + page_size]
-    native_results = _convert_paths_to_native(paginated)
-
-    response = cast(
-        SearchResponse,
-        {
-            "results": native_results,
-            "pagination": {
-                "offset": offset,
-                "page_size": page_size,
-                "has_more": total > offset + page_size,
-                "total": total,
-                "next_offset": offset + page_size if total > offset + page_size else None,
-            },
-        },
-    )
-    return limit_response_size(response)
-
-
-def _apply_type_filter(
-    services: Any, results: list[dict], type_filter: str,
-) -> list[dict]:
-    """Post-filter chunk results by matching symbols with type_signature.
-
-    Batches the lookup into a single SQL query to avoid N+1 round-trips.
-    """
-    if not results:
-        return results
-
-    escaped_filter = _escape_like(type_filter)
-
-    # Build batch query — one OR clause per chunk result
-    conditions = []
-    params: list[Any] = []
-    for r in results:
-        conditions.append(
-            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-        )
-        params.extend([r["file_path"], r["end_line"], r["start_line"]])
-
-    where_clause = " OR ".join(conditions)
-    params.append(f"%{escaped_filter}%")
-
-    query = (
-        "SELECT DISTINCT s.file_path, s.range_start, s.range_end "
-        "FROM symbols s "
-        f"WHERE ({where_clause}) AND s.type_signature LIKE ?"
-    )
-
-    matches = services.provider.execute_query(query, params)
-
-    # Build a set of matching (file_path, start, end) for fast lookup
-    match_set = {
-        (m["file_path"], m["range_start"], m["range_end"]) for m in matches
-    }
-
-    # Keep results where any matching symbol overlaps
-    return [
-        r for r in results
-        if any(
-            fp == r["file_path"]
-            and rs <= r["end_line"]
-            and re >= r["start_line"]
-            for fp, rs, re in match_set
-        )
-    ]
-
-
-async def _search_symbols(
-    services: Any,
-    query: str,
-    path: str | None,
-    page_size: int,
-    offset: int,
-    type_filter: str | None,
-) -> SearchResponse:
-    """Search the symbols table directly by name/FQN substring."""
-    conditions = []
-    params: list[Any] = []
-
-    # Name/FQN filter — empty query matches all
-    if query:
-        escaped_query = _escape_like(query)
-        like_pattern = f"%{escaped_query}%"
-        conditions.append("(name LIKE ? OR fqn LIKE ?)")
-        params.extend([like_pattern, like_pattern])
-
-    # Path filter
-    if path:
-        escaped_path = _escape_like(path)
-        conditions.append("file_path LIKE ?")
-        params.append(f"{escaped_path}%")
-
-    # Type signature filter
-    if type_filter:
-        escaped_type = _escape_like(type_filter)
-        conditions.append("type_signature LIKE ?")
-        params.append(f"%{escaped_type}%")
-
-    where_clause = " AND ".join(conditions) if conditions else "1=1"
-
-    # Query symbols
-    symbol_query = (
-        "SELECT fqn, name, kind, language, file_path, range_start, range_end, type_signature "
-        f"FROM symbols WHERE {where_clause} "
-        "ORDER BY name LIMIT ? OFFSET ?"
-    )
-    params.extend([page_size, offset])
-
-    symbol_rows = services.provider.execute_query(symbol_query, params)
-
-    # Count query for pagination
-    count_params = params[:-2]  # Exclude LIMIT/OFFSET
-    count_query = f"SELECT COUNT(*) as total FROM symbols WHERE {where_clause}"
-    count_rows = services.provider.execute_query(count_query, count_params)
-    total = count_rows[0]["total"] if count_rows else 0
-
-    # Format results
-    results = [
-        {
-            "fqn": row["fqn"],
-            "name": row["name"],
-            "kind": row["kind"],
-            "language": row.get("language"),
-            "file_path": row["file_path"],
-            "range_start": row["range_start"],
-            "range_end": row["range_end"],
-            "type_signature": row.get("type_signature"),
-        }
-        for row in symbol_rows
-    ]
-
-    pagination = {
-        "offset": offset,
-        "page_size": page_size,
-        "has_more": offset + page_size < total,
-        "total": total,
-    }
-
-    response = cast(
-        SearchResponse, {"results": results, "pagination": pagination}
-    )
-    return limit_response_size(response)
-
-
 # =============================================================================
 # LSP Tools
 # =============================================================================
@@ -1500,6 +1028,7 @@ async def execute_tool(
 # at which point the local TOOL_REGISTRY/execute_tool will also be removed.
 from . import graph as graph  # noqa: E402, F811
 from .registry import TOOL_REGISTRY as _extracted_reg  # noqa: E402
+
 for _name in list(_extracted_reg):
     TOOL_REGISTRY[_name] = _extracted_reg[_name]  # noqa: F811
 del _extracted_reg, _name  # noqa: F811
