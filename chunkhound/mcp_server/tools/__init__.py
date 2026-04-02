@@ -28,6 +28,8 @@ from .response import (  # noqa: F811
 import inspect
 import json
 import types
+
+from .queries.common import escape_like as _escape_like
 from collections.abc import Callable
 from dataclasses import dataclass
 from typing import Any, Literal, TypedDict, Union, cast, get_args, get_origin
@@ -1244,6 +1246,8 @@ async def symbol_context_impl(
     graph_neighborhood = None
     if fqn_rows:
         try:
+            from .graph import _graph_walk
+
             graph_neighborhood = _graph_walk(
                 services, fqn_rows[0]["fqn"], depth=1, edge_kind=None, limit=20
             )
@@ -1257,349 +1261,6 @@ async def symbol_context_impl(
         "callees": callees,
         "graph_neighborhood": graph_neighborhood,
     }
-
-
-GRAPH_DESCRIPTION = (
-    "Query the pre-computed symbol dependency graph from the DuckDB database. "
-    "All operations are deterministic DuckDB queries — no live LSP calls. "
-    "Operations:\n"
-    "  walk: Traverse connected symbols from a starting FQN. Returns nodes + edges. "
-    "Params: symbol (required), depth (1-20, default 2), edge_kind (optional filter), limit (max nodes, 1-100, default 20).\n"
-    "  reachability: Find symbols unreachable from any entry point in a scope. "
-    "Params: scope (required, path prefix like 'chunkhound/mcp_server/').\n"
-    "  boundary: Find edges that cross a scope boundary (internal→external or external→internal). "
-    "Params: scope (required).\n"
-    "  overview: Return the most-connected symbols with per-edge_kind breakdown. "
-    "Params: scope (optional), limit (1-100, default 20).\n"
-    "Edge kinds in the graph: 'defines', 'references', 'implements', 'called_by', 'calls'. "
-    "If results are empty, the graph may not be populated — check lsp_status or get_stats."
-)
-
-
-def _escape_like(value: str) -> str:
-    """Escape LIKE-special characters in a user-provided string."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
-
-
-@register_tool(
-    description=GRAPH_DESCRIPTION,
-    name="graph",
-)
-async def graph_impl(
-    services: Any,
-    operation: str,
-    symbol: str | None = None,
-    depth: int = 2,
-    edge_kind: str | None = None,
-    scope: str | None = None,
-    limit: int = 20,
-) -> dict[str, Any]:
-    """Unified graph query tool dispatching to walk/reachability/boundary/overview.
-
-    Args:
-        services: DatabaseServices instance
-        operation: One of 'walk', 'reachability', 'boundary', 'overview'
-        symbol: FQN of starting symbol (required for walk)
-        depth: Max traversal depth for walk (clamped to 1-20)
-        edge_kind: Optional edge kind filter for walk
-        scope: File path prefix for reachability/boundary (required for those ops)
-        limit: Max results (clamped to 1-100)
-    """
-    # Validate operation
-    valid_ops = {"walk", "reachability", "boundary", "overview"}
-    if operation not in valid_ops:
-        return {
-            "error": "invalid_operation",
-            "message": f"Unknown operation '{operation}'. Valid: {', '.join(sorted(valid_ops))}",
-        }
-
-    # Clamp bounds
-    depth = max(1, min(depth, 20))
-    limit = max(1, min(limit, 100))
-
-    if operation == "walk":
-        return _graph_walk(services, symbol, depth, edge_kind, limit)
-    elif operation == "reachability":
-        return _graph_reachability(services, scope, limit)
-    elif operation == "boundary":
-        return _graph_boundary(services, scope, limit)
-    else:  # overview
-        return _graph_overview(services, scope, limit)
-
-
-def _graph_walk(
-    services: Any,
-    symbol: str | None,
-    depth: int,
-    edge_kind: str | None,
-    limit: int,
-) -> dict[str, Any]:
-    """Walk connected symbols from a starting FQN."""
-    if not symbol:
-        return {
-            "error": "missing_parameter",
-            "message": "walk operation requires 'symbol' parameter (FQN of starting symbol)",
-        }
-
-    # Build recursive CTE for node discovery
-    edge_filter = ""
-    params: list[Any] = [symbol, depth, limit]
-    if edge_kind:
-        edge_filter = "AND e.edge_kind = ?"
-        params = [symbol, depth, edge_kind, limit]
-
-    # Recursive CTE: find all reachable nodes from the seed FQN
-    # Inline UNION normalizes edges to bidirectional — every edge appears
-    # as both (from→to) and (to→from) so the walk traverses in both directions.
-    # Uses list_concat for visited tracking to prevent cycles.
-    nodes_sql = f"""
-        WITH RECURSIVE reachable AS (
-            SELECT s.fqn, s.name, s.kind, s.file_path, 0 AS depth,
-                   [s.fqn] AS visited
-            FROM symbols s
-            WHERE s.fqn = ?
-
-            UNION ALL
-
-            SELECT s2.fqn, s2.name, s2.kind, s2.file_path,
-                   r.depth + 1,
-                   list_concat(r.visited, [s2.fqn])
-            FROM reachable r
-            JOIN (
-                SELECT from_fqn AS src, to_fqn AS dst, edge_kind
-                FROM symbol_edges
-                UNION ALL
-                SELECT to_fqn AS src, from_fqn AS dst, edge_kind
-                FROM symbol_edges
-            ) e ON e.src = r.fqn
-            JOIN symbols s2 ON s2.fqn = e.dst
-            WHERE r.depth < ?
-              AND NOT list_contains(r.visited, s2.fqn)
-              {edge_filter}
-        )
-        SELECT DISTINCT fqn, name, kind, file_path, depth
-        FROM reachable
-        ORDER BY depth, fqn
-        LIMIT ?
-    """
-
-    nodes = services.provider.execute_query(nodes_sql, params)
-
-    # Collect FQNs for edge query
-    fqns = [n["fqn"] for n in nodes]
-    if not fqns:
-        return {"results": [], "edges": [], "count": 0}
-
-    # Get edges between discovered nodes
-    placeholders = ", ".join(["?"] * len(fqns))
-    edge_params: list[Any] = fqns + fqns
-    edge_filter_sql = ""
-    if edge_kind:
-        edge_filter_sql = "AND e.edge_kind = ?"
-        edge_params.append(edge_kind)
-
-    edges_sql = f"""
-        SELECT e.from_fqn, e.to_fqn, e.edge_kind, e.from_file, e.to_file
-        FROM symbol_edges e
-        WHERE e.from_fqn IN ({placeholders})
-          AND e.to_fqn IN ({placeholders})
-          {edge_filter_sql}
-    """
-
-    raw_edges = services.provider.execute_query(edges_sql, edge_params)
-
-    # Build clean response
-    results = [
-        {"fqn": n["fqn"], "name": n["name"], "kind": n["kind"],
-         "file_path": n["file_path"], "depth": n["depth"]}
-        for n in nodes
-    ]
-    edges = [
-        {"from_symbol": e["from_fqn"], "to_symbol": e["to_fqn"],
-         "edge_kind": e["edge_kind"], "from_file": e["from_file"],
-         "to_file": e["to_file"]}
-        for e in raw_edges
-    ]
-
-    return {"results": results, "edges": edges, "count": len(results)}
-
-
-def _graph_reachability(
-    services: Any,
-    scope: str | None,
-    limit: int,
-) -> dict[str, Any]:
-    """Find symbols unreachable from scope entry points."""
-    if not scope:
-        return {
-            "error": "missing_parameter",
-            "message": "reachability operation requires 'scope' parameter (file path prefix)",
-        }
-    escaped_scope = _escape_like(scope)
-    scope_pattern = escaped_scope + "%"
-
-    # Query 1: all symbols in scope
-    all_in_scope_sql = """
-        SELECT fqn, name, kind, file_path
-        FROM symbols
-        WHERE file_path LIKE ? ESCAPE '\\'
-    """
-    all_symbols = services.provider.execute_query(all_in_scope_sql, [scope_pattern])
-
-    # Query 2: reachable FQNs via recursive edge traversal from scope roots
-    reachable_sql = """
-        WITH RECURSIVE reachable AS (
-            SELECT DISTINCT s.fqn
-            FROM symbols s
-            WHERE s.file_path LIKE ? ESCAPE '\\'
-
-            UNION
-
-            SELECT DISTINCT s2.fqn
-            FROM reachable r
-            JOIN symbol_edges e ON e.from_fqn = r.fqn
-            JOIN symbols s2 ON s2.fqn = e.to_fqn
-            WHERE s2.file_path LIKE ? ESCAPE '\\'
-        )
-        SELECT fqn FROM reachable
-    """
-    reachable_rows = services.provider.execute_query(
-        reachable_sql, [scope_pattern, scope_pattern]
-    )
-    reachable_fqns = {r["fqn"] for r in reachable_rows}
-
-    # Unreachable = all in scope minus reachable
-    unreachable = [
-        {"fqn": s["fqn"], "name": s["name"], "kind": s["kind"], "file_path": s["file_path"]}
-        for s in all_symbols
-        if s["fqn"] not in reachable_fqns
-    ][:limit]
-
-    return {"unreachable": unreachable, "count": len(unreachable)}
-
-
-def _graph_boundary(
-    services: Any,
-    scope: str | None,
-    limit: int,
-) -> dict[str, Any]:
-    """Find edges crossing a scope boundary."""
-    if not scope:
-        return {
-            "error": "missing_parameter",
-            "message": "boundary operation requires 'scope' parameter (file path prefix)",
-        }
-
-    escaped_scope = _escape_like(scope)
-    scope_pattern = escaped_scope + "%"
-
-    # Edges where one side is in scope and the other is not
-    boundary_sql = """
-        SELECT
-            e.from_fqn, s1.name AS from_name, s1.kind AS from_kind, e.from_file,
-            e.to_fqn, s2.name AS to_name, s2.kind AS to_kind, e.to_file,
-            e.edge_kind
-        FROM symbol_edges e
-        JOIN symbols s1 ON e.from_fqn = s1.fqn
-        JOIN symbols s2 ON e.to_fqn = s2.fqn
-        WHERE (
-            (s1.file_path LIKE ? ESCAPE '\\' AND s2.file_path NOT LIKE ? ESCAPE '\\')
-            OR
-            (s1.file_path NOT LIKE ? ESCAPE '\\' AND s2.file_path LIKE ? ESCAPE '\\')
-        )
-        LIMIT ?
-    """
-    raw_edges = services.provider.execute_query(
-        boundary_sql,
-        [scope_pattern, scope_pattern, scope_pattern, scope_pattern, limit],
-    )
-
-    edges = [
-        {
-            "from_symbol": e["from_fqn"], "from_name": e["from_name"],
-            "from_kind": e["from_kind"], "from_file": e["from_file"],
-            "to_symbol": e["to_fqn"], "to_name": e["to_name"],
-            "to_kind": e["to_kind"], "to_file": e["to_file"],
-            "edge_kind": e["edge_kind"],
-        }
-        for e in raw_edges
-    ]
-
-    return {"edges": edges, "count": len(edges)}
-
-
-def _graph_overview(
-    services: Any,
-    scope: str | None,
-    limit: int,
-) -> dict[str, Any]:
-    """Return most-connected symbols with edge_kind breakdown."""
-    # Split into outgoing + incoming counts to avoid OR-join performance issues
-    scope_filter = ""
-    params: list[Any] = []
-    if scope:
-        escaped_scope = _escape_like(scope)
-        scope_pattern = escaped_scope + "%"
-        scope_filter = "WHERE s.file_path LIKE ? ESCAPE '\\'"
-        params.append(scope_pattern)
-
-    # Query 1: top symbols by total edge count (UNION ALL avoids OR-join)
-    top_sql = f"""
-        WITH edge_counts AS (
-            SELECT s.fqn, s.name, s.kind, s.file_path,
-                   COUNT(*) AS total_edges
-            FROM symbols s
-            JOIN (
-                SELECT from_fqn AS fqn FROM symbol_edges
-                UNION ALL
-                SELECT to_fqn AS fqn FROM symbol_edges
-            ) AS all_refs ON all_refs.fqn = s.fqn
-            {scope_filter}
-            GROUP BY s.fqn, s.name, s.kind, s.file_path
-        )
-        SELECT fqn, name, kind, file_path, total_edges
-        FROM edge_counts
-        ORDER BY total_edges DESC
-        LIMIT ?
-    """
-    params.append(limit)
-    top_symbols = services.provider.execute_query(top_sql, params)
-
-    if not top_symbols:
-        return {"symbols": [], "count": 0}
-
-    # Query 2: per-symbol edge_kind breakdown for the top symbols
-    fqns = [s["fqn"] for s in top_symbols]
-    placeholders = ", ".join(["?"] * len(fqns))
-    breakdown_sql = f"""
-        SELECT fqn, edge_kind, edge_count FROM (
-            SELECT s.fqn, e.edge_kind, COUNT(*) AS edge_count
-            FROM symbols s
-            JOIN symbol_edges e ON e.from_fqn = s.fqn OR e.to_fqn = s.fqn
-            WHERE s.fqn IN ({placeholders})
-            GROUP BY s.fqn, e.edge_kind
-        )
-    """
-    breakdown_rows = services.provider.execute_query(breakdown_sql, fqns)
-
-    # Build breakdown lookup: fqn → {edge_kind: count}
-    breakdown_map: dict[str, dict[str, int]] = {}
-    for row in breakdown_rows:
-        fqn = row["fqn"]
-        if fqn not in breakdown_map:
-            breakdown_map[fqn] = {}
-        breakdown_map[fqn][row["edge_kind"]] = row["edge_count"]
-
-    symbols = [
-        {
-            "fqn": s["fqn"], "name": s["name"], "kind": s["kind"],
-            "file_path": s["file_path"], "total_edges": s["total_edges"],
-            "breakdown": breakdown_map.get(s["fqn"], {}),
-        }
-        for s in top_symbols
-    ]
-
-    return {"symbols": symbols, "count": len(symbols)}
 
 
 @register_tool(
@@ -1830,3 +1491,15 @@ async def execute_tool(
         return result
     else:
         return {"result": result}
+
+
+# Domain module imports — new modules register in registry.py's TOOL_REGISTRY.
+# During transition, copy registrations into the local TOOL_REGISTRY so
+# execute_tool (which uses the local dict) dispatches to the new implementations.
+# Domain tasks (ch-ei8, ch-p1r, ch-c0w) will delete the legacy copies,
+# at which point the local TOOL_REGISTRY/execute_tool will also be removed.
+from . import graph as graph  # noqa: E402, F811
+from .registry import TOOL_REGISTRY as _extracted_reg  # noqa: E402
+for _name in list(_extracted_reg):
+    TOOL_REGISTRY[_name] = _extracted_reg[_name]  # noqa: F811
+del _extracted_reg, _name  # noqa: F811

@@ -1,12 +1,14 @@
 ---
 id: ch-ei8
 title: 'Graph tools: query builder tests + sqlglot rebuild'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 depends_on: [ch-bcw]
 parent: ch-mtq
 ---
+
 
 ## Context
 
@@ -72,14 +74,16 @@ Full walk query spike completed and verified during planning — see conversatio
 
 ### Step 4: Implement graph.py tool functions
 - **File:** `chunkhound/mcp_server/tools/graph.py`
-- **Move:** `graph_impl`, `_graph_walk`, `_graph_reachability`, `_graph_boundary`, `_graph_overview`, `GRAPH_DESCRIPTION` from _legacy_tools.py
+- **Move:** `graph_impl`, `_graph_walk`, `_graph_reachability`, `_graph_boundary`, `_graph_overview`, `GRAPH_DESCRIPTION` from `__init__.py` (the legacy monolith, 1832 lines)
 - **Rebuild:** each function uses `require_param`/`clamp` from validation.py, query builders from queries/graph.py, formatters from formatters.py
 - **Remove:** inline SQL strings, inline formatting, inline param validation
 - **Register:** `@register_tool` from registry.py
+- **Wire:** `__init__.py` must import `graph.py` (e.g., `from .graph import graph_impl`) so `@register_tool` fires and the tool appears in TOOL_REGISTRY
 
-### Step 5: Remove graph functions from _legacy_tools.py
+### Step 5: Remove graph functions from __init__.py
 - **Delete:** graph_impl, _graph_walk, _graph_reachability, _graph_boundary, _graph_overview, GRAPH_DESCRIPTION, _escape_like (now in queries/common)
-- **Verify:** `_legacy_tools.py` shrinks significantly
+- **Update test imports:** `tests/lsp/test_tool_graph.py` line 15 imports `_escape_like` from `chunkhound.mcp_server.tools` — update to `from chunkhound.mcp_server.tools.queries.common import escape_like`
+- **Verify:** `__init__.py` shrinks significantly
 
 ### Step 6: Run full graph test suite
 - **Run:** `uv run pytest tests/lsp/test_tool_graph.py tests/mcp_server/test_queries_graph.py -v`
@@ -104,6 +108,12 @@ Full walk query spike completed and verified during planning — see conversatio
 - [ ] Existing graph tests pass
 - [ ] Smoke tests pass
 - [ ] Committed and pushed
+
+## Key Considerations
+
+- sqlglot normalizes `list_contains` → `array_contains` in DuckDB dialect — assert on `array_contains` in query builder tests
+- Overview breakdown query uses OR-join (`e.from_fqn = s.fqn OR e.to_fqn = s.fqn`) — acceptable for small N (post-filter on top symbols). Top-symbol query uses UNION ALL for performance.
+- After creating `graph.py`, forgetting to import it in `__init__.py` → tool silently absent → existing tests will catch this (SC8)
 
 ## Anti-Patterns
 

@@ -12,7 +12,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from chunkhound.mcp_server.tools import _escape_like
+from chunkhound.mcp_server.tools.queries.common import escape_like as _escape_like
 from tests.lsp.mcp_tool_helpers import call_graph_tool, make_mock_services
 
 
