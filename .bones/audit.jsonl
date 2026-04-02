@@ -264,3 +264,4 @@
 {"timestamp":"2026-04-02T16:54:00.655278+00:00","actor":"Seth","event_type":"logged","task_id":"ch-s0x","details":{"message":"SQL fix committed f0522c44, verified via live MCP (20 nodes, 42 edges). Regression coverage deferred to ch-ei8 query builder tests + ch-mtq broader testing gap. Structural search has same bug — tracked in ch-p1r."}}
 {"timestamp":"2026-04-02T19:19:49.930686+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-e6v","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-02T19:40:56.671427+00:00","actor":"Seth","event_type":"closed","task_id":"ch-e6v","details":{"notes":null}}
+{"timestamp":"2026-04-02T19:45:43.907097+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-bcw","details":{"actor":"Seth"}}

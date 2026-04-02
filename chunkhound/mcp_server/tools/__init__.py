@@ -6,6 +6,25 @@ registry that the stdio server uses for tool definitions.
 The registry pattern ensures consistent tool metadata and behavior.
 """
 
+# Re-exports from extracted modules — shadowed by local definitions during
+# transition. Domain tasks (ch-ei8, ch-p1r, ch-c0w) will delete the local
+# copies, making these re-exports authoritative.
+from .registry import (  # noqa: F811
+    Tool as Tool,
+    TOOL_REGISTRY as TOOL_REGISTRY,
+    execute_tool as execute_tool,
+    register_tool as register_tool,
+)
+from .response import (  # noqa: F811
+    MAX_ALLOWED_TOKENS as MAX_ALLOWED_TOKENS,
+    MAX_RESPONSE_TOKENS as MAX_RESPONSE_TOKENS,
+    MIN_RESPONSE_TOKENS as MIN_RESPONSE_TOKENS,
+    PaginationInfo as PaginationInfo,
+    SearchResponse as SearchResponse,
+    estimate_tokens as estimate_tokens,
+    limit_response_size as limit_response_size,
+)
+
 import inspect
 import json
 import types
