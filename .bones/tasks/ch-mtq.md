@@ -4,9 +4,11 @@ title: MCP Tools Decomposition & Quality Gate
 status: open
 type: epic
 priority: 1
-depends_on: [ch-e6v, ch-bcw, ch-ei8, ch-p1r, ch-c0w, ch-s0x]
+depends_on: [ch-e6v, ch-bcw, ch-ei8, ch-p1r, ch-c0w, ch-s0x, ch-ehd]
 parent: ch-zyz
 ---
+
+
 
 
 

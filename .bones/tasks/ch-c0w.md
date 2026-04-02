@@ -11,6 +11,7 @@ parent: ch-mtq
 
 
 
+
 ## Context
 
 Three tool domains grouped because none is heavy alone:
@@ -198,3 +199,7 @@ Domain module imports: graph, search, lsp_tools, stats, research (trigger regist
 - Betrayal: If a domain file imports from __init__.py (even indirectly), and __init__.py imports the domain file → circular import
 - Consequence: ImportError or partially initialized module
 - Mitigation: Anti-pattern already blocks this. Domain files never import from `__init__.py`.
+
+## Log
+
+- [2026-04-02T22:20:45Z] [Seth] Debrief: Clean decomposition — LSP dispatch dict, _safe_count guard, CODE_RESEARCH_DESCRIPTION moved to research.py. One external test coupling fixed (test_tool_wiring.py imported private fn from __init__). SRE caught _legacy_tools.py factual error before any wasted effort. Reflections: skeleton accuracy was good except for the wrong file name (6 references). User confirmed raw SQL for stats. All ch-mtq criteria now checked.
