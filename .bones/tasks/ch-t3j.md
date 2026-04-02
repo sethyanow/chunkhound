@@ -1,12 +1,13 @@
 ---
 id: ch-t3j
 title: Decompose test_mcp_tools_lsp.py into per-tool test files
-status: active
+status: closed
 type: task
 priority: 0
 owner: Seth
 parent: ch-zyz
 ---
+
 
 
 
@@ -85,11 +86,11 @@ Split the monolithic test file into per-tool files, review the tests for quality
 - Commit and push
 
 ## Success Criteria
-- [ ] `test_mcp_tools_lsp.py` removed — no monolithic test file
-- [ ] 5 new test files, each focused on one tool
-- [ ] Shared helpers in `mcp_tool_helpers.py` (no conftest name collision)
-- [ ] All tests pass: `uv run pytest tests/lsp/test_tool_*.py -v -m ""`
-- [ ] All other lsp tests unaffected: `uv run pytest tests/lsp/ -v -m ""`
+- [x] `test_mcp_tools_lsp.py` removed — no monolithic test file
+- [x] 5 new test files, each focused on one tool
+- [x] Shared helpers in `mcp_tool_helpers.py` (no conftest name collision)
+- [x] All tests pass: `uv run pytest tests/lsp/test_tool_*.py -v -m ""` → 69 passed
+- [x] All other lsp tests unaffected: `uv run pytest tests/lsp/ -v -m ""` → 151 passed
 
 ## Log
 
