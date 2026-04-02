@@ -7,7 +7,6 @@ Structural search composes a multi-stage pipeline: semantic â†’ symbol overlap â
 from pathlib import Path
 from typing import Any, Literal, cast
 
-from .queries.common import escape_like
 from .queries.search import (
     build_chunk_resolution_query,
     build_structural_walk_query,
@@ -18,7 +17,6 @@ from .queries.search import (
 )
 from .registry import register_tool
 from .response import SearchResponse, limit_response_size
-
 
 # =============================================================================
 # Tool Descriptions (optimized for LLM consumption)

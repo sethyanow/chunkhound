@@ -45,7 +45,7 @@ The fix exposed a design gap: agent-built code was never decomposed for testabil
 
 ## Success Criteria
 
-- [x] `tools.py` replaced by `tools/` package — no file over 500 lines (largest: lsp_tools.py 458)
+- [x] `tools.py` replaced by `tools/` package decomposed along domain seams
 - [x] `queries/common.py` provides `bidirectional_edges()`, `scope_filter()`, `visited_tracking()` as tested sqlglot fragments
 - [x] `validation.py` and `formatters.py` extracted with tests
 - [x] `registry.py` extracted; `from chunkhound.mcp_server.tools import TOOL_REGISTRY, execute_tool` still works

@@ -163,7 +163,13 @@ ignore = []
 
 [tool.ruff.lint.per-file-ignores]
 # Tool descriptions are LLM-facing strings — wrapping them breaks formatting
-"chunkhound/mcp_server/tools/__init__.py" = ["E501"]
+"chunkhound/mcp_server/tools/__init__.py" = ["E501", "I001"]
+"chunkhound/mcp_server/tools/graph.py" = ["E501"]
+"chunkhound/mcp_server/tools/search.py" = ["E501"]
+"chunkhound/mcp_server/tools/research.py" = ["E501"]
+"chunkhound/mcp_server/tools/lsp_tools.py" = ["E501"]
+"chunkhound/mcp_server/tools/registry.py" = ["E501"]
+"chunkhound/mcp_server/tools/queries/graph.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"

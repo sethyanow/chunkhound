@@ -9,7 +9,6 @@ import os
 from collections.abc import Callable, Coroutine
 from pathlib import Path
 from typing import Any, Literal
-from urllib.parse import unquote, urlparse
 
 from chunkhound.core.types.common import Language
 from chunkhound.lsp.types import (
@@ -19,60 +18,13 @@ from chunkhound.lsp.types import (
     ServerState,
 )
 
+from .formatters import (
+    _uri_to_path,
+    call_item_to_dict,
+    diagnostic_to_dict,
+    location_to_dict,
+)
 from .registry import register_tool
-
-
-# =============================================================================
-# Formatting helpers
-# =============================================================================
-
-
-def _uri_to_path(uri: str) -> str:
-    """Convert a file:// URI to a filesystem path."""
-    if uri.startswith("file://"):
-        parsed = urlparse(uri)
-        return unquote(parsed.path)
-    return uri
-
-
-def _location_to_dict(loc: Any) -> dict[str, Any]:
-    """Convert a Location dataclass to a clean dict."""
-    return {
-        "file_path": _uri_to_path(loc.uri),
-        "line": loc.range_start_line,
-        "character": loc.range_start_char,
-        "end_line": loc.range_end_line,
-        "end_character": loc.range_end_char,
-    }
-
-
-def _call_item_to_dict(item: Any) -> dict[str, Any]:
-    """Convert a CallHierarchyItem to a clean dict."""
-    return {
-        "name": item.name,
-        "kind": item.kind,
-        "file_path": _uri_to_path(item.uri),
-        "line": item.range_start_line,
-        "character": item.range_start_char,
-        "end_line": item.range_end_line,
-        "end_character": item.range_end_char,
-        "detail": item.detail,
-    }
-
-
-def _diagnostic_to_dict(diag: Any) -> dict[str, Any]:
-    """Convert a Diagnostic to a clean dict."""
-    return {
-        "line": diag.range_start_line,
-        "character": diag.range_start_char,
-        "end_line": diag.range_end_line,
-        "end_character": diag.range_end_char,
-        "severity": diag.severity,
-        "message": diag.message,
-        "source": diag.source,
-        "code": diag.code,
-    }
-
 
 # =============================================================================
 # Dispatch handlers — each takes (client, file_uri, line, character)
@@ -86,35 +38,35 @@ async def _handle_definition(
     client: Any, file_uri: str, line: int, character: int
 ) -> dict[str, Any]:
     locations = await client.go_to_definition(file_uri, line, character)
-    return {"results": [_location_to_dict(loc) for loc in locations]}
+    return {"results": [location_to_dict(loc) for loc in locations]}
 
 
 async def _handle_references(
     client: Any, file_uri: str, line: int, character: int
 ) -> dict[str, Any]:
     locations = await client.find_references(file_uri, line, character)
-    return {"results": [_location_to_dict(loc) for loc in locations]}
+    return {"results": [location_to_dict(loc) for loc in locations]}
 
 
 async def _handle_implementations(
     client: Any, file_uri: str, line: int, character: int
 ) -> dict[str, Any]:
     locations = await client.go_to_implementation(file_uri, line, character)
-    return {"results": [_location_to_dict(loc) for loc in locations]}
+    return {"results": [location_to_dict(loc) for loc in locations]}
 
 
 async def _handle_callers(
     client: Any, file_uri: str, line: int, character: int
 ) -> dict[str, Any]:
     items = await client.incoming_calls(file_uri, line, character)
-    return {"results": [_call_item_to_dict(item) for item in items]}
+    return {"results": [call_item_to_dict(item) for item in items]}
 
 
 async def _handle_callees(
     client: Any, file_uri: str, line: int, character: int
 ) -> dict[str, Any]:
     items = await client.outgoing_calls(file_uri, line, character)
-    return {"results": [_call_item_to_dict(item) for item in items]}
+    return {"results": [call_item_to_dict(item) for item in items]}
 
 
 async def _handle_hover(
@@ -141,7 +93,7 @@ async def _handle_diagnostics(
 ) -> dict[str, Any]:
     # diagnostics only uses file_uri; line/character ignored
     diagnostics = await client.get_diagnostics(file_uri)
-    return {"results": [_diagnostic_to_dict(d) for d in diagnostics]}
+    return {"results": [diagnostic_to_dict(d) for d in diagnostics]}
 
 
 # The dispatch dict — maps operation name to handler
@@ -399,21 +351,24 @@ async def symbol_context_impl(
         except Exception:
             return None
 
-    async def _safe_definition() -> list:
+    async def _safe_definition() -> list[Any]:
         try:
-            return await client.go_to_definition(file_uri, line, character)
+            result: list[Any] = await client.go_to_definition(file_uri, line, character)
+            return result
         except Exception:
             return []
 
-    async def _safe_incoming() -> list:
+    async def _safe_incoming() -> list[Any]:
         try:
-            return await client.incoming_calls(file_uri, line, character)
+            result: list[Any] = await client.incoming_calls(file_uri, line, character)
+            return result
         except Exception:
             return []
 
-    async def _safe_outgoing() -> list:
+    async def _safe_outgoing() -> list[Any]:
         try:
-            return await client.outgoing_calls(file_uri, line, character)
+            result: list[Any] = await client.outgoing_calls(file_uri, line, character)
+            return result
         except Exception:
             return []
 
@@ -423,9 +378,9 @@ async def symbol_context_impl(
 
     # Format results using helpers
     hover = hover_result.contents if hover_result is not None else None
-    definition = [_location_to_dict(loc) for loc in definitions]
-    callers = [_call_item_to_dict(item) for item in callers_raw]
-    callees = [_call_item_to_dict(item) for item in callees_raw]
+    definition = [location_to_dict(loc) for loc in definitions]
+    callers = [call_item_to_dict(item) for item in callers_raw]
+    callees = [call_item_to_dict(item) for item in callees_raw]
 
     # FQN lookup for graph neighborhood
     relative_path = os.path.relpath(str(Path(resolved_file).resolve()), workspace_root)

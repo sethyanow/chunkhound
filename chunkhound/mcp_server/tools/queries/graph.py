@@ -8,9 +8,13 @@ filtering, and cycle tracking.
 from typing import Any
 
 import sqlglot
-from sqlglot import exp
 
-from .common import bidirectional_edges, escape_like, scope_filter, visited_tracking_columns
+from .common import (
+    bidirectional_edges,
+    escape_like,
+    scope_filter,
+    visited_tracking_columns,
+)
 
 
 def build_walk_query(

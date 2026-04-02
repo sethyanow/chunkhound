@@ -143,21 +143,22 @@ def test_default_values_in_schema():
 
 
 def test_no_duplicate_tool_dataclass():
-    """Verify there's only one Tool dataclass definition in tools.py.
+    """Verify there's only one Tool dataclass definition across the tools package.
 
     Prevents regression where Tool was defined twice (once for decorator,
-    once in old TOOL_DEFINITIONS approach).
+    once in old TOOL_DEFINITIONS approach). After decomposition, Tool lives
+    in registry.py, not __init__.py.
     """
     from pathlib import Path
 
-    tools_path = Path(__file__).parent.parent / "chunkhound" / "mcp_server" / "tools" / "__init__.py"
-    content = tools_path.read_text()
+    registry_path = Path(__file__).parent.parent / "chunkhound" / "mcp_server" / "tools" / "registry.py"
+    content = registry_path.read_text()
 
     # Count occurrences of "@dataclass\nclass Tool:"
     import re
 
     matches = re.findall(r"@dataclass\s+class Tool:", content)
-    assert len(matches) == 1, "There should be exactly one Tool dataclass definition"
+    assert len(matches) == 1, "There should be exactly one Tool dataclass definition in registry.py"
 
 
 def test_no_tool_definitions_list():
