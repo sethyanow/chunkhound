@@ -10,8 +10,10 @@ pytestmark = pytest.mark.unit
 from chunkhound.mcp_server.tools import (
     TOOL_REGISTRY,
     Tool,
-    _generate_json_schema_from_signature,
     execute_tool,
+)
+from chunkhound.mcp_server.tools.registry import (
+    _generate_json_schema_from_signature,
 )
 
 
@@ -27,8 +29,7 @@ class TestLspClientPoolWiring:
             services: Any,
             query: str,
             count: int = 5,
-        ) -> dict:
-            ...
+        ) -> dict: ...
 
         schema = _generate_json_schema_from_signature(dummy_tool)
 

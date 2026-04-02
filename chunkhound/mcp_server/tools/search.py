@@ -73,24 +73,7 @@ OPTIONAL FILTERS:
 
 OUTPUT: {results: [{file_path, content, start_line, end_line}], pagination}"""
 
-CODE_RESEARCH_DESCRIPTION = """Start here for any coding task. Call code_research first to understand the relevant code area before writing or modifying code.
-
-WORKFLOW:
-1. **Understand** — call code_research to map architecture, components, and data flow
-2. **Deepen** — call again with focused queries on specific subsystems discovered in step 1
-3. **Pinpoint** — switch to search (regex/semantic) for exact file locations and symbol references
-4. **Inspect** — use Explore/grep/read for granular line-level follow-up
-
-WHAT IT RETURNS: Cited markdown report covering architecture overview, key code locations, component relationships, and cross-file data flows.
-
-EXAMPLES:
-- "How does authentication work?" — traces the full auth flow across files
-- "What happens when a request hits /api/users?" — maps the request lifecycle
-- "Explain error handling patterns" — identifies cross-cutting concerns
-
-SCOPE: Use the path parameter to restrict analysis to a subdirectory for faster, focused results.
-
-One call replaces 5-10 manual searches. Call it liberally — understanding first, coding second."""
+# CODE_RESEARCH_DESCRIPTION moved to research.py (owns the code_research tool)
 
 
 # =============================================================================

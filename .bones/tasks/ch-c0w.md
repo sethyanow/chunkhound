@@ -1,32 +1,34 @@
 ---
 id: ch-c0w
 title: 'LSP dispatch + stats + research: cleanup and port'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 depends_on: [ch-bcw]
 parent: ch-mtq
 ---
+
 
 ## Context
 
 Three tool domains grouped because none is heavy alone:
 - **LSP tools** (lsp_impl, lsp_status_impl, symbol_context_impl): no SQL, but the dispatch chain is a long if/elif. Formatters already extracted in ch-e6v. Reflect on the dispatch pattern.
-- **Stats** (get_stats_impl): some SQL for counts/breakdowns. Port to sqlglot.
+- **Stats** (get_stats_impl): trivial SQL for counts/breakdowns. Keep raw SQL.
 - **Research** (deep_research_impl): thin validation + factory delegation. Stays thin, just moves to its own file.
 
-After this task, `_legacy_tools.py` should be empty and deletable.
+After this task, `tools/__init__.py` (currently 1034 lines with local copies of all infrastructure + remaining tool implementations) should become a thin re-export module (~30-50 lines).
 
 **Blocked by:** ch-bcw (registry in place)
-**Unlocks:** ch-mtq acceptance (final tool migration, legacy file deletion)
+**Unlocks:** ch-mtq acceptance (final tool migration, monolith cleanup)
 
 ## Requirements
 
 1. `chunkhound/mcp_server/tools/lsp_tools.py` — lsp_impl, lsp_status_impl, symbol_context_impl
-2. `chunkhound/mcp_server/tools/stats.py` — get_stats_impl with sqlglot query builders
+2. `chunkhound/mcp_server/tools/stats.py` — get_stats_impl with raw SQL (queries are trivial COUNTs + GROUP BY)
 3. `chunkhound/mcp_server/tools/research.py` — deep_research_impl
 4. LSP dispatch improved (not just moved)
-5. `_legacy_tools.py` empty and deleted
+5. `__init__.py` cleaned up to thin re-export module — all local definitions deleted (Tool, TOOL_REGISTRY, register_tool, schema gen, execute_tool, copy-loop)
 6. All existing tests pass
 
 ## Design
@@ -40,18 +42,31 @@ After this task, `_legacy_tools.py` should be empty and deletable.
 
 **stats.py** — stats tool:
 - `get_stats_impl` has SQL for symbol counts, edge counts, language breakdowns
-- Port these queries to sqlglot builders in `queries/stats.py` or inline if small enough
+- Keep raw SQL inline — queries are trivial (4 COUNTs + 1 GROUP BY), sqlglot adds no value here
 - `GET_STATS_DESCRIPTION` constant
+- **Edge case:** guard against missing `symbols`/`symbol_edges` tables (pre-population state) — catch table-not-found errors gracefully, return 0 counts
 
 **research.py** — research tool:
 - `deep_research_impl` is validation + factory delegation. No SQL. Just move, use validation helpers.
-- `CODE_RESEARCH_DESCRIPTION` constant (or this may live with search — check where it's registered)
+- `CODE_RESEARCH_DESCRIPTION` constant — move from search.py to here (it describes research, not search)
 
-**Legacy cleanup:**
-- After all functions moved, `_legacy_tools.py` should be empty
-- Delete it
-- Verify `tools/__init__.py` doesn't reference it anymore
+**`__init__.py` cleanup** (the actual monolith — there is no `_legacy_tools.py`):
+- After all tool functions moved to domain files, delete ALL local definitions from `__init__.py`: Tool class (line 92), TOOL_REGISTRY (line 106), schema gen functions (lines 109-263), register_tool (lines 265-314), PaginationInfo/SearchResponse/estimate_tokens/limit_response_size (lines 322-396), execute_tool (lines 940-1021), copy-loop hack (lines 1024-1034)
+- Keep ONLY the re-export block (lines 1-67) + domain module imports to trigger registration
+- Add `from .lsp_tools import lsp_impl, lsp_status_impl, symbol_context_impl` (new)
+- Add `from .stats import get_stats_impl` (new)
+- Add `from .research import deep_research_impl` (new, required — CLI imports `deep_research_impl` from package)
+- Verify `@register_tool` decorators in domain files import from `registry.py`, NOT from `__init__.py`
 - Verify all `@register_tool` decorators fire correctly from the new locations
+
+**Final `__init__.py` contents (~30-50 lines):**
+```
+Re-exports from registry.py: Tool, TOOL_REGISTRY, execute_tool, register_tool
+Re-exports from response.py: PaginationInfo, SearchResponse, estimate_tokens, limit_response_size, MAX_*
+Re-exports from search.py: search_impl, SEARCH_DESCRIPTION, SEARCH_DESCRIPTION_NO_RESEARCH
+Re-exports from research.py: deep_research_impl, CODE_RESEARCH_DESCRIPTION
+Domain module imports: graph, search, lsp_tools, stats, research (trigger registration)
+```
 
 ## Implementation
 
@@ -62,9 +77,10 @@ After this task, `_legacy_tools.py` should be empty and deletable.
 - **Test:** invalid operation → error response
 - **Test:** missing required params → error dict
 
-### Step 2: Write stats query builder tests
-- **File:** `tests/mcp_server/test_queries_stats.py` (if builders extracted) or `tests/mcp_server/test_stats_tool.py`
-- **Test:** stats queries generate correct SQL for symbol count, edge count, language breakdown
+### Step 2: Write stats tool tests
+- **File:** `tests/mcp_server/test_stats_tool.py`
+- **Test:** stats returns correct structure with symbol count, edge count, language breakdown
+- **Test:** stats handles empty/missing tables gracefully (returns 0 counts)
 - **Run:** ImportError expected
 
 ### Step 3: Implement lsp_tools.py
@@ -76,8 +92,8 @@ After this task, `_legacy_tools.py` should be empty and deletable.
 
 ### Step 4: Implement stats.py
 - **File:** `chunkhound/mcp_server/tools/stats.py`
-- **Port:** get_stats_impl SQL to sqlglot or keep inline if queries are simple/few
-- **Use:** validation helpers, formatters as needed
+- **Keep:** raw SQL inline — trivial COUNTs + GROUP BY
+- **Add:** error guard for missing tables (pre-population state)
 - **Register:** `@register_tool`
 
 ### Step 5: Implement research.py
@@ -86,11 +102,12 @@ After this task, `_legacy_tools.py` should be empty and deletable.
 - **Use:** validation helpers for the gate checks
 - **Register:** `@register_tool`
 
-### Step 6: Delete _legacy_tools.py
-- **Verify:** no functions remain
-- **Delete:** the file
-- **Update:** `tools/__init__.py` if it imports from _legacy_tools
-- **Run:** `uv run python -c "from chunkhound.mcp_server.tools import TOOL_REGISTRY; print(sorted(TOOL_REGISTRY.keys()))"` — verify all tools registered
+### Step 6: Clean up `__init__.py`
+- **Delete:** all local definitions (Tool, TOOL_REGISTRY, register_tool, schema gen, response types, execute_tool, copy-loop)
+- **Keep:** re-export block + domain module imports only
+- **Add:** re-exports for new modules (lsp_tools, stats, research)
+- **Verify:** `uv run python -c "from chunkhound.mcp_server.tools import TOOL_REGISTRY; print(sorted(TOOL_REGISTRY.keys()))"` — all tools registered
+- **Verify:** `uv run python -c "from chunkhound.mcp_server.tools import deep_research_impl, search_impl, execute_tool"` — CLI imports work
 
 ### Step 7: Run full test suite
 - **Run:** `uv run pytest tests/lsp/ tests/mcp_server/ -v > /tmp/final_decomp.txt 2>&1 && tail -20 /tmp/final_decomp.txt`
@@ -110,10 +127,11 @@ After this task, `_legacy_tools.py` should be empty and deletable.
 ## Success Criteria
 
 - [ ] `lsp_tools.py` has improved dispatch pattern (not if/elif chain)
-- [ ] `stats.py` has get_stats_impl with sqlglot or clean inline SQL
+- [ ] `stats.py` has get_stats_impl with raw SQL, handles missing tables gracefully
 - [ ] `research.py` has deep_research_impl
-- [ ] `_legacy_tools.py` deleted — no more monolith
+- [ ] `__init__.py` is a thin re-export module (~30-50 lines) — no local Tool/TOOL_REGISTRY/register_tool/schema gen/execute_tool/copy-loop
 - [ ] All tools registered correctly (verify via TOOL_REGISTRY)
+- [ ] CLI imports work (`from chunkhound.mcp_server.tools import deep_research_impl, search_impl, execute_tool`)
 - [ ] No file in `tools/` exceeds 500 lines
 - [ ] All existing tests pass
 - [ ] Smoke tests pass
@@ -123,4 +141,59 @@ After this task, `_legacy_tools.py` should be empty and deletable.
 
 - Don't gold-plate the LSP dispatch — a dict is enough, no need for a registry pattern
 - Don't refactor research internals — it's already thin, just move it
-- Don't leave _legacy_tools.py around "just in case" — delete it when empty
+- Don't leave local definitions in `__init__.py` — the whole point is eliminating the monolith, not just moving functions out while leaving infrastructure behind
+- Don't import `register_tool` from `__init__.py` in domain files — import from `registry.py` to avoid circular deps
+- Don't port stats SQL to sqlglot — raw SQL for trivial queries is correct here
+- Don't leave CODE_RESEARCH_DESCRIPTION in search.py — it describes the research tool, move it to research.py
+
+## Key Considerations
+
+### lsp_tools.py — dispatch dict
+
+**[Input Hostility]: Operation routing**
+- Assumption: `operation` string matches a dispatch dict key
+- Betrayal: MCP schema enforcement is client-side. At runtime, any string can arrive.
+- Consequence: `dict[key]` → KeyError; `dict.get()` → None → downstream AttributeError
+- Mitigation: `handler = DISPATCH.get(operation)` with explicit None check returning error dict. The dict pattern itself is the structural fix over if/elif.
+
+**[Dependency Treachery]: graph._graph_walk cross-import in symbol_context_impl**
+- Assumption: `from .graph import _graph_walk` succeeds
+- Betrayal: graph.py internal restructure breaks this import
+- Consequence: graph_neighborhood silently None — data loss, not crash
+- Mitigation: Already structural — try/except with None fallback. Acceptable degradation.
+
+### stats.py — raw SQL
+
+**[Temporal Betrayal]: Missing tables pre-population**
+- Assumption: `symbols` and `symbol_edges` tables exist when stats queries run
+- Betrayal: Indexing hasn't completed or failed mid-way → DuckDB CatalogException
+- Consequence: Unhandled exception propagates to MCP client
+- Mitigation: Catch CatalogException for symbol/edge queries, return 0 counts. File/chunk tables always exist (created during DB init).
+
+### research.py — description ownership
+
+**[Dependency Treachery]: CODE_RESEARCH_DESCRIPTION lives in wrong module**
+- Assumption: research.py imports its tool description from search.py
+- Betrayal: search.py modification accidentally changes research tool description. Confusing ownership.
+- Consequence: Research tool description drifts from research tool behavior
+- Mitigation: Move CODE_RESEARCH_DESCRIPTION to research.py. Update __init__.py re-export source.
+
+### __init__.py — registration wiring
+
+**[Dependency Treachery]: Silent registration failure**
+- Assumption: Importing domain modules triggers @register_tool, populating TOOL_REGISTRY
+- Betrayal: If a domain module import fails (missing dep, circular import), that tool silently doesn't register — no error, just fewer entries in TOOL_REGISTRY
+- Consequence: MCP client doesn't see the tool; execute_tool raises ValueError
+- Mitigation: Verification step (`print(sorted(TOOL_REGISTRY.keys()))`) catches this. But should also be a test assertion.
+
+**[Temporal Betrayal]: Dual registry incomplete cleanup**
+- Assumption: After cleanup, only registry.py's TOOL_REGISTRY exists
+- Betrayal: Partial cleanup leaves some tools registering into a dead local dict
+- Consequence: Tool works in direct-import tests but fails via MCP dispatch (which uses registry.py's TOOL_REGISTRY)
+- Mitigation: Delete local TOOL_REGISTRY entirely. Any stale reference → immediate ImportError. Verification step confirms all tools reachable.
+
+**[Dependency Treachery]: Circular imports in domain files**
+- Assumption: Domain files import only from registry.py, response.py, validation.py, formatters.py
+- Betrayal: If a domain file imports from __init__.py (even indirectly), and __init__.py imports the domain file → circular import
+- Consequence: ImportError or partially initialized module
+- Mitigation: Anti-pattern already blocks this. Domain files never import from `__init__.py`.
