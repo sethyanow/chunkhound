@@ -1330,7 +1330,9 @@ def _graph_walk(
         params = [symbol, depth, edge_kind, limit]
 
     # Recursive CTE: find all reachable nodes from the seed FQN
-    # Uses list_concat for visited tracking to prevent cycles
+    # Inline UNION normalizes edges to bidirectional — every edge appears
+    # as both (from→to) and (to→from) so the walk traverses in both directions.
+    # Uses list_concat for visited tracking to prevent cycles.
     nodes_sql = f"""
         WITH RECURSIVE reachable AS (
             SELECT s.fqn, s.name, s.kind, s.file_path, 0 AS depth,
@@ -1344,8 +1346,14 @@ def _graph_walk(
                    r.depth + 1,
                    list_concat(r.visited, [s2.fqn])
             FROM reachable r
-            JOIN symbol_edges e ON e.from_fqn = r.fqn
-            JOIN symbols s2 ON s2.fqn = e.to_fqn
+            JOIN (
+                SELECT from_fqn AS src, to_fqn AS dst, edge_kind
+                FROM symbol_edges
+                UNION ALL
+                SELECT to_fqn AS src, from_fqn AS dst, edge_kind
+                FROM symbol_edges
+            ) e ON e.src = r.fqn
+            JOIN symbols s2 ON s2.fqn = e.dst
             WHERE r.depth < ?
               AND NOT list_contains(r.visited, s2.fqn)
               {edge_filter}
