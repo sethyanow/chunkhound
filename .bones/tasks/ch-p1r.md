@@ -11,6 +11,7 @@ parent: ch-mtq
 
 
 
+
 ## Context
 
 Search has four modes: regex (delegated to service, no SQL in tools.py), semantic (same), symbols (direct SQL), structural (8-stage pipeline with SQL stages 2-4). The SQL lives in `_search_structural` and `_search_symbols` plus `_apply_type_filter`.
@@ -134,3 +135,7 @@ Search has four modes: regex (delegated to service, no SQL in tools.py), semanti
 - Don't forget the structural walk bidirectional fix — it's half the point of this task
 - Don't write bidirectional tests that only assert `UNION ALL` presence — that's too weak. Assert both edge directions (`from_fqn AS src` AND `to_fqn AS src`) are in the subquery
 - Don't reference `_legacy_tools.py` — source functions are in `__init__.py`
+
+## Log
+
+- [2026-04-02T21:47:37Z] [Seth] Debrief: Clean extraction following graph.py pattern. Added build_symbol_count_query not in skeleton (pagination requires separate COUNT). Re-exported search_impl for CLI backward compat (smoke test caught). ruff I001 autofix splits imports aggressively. Reflections: Skeleton had wrong source file ref (fixed by SRE). Missing count builder discovered during impl (normal TDD gap). Epic criteria remain accurate. No user corrections. No new memories.
