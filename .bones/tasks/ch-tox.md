@@ -5,8 +5,11 @@ status: active
 type: task
 priority: 1
 owner: Seth
+depends_on: [ch-h05, ch-mtq]
 parent: ch-zyz
 ---
+
+
 
 
 

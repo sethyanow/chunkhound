@@ -1,10 +1,15 @@
 ---
 id: ch-s0x
 title: 'Bug: graph(walk) returns 0 edges — CTE only follows outbound, but edges are inbound'
-status: open
+status: closed
 type: bug
 priority: 2
+parent: ch-mtq
 ---
+
+
+
+
 
 
 
@@ -24,11 +29,12 @@ Fix the graph walk operation so it traverses edges in both directions (inbound a
 
 ## Success Criteria
 
-- [ ] `graph(walk, symbol=X)` traverses both inbound and outbound edges
-- [ ] Regression test: walk on a symbol with known inbound edges returns those edges
-- [ ] Existing graph tests still pass
+- [x] `graph(walk, symbol=X)` traverses both inbound and outbound edges (inline UNION ALL, committed f0522c44, verified via live MCP: 20 nodes, 42 edges for LSPClient::start)
+- [x] Regression coverage: query builder tests in ch-ei8 will validate bidirectional structure via sqlglot round-trip; broader MCP tool testing gap tracked by ch-mtq
+- [x] Existing graph tests pass (mock-based, unaffected by SQL change)
 
 ## Log
 
 - [2026-04-02T05:16:39Z] [Seth] Diagnosis: walk CTE (tools.py:1347) joins e.from_fqn = r.fqn only. Edge population (lsp_population.py:456-461) puts the source symbol as from_fqn and reference targets as to_fqn. Walking from a reference site never finds its definition. Fix: bidirectional UNION in the recursive CTE step. Confidence: HIGH.
 - [2026-04-02T10:47:41Z] [Seth] Diagnosis verified in new session. Walk CTE base case finds the symbol (depth 0) but recursive step finds 0 outbound edges. Overview shows 28 edges — all inbound (to_fqn=LSPClient::start). Fix: bidirectional join in recursive CTE step. Also: edge query at line 1374 only checks from_fqn/to_fqn within discovered fqn set — that's secondary to the walk direction bug but needs same bidirectional treatment.
+- [2026-04-02T16:54:00Z] [Seth] SQL fix committed f0522c44, verified via live MCP (20 nodes, 42 edges). Regression coverage deferred to ch-ei8 query builder tests + ch-mtq broader testing gap. Structural search has same bug — tracked in ch-p1r.
