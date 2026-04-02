@@ -12,6 +12,7 @@ parent: ch-mtq
 
 
 
+
 ## Context
 
 Graph operations (walk, reachability, boundary, overview) are the most SQL-heavy tools. Walk already has the bidirectional fix (ch-s0x) as a reference. This task ports all four to sqlglot query builders and rebuilds the tool functions to be thin.
@@ -126,3 +127,4 @@ Full walk query spike completed and verified during planning — see conversatio
 ## Log
 
 - [2026-04-02T20:48:55Z] [Seth] Completed. 7 query builders (walk, walk_edges, reachability_all_symbols, reachability_reachable, boundary, overview, overview_breakdown) in queries/graph.py. Thin tools in graph.py. __init__.py 1832→1505 lines. Dual-TOOL_REGISTRY transition wiring discovered and handled. 35 new tests, all 1819 pass.
+- [2026-04-02T20:50:08Z] [Seth] Debrief: Dual-TOOL_REGISTRY transition wiring discovered — __init__.py shadows registry.py, domain modules need copy loop. Reachability split to 2 builders for mock test compat. sqlglot NOT LIKE normalization. Reflections: skeleton had wrong file reference (_legacy_tools.py → __init__.py), corrected during SRE. Next: ch-p1r follows same pattern, inherits dual-registry wiring.
