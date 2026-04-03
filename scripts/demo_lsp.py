@@ -66,51 +66,6 @@ def _sep(widths: tuple[int, int] = (20, 32)) -> None:
     print(f"  {'─' * widths[0]} {'─' * widths[1]} {'─' * 10}")
 
 
-# ── Demo Services ──────────────────────────────────────────────
-
-
-class _DemoProvider:
-    """Minimal provider implementing execute_query for demo tool dispatch."""
-
-    def __init__(self, db_path: str | Path) -> None:
-        import duckdb
-
-        self._conn = duckdb.connect(str(db_path), read_only=True)
-
-    def execute_query(
-        self, query: str, params: list | None = None,
-    ) -> list[dict]:
-        result = self._conn.execute(query, params or [])
-        columns = [desc[0] for desc in result.description]
-        return [dict(zip(columns, row)) for row in result.fetchall()]
-
-    def close(self) -> None:
-        try:
-            self._conn.close()
-        except Exception:
-            pass
-
-
-class _DemoServices:
-    """Minimal services bundle for execute_tool dispatch in demo script."""
-
-    def __init__(self, db_path: str | Path) -> None:
-        self.provider = _DemoProvider(db_path)
-
-    def close(self) -> None:
-        self.provider.close()
-
-
-def _build_demo_services(db_path: str | Path) -> _DemoServices:
-    """Build minimal services wrapper for demo tool execution.
-
-    The graph and search(symbols) tools only need services.provider.execute_query.
-    This avoids pulling in the full registry/config stack, which can conflict
-    with a running MCP server's DB lock.
-    """
-    return _DemoServices(db_path)
-
-
 # ── 1. LSP Client ──────────────────────────────────────────────
 
 
@@ -680,17 +635,18 @@ def demo_cross_file_edge_health(conn) -> bool:
 # ── 11. Search Symbols (Phase 3) ─────────────────────────────
 
 
-def demo_search_symbols(result: dict, query: str = "parse") -> bool:
-    """Phase 3: search(type=symbols) — evaluate execute_tool result.
+def demo_search_symbols(conn, query: str = "parse") -> bool:
+    """Phase 3: search(type=symbols) — query the indexed symbols table.
 
-    Takes the result dict from execute_tool("search", ..., type="symbols").
-    Returns True if matching symbols were found.
+    Uses the same SQL pattern as the MCP search tool's symbols mode.
+    Verifies the symbols table is queryable and returns meaningful results.
     """
-    if "error" in result:
-        print(f"  ERROR: {result.get('message', result['error'])}")
-        return False
-
-    rows = result.get("results", [])
+    rows = conn.execute(
+        "SELECT fqn, name, kind, language, file_path, range_start, range_end "
+        "FROM symbols WHERE name ILIKE '%' || ? || '%' "
+        "ORDER BY name LIMIT 10",
+        [query],
+    ).fetchall()
 
     print(f"  Query: {query!r}")
     print(f"  Results: {len(rows)}\n")
@@ -701,13 +657,8 @@ def demo_search_symbols(result: dict, query: str = "parse") -> bool:
 
     _row("Name", "Kind", "File", widths=(28, 12))
     _sep(widths=(28, 12))
-    for row in rows:
-        name = row.get("name") or "?"
-        kind = row.get("kind") or "?"
-        fpath = row.get("file_path") or "?"
-        rs = row.get("range_start", "?")
-        re_ = row.get("range_end", "?")
-        _row(name, kind, f"{fpath}:{rs}-{re_}", widths=(28, 12))
+    for fqn, name, kind, lang, fpath, rs, re in rows:
+        _row(name, kind or "?", f"{fpath}:{rs}-{re}", widths=(28, 12))
 
     return True
 
@@ -715,18 +666,61 @@ def demo_search_symbols(result: dict, query: str = "parse") -> bool:
 # ── 12. Graph Walk (Phase 3) ────────────────────────────────
 
 
-def demo_graph_walk(result: dict, symbol: str = "LSPClient") -> bool:
-    """Phase 3: graph(walk) — evaluate execute_tool result.
+def demo_graph_walk(conn, symbol: str = "LSPClient") -> bool:
+    """Phase 3: graph(walk) — traverse symbol dependencies from a starting FQN.
 
-    Takes the result dict from execute_tool("graph", ..., operation="walk").
-    Returns True if the walk found edges (connected symbols), False if isolated.
+    Uses the same recursive CTE as the MCP graph tool's walk operation.
+    Returns True if the walk finds edges (connected symbols), False if isolated.
     """
-    if "error" in result:
-        print(f"  ERROR: {result.get('message', result['error'])}")
-        return False
+    # Recursive CTE matching tools.py::_graph_walk
+    nodes_sql = """
+        WITH RECURSIVE reachable AS (
+            SELECT s.fqn, s.name, s.kind, s.file_path, 0 AS depth,
+                   [s.fqn] AS visited
+            FROM symbols s
+            WHERE s.fqn = ?
 
-    nodes = result.get("results", [])
-    edges = result.get("edges", [])
+            UNION ALL
+
+            SELECT s2.fqn, s2.name, s2.kind, s2.file_path,
+                   r.depth + 1,
+                   list_concat(r.visited, [s2.fqn])
+            FROM reachable r
+            JOIN symbol_edges e ON e.from_fqn = r.fqn
+            JOIN symbols s2 ON s2.fqn = e.to_fqn
+            WHERE r.depth < ?
+              AND NOT list_contains(r.visited, s2.fqn)
+        )
+        SELECT DISTINCT fqn, name, kind, file_path, depth
+        FROM reachable
+        ORDER BY depth, name
+        LIMIT ?
+    """
+    nodes = conn.execute(nodes_sql, [symbol, 2, 15]).fetchall()
+
+    edges_sql = """
+        SELECT e.from_fqn, e.to_fqn, e.edge_kind, e.from_file, e.to_file
+        FROM symbol_edges e
+        WHERE e.from_fqn IN (
+            SELECT DISTINCT fqn FROM (
+                WITH RECURSIVE reachable AS (
+                    SELECT s.fqn, 0 AS depth, [s.fqn] AS visited
+                    FROM symbols s WHERE s.fqn = ?
+                    UNION ALL
+                    SELECT s2.fqn, r.depth + 1,
+                           list_concat(r.visited, [s2.fqn])
+                    FROM reachable r
+                    JOIN symbol_edges e2 ON e2.from_fqn = r.fqn
+                    JOIN symbols s2 ON s2.fqn = e2.to_fqn
+                    WHERE r.depth < ?
+                      AND NOT list_contains(r.visited, s2.fqn)
+                )
+                SELECT fqn FROM reachable
+            )
+        )
+        LIMIT ?
+    """
+    edges = conn.execute(edges_sql, [symbol, 2, 50]).fetchall()
 
     print(f"  Start symbol: {symbol}")
     print(f"  Nodes found:  {len(nodes)}")
@@ -735,22 +729,16 @@ def demo_graph_walk(result: dict, symbol: str = "LSPClient") -> bool:
     if nodes:
         _row("Symbol", "Kind", "Depth", widths=(32, 12))
         _sep(widths=(32, 12))
-        for node in nodes:
-            name = node.get("name") or "?"
-            kind = node.get("kind") or "?"
-            depth = node.get("depth", "?")
-            _row(name, kind, str(depth), widths=(32, 12))
+        for fqn, name, kind, fpath, depth in nodes:
+            _row(name, kind or "?", str(depth), widths=(32, 12))
 
     if edges:
-        print("\n  Edges:")
-        for edge in edges[:10]:
-            ek = edge.get("edge_kind") or "?"
-            frm = edge.get("from_symbol") or "?"
-            to = edge.get("to_symbol") or "?"
+        print(f"\n  Edges:")
+        for frm, to, ek, ff, tf in edges[:10]:
             print(f"    {ek:<12} {frm} → {to}")
 
     if not edges:
-        print("\n  No edges found — symbol may be isolated or edge data sparse")
+        print(f"\n  No edges found — symbol may be isolated or edge data sparse")
         return False
 
     return True
@@ -759,17 +747,23 @@ def demo_graph_walk(result: dict, symbol: str = "LSPClient") -> bool:
 # ── 13. Graph Boundary (Phase 3) ────────────────────────────
 
 
-def demo_graph_boundary(result: dict, scope: str = "chunkhound/lsp/") -> bool:
-    """Phase 3: graph(boundary) — evaluate execute_tool result.
+def demo_graph_boundary(conn, scope: str = "chunkhound/lsp/") -> bool:
+    """Phase 3: graph(boundary) — find edges crossing a scope boundary.
 
-    Takes the result dict from execute_tool("graph", ..., operation="boundary").
-    Returns True if cross-scope edges were found.
+    Uses the same SQL as the MCP graph tool's boundary operation.
+    Returns True if cross-scope edges exist.
     """
-    if "error" in result:
-        print(f"  ERROR: {result.get('message', result['error'])}")
-        return False
-
-    edges = result.get("edges", [])
+    sql = """
+        SELECT e.from_fqn, e.to_fqn, e.edge_kind, e.from_file, e.to_file
+        FROM symbol_edges e
+        WHERE (
+            (e.from_file LIKE ? || '%' AND NOT e.to_file LIKE ? || '%')
+            OR
+            (NOT e.from_file LIKE ? || '%' AND e.to_file LIKE ? || '%')
+        )
+        LIMIT ?
+    """
+    edges = conn.execute(sql, [scope, scope, scope, scope, 20]).fetchall()
 
     print(f"  Scope: {scope}")
     print(f"  Boundary edges: {len(edges)}\n")
@@ -778,10 +772,7 @@ def demo_graph_boundary(result: dict, scope: str = "chunkhound/lsp/") -> bool:
         print(f"  No edges cross the {scope} boundary")
         return False
 
-    for edge in edges[:10]:
-        ek = edge.get("edge_kind") or "?"
-        ff = edge.get("from_file") or "?"
-        tf = edge.get("to_file") or "?"
+    for frm_fqn, to_fqn, ek, ff, tf in edges[:10]:
         direction = "→" if ff.startswith(scope) else "←"
         print(f"    {ek:<12} {ff} {direction} {tf}")
 
@@ -965,57 +956,33 @@ async def main() -> int:
 
     # ── Phase 3 (MCP tool layer shakedown) ──
     if db_path:
-        from chunkhound.lsp.client import LSPClientPool
-        from chunkhound.mcp_server.tools.registry import execute_tool
-
-        demo_services = _build_demo_services(db_path)
-        lsp_pool = LSPClientPool()
-
+        conn = _open_db(db_path)
         try:
-            # DB-only Phase 3 tools (graph, search symbols)
             _hdr(11, "SEARCH SYMBOLS — Phase 3")
-            try:
-                search_result = await execute_tool(
-                    "search", demo_services, None,
-                    {"type": "symbols", "query": "parse"},
-                )
-                results["search_symbols"] = demo_search_symbols(
-                    search_result, query="parse",
-                )
-            except Exception as e:
-                print(f"  ERROR: {e}")
-                results["search_symbols"] = False
+            results["search_symbols"] = demo_search_symbols(conn, query="parse")
 
             _hdr(12, "GRAPH WALK — Phase 3")
-            try:
-                walk_result = await execute_tool(
-                    "graph", demo_services, None,
-                    {"operation": "walk", "symbol": "LSPClient",
-                     "depth": 2, "limit": 15},
-                )
-                results["graph_walk"] = demo_graph_walk(walk_result, symbol="LSPClient")
-            except Exception as e:
-                print(f"  ERROR: {e}")
-                results["graph_walk"] = False
+            results["graph_walk"] = demo_graph_walk(conn)
 
             _hdr(13, "GRAPH BOUNDARY — Phase 3")
-            try:
-                boundary_result = await execute_tool(
-                    "graph", demo_services, None,
-                    {"operation": "boundary", "scope": "chunkhound/lsp/"},
-                )
-                results["graph_boundary"] = demo_graph_boundary(
-                    boundary_result, scope="chunkhound/lsp/",
-                )
-            except Exception as e:
-                print(f"  ERROR: {e}")
-                results["graph_boundary"] = False
+            results["graph_boundary"] = demo_graph_boundary(conn)
+        finally:
+            conn.close()
 
-            # LSP-dependent Phase 3 demos — need a live LSP client pool
-            # Pick a known symbol position from Phase 1 output (LSPClient class def)
-            demo_line = 31  # LSPClient class definition (0-based for LSP)
-            demo_char = 6   # "class LSPClient" — the name
+        # LSP-dependent Phase 3 demos — need a live LSP client pool + services
+        from chunkhound.lsp.client import LSPClientPool
+        from chunkhound.mcp_server.tools import execute_tool
 
+        lsp_pool = LSPClientPool()
+
+        # Minimal services wrapper for tools that need services.provider.execute_query
+        demo_services = _build_demo_services(db_path)
+
+        # Pick a known symbol position from Phase 1 output (LSPClient class def)
+        demo_line = 31  # LSPClient class definition (0-based for LSP)
+        demo_char = 6   # "class LSPClient" — the name
+
+        try:
             _hdr(14, "LSP DEFINITION — Phase 3")
             print(f"  Target: {target}, line {demo_line}, char {demo_char}")
             try:
@@ -1058,7 +1025,6 @@ async def main() -> int:
                 results["symbol_context"] = False
         finally:
             await lsp_pool.stop_all()
-            demo_services.close()
 
     # Summary
     section_num = 17 if db_path else 5
