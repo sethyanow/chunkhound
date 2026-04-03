@@ -287,3 +287,7 @@
 {"timestamp":"2026-04-03T04:07:25.163294+00:00","actor":"Seth","event_type":"logged","task_id":"ch-tox","details":{"message":"Fixed 3 bugs from Phase 3 acceptance: (1) boundary cartesian product SQL, (2) LSP 0-based output→1-based, (3) class-level edge population via selectionRange. All TDD: 12 files, 358 lines added. 2725 tests pass."}}
 {"timestamp":"2026-04-03T04:51:59.691985+00:00","actor":"Seth","event_type":"logged","task_id":"ch-tox","details":{"message":"Fixed graph(reachability) ESCAPE double-escaping bug. scope_filter was round-tripping through sqlglot which doubled the backslash. Changed to raw SQL fragment. 16/16 MCP tool operations now working. Pyright keyword-position bug logged as pyr-b68."}}
 {"timestamp":"2026-04-03T04:58:29.834173+00:00","actor":"Seth","event_type":"closed","task_id":"ch-tox","details":{"notes":null}}
+{"timestamp":"2026-04-03T05:03:41.435245+00:00","actor":"Seth","event_type":"closed","task_id":"ch-zyz","details":{"notes":null}}
+{"timestamp":"2026-04-03T05:06:07.205647+00:00","actor":"Seth","event_type":"created","task_id":"ch-ef9","details":{}}
+{"timestamp":"2026-04-03T05:06:12.697690+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"parent-child","to":"ch-ef9"}}
+{"timestamp":"2026-04-03T05:06:12.698097+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"blocks","to":"ch-ef9"}}
