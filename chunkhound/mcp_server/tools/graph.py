@@ -75,6 +75,7 @@ def _graph_walk(
     depth: int,
     edge_kind: str | None,
     limit: int,
+    directed: bool = False,
 ) -> dict[str, Any]:
     """Walk connected symbols from a starting FQN."""
     err = require_param("symbol", symbol)
@@ -85,6 +86,7 @@ def _graph_walk(
 
     sql, params = build_walk_query(
         symbol=symbol, depth=depth, edge_kind=edge_kind, limit=limit,
+        directed=directed,
     )
     nodes = services.provider.execute_query(sql, params)
 

@@ -291,3 +291,4 @@
 {"timestamp":"2026-04-03T05:06:07.205647+00:00","actor":"Seth","event_type":"created","task_id":"ch-ef9","details":{}}
 {"timestamp":"2026-04-03T05:06:12.697690+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"parent-child","to":"ch-ef9"}}
 {"timestamp":"2026-04-03T05:06:12.698097+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"blocks","to":"ch-ef9"}}
+{"timestamp":"2026-04-03T07:07:08.135585+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-ef9","details":{"actor":"Seth"}}

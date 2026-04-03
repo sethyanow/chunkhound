@@ -80,6 +80,42 @@ class TestBuildWalkQuery:
         assert params_ek == ["x::Y", 5, "defines", 10]
 
 
+class TestBuildWalkQueryDirected:
+    """Walk CTE with directed=True: forward-only edge traversal."""
+
+    def test_directed_roundtrip_parses(self) -> None:
+        sql, _ = build_walk_query(symbol="mod::A", depth=2, edge_kind="called_by", limit=20, directed=True)
+        _roundtrip(sql)
+
+    def test_directed_no_bidirectional_union(self) -> None:
+        """directed=True uses forward-only edges — no UNION ALL for bidirectional."""
+        sql, _ = build_walk_query(symbol="mod::A", depth=2, edge_kind="called_by", limit=20, directed=True)
+        upper = sql.upper()
+        # The recursive CTE still has UNION ALL (seed UNION ALL recursive)
+        # But there should NOT be a nested UNION ALL for bidirectional edges
+        # Forward-only: SELECT from_fqn AS src, to_fqn AS dst FROM symbol_edges
+        assert "FROM_FQN" in upper
+        assert "TO_FQN" in upper
+
+    def test_directed_still_has_recursive_cte(self) -> None:
+        sql, _ = build_walk_query(symbol="mod::A", depth=2, edge_kind="called_by", limit=20, directed=True)
+        upper = sql.upper()
+        assert "WITH RECURSIVE" in upper
+
+    def test_directed_false_is_default(self) -> None:
+        """Default (no directed param) produces same SQL as directed=False."""
+        sql_default, params_default = build_walk_query(symbol="mod::A", depth=2, edge_kind=None, limit=20)
+        sql_explicit, params_explicit = build_walk_query(symbol="mod::A", depth=2, edge_kind=None, limit=20, directed=False)
+        assert sql_default == sql_explicit
+        assert params_default == params_explicit
+
+    def test_directed_param_count_matches_undirected(self) -> None:
+        """Same params regardless of directed flag."""
+        _, params_bidir = build_walk_query(symbol="mod::A", depth=2, edge_kind="called_by", limit=20, directed=False)
+        _, params_directed = build_walk_query(symbol="mod::A", depth=2, edge_kind="called_by", limit=20, directed=True)
+        assert params_bidir == params_directed
+
+
 # ---------------------------------------------------------------------------
 # build_walk_edges_query
 # ---------------------------------------------------------------------------

@@ -1,11 +1,13 @@
 ---
 id: ch-ef9
 title: impact_cascade — transitive caller tree with type annotations
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-dar
 ---
+
 
 ## Context
 First Phase 4 fusion tool. Composes Phase 3 primitives (`_graph_walk` + symbols table)
@@ -65,8 +67,8 @@ Test: given a symbol in `symbols` table at a known position, `_resolve_start_fqn
 
 ### Step 2: Implement `_resolve_start_fqn`
 File: `chunkhound/mcp_server/tools/fusion.py` (new)
-Signature: `_resolve_start_fqn(services: Any, file: str, line: int, character: int) -> str | dict[str, Any]`
-FQN lookup from `symbol_context_impl` pattern. Returns FQN string or error dict. Converts 1-based line to 0-based for DB.
+Signature: `_resolve_start_fqn(services: Any, file: str, line: int, character: int, workspace_root: str) -> str | dict[str, Any]`
+FQN lookup from `symbol_context_impl` pattern (lsp_tools.py:390-397). Normalize `file` to relative path via `os.path.relpath(Path(file).resolve(), workspace_root)` before querying. Handle `file://` URIs. Returns FQN string or error dict. Converts 1-based line to 0-based for DB range query (`range_start <= line AND range_end >= line`). `character` accepted for API consistency but unused in DB query.
 
 ### Step 3: Write failing test — type signature decoration
 Test: given walk result nodes, `_annotate_type_signatures(services, nodes)` adds `type_signature` from DB. Nodes without signatures get `None`.
@@ -82,17 +84,29 @@ Test: given flat nodes with `depth` and edges, `_build_caller_tree(root_fqn, nod
 Signature: `_build_caller_tree(root_fqn: str, nodes: list[dict], edges: list[dict]) -> dict[str, Any]`
 Adjacency map from edges, BFS from root. Each node: `{fqn, name, kind, file_path, hop_distance, type_signature, children}`.
 
-### Step 7: Write failing test — full tool integration
+### Step 7: Write failing test + implement directed walk parameter
+File (test): `tests/mcp_server/test_queries_graph.py` (existing, add tests)
+File (impl): `chunkhound/mcp_server/tools/queries/graph.py` + `chunkhound/mcp_server/tools/graph.py`
+**Why:** `build_walk_query` uses `bidirectional_edges()` — traverses BOTH directions. With `edge_kind="called_by"`, bidirectional returns callers (correct: forward) AND callees (wrong: reverse). Impact cascade requires forward-only traversal.
+- Add `directed: bool = False` param to `build_walk_query`. When `True`, use `SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges` instead of `bidirectional_edges()`.
+- Add `directed: bool = False` param to `_graph_walk`, pass through to `build_walk_query`.
+- Test: mock data with both `(A, B, "calls")` and `(B, A, "called_by")` edges. Verify directed walk from B with `edge_kind="called_by"` returns A (caller) but NOT other nodes reachable via reverse edges. Existing undirected tests must still pass.
+
+### Step 8: Write failing test — full tool integration
 Test: mock `services.provider.execute_query` with canned data. Call `impact_cascade_impl`. Verify output shape, `@register_tool` registration in `TOOL_REGISTRY`.
+Additional test cases:
+- **Callee exclusion:** Mock data includes both `calls` and `called_by` edges → only callers appear in tree (negative assertion on callees).
+- **Empty callers:** Root symbol exists, walk returns root only → output has `children: [], total_nodes: 1, max_depth: 0`.
+- **NULL type_signature:** Some nodes lack signatures → `type_signature: null` in output, no crash.
 
-### Step 8: Implement `impact_cascade_impl`
-Signature: `async def impact_cascade_impl(services: Any, file: str, line: int, character: int, depth: int = 3) -> dict[str, Any]`
-`@register_tool(name="impact_cascade")`. Clamp depth 1-10. Compose the 4 helpers.
+### Step 9: Implement `impact_cascade_impl`
+Signature: `async def impact_cascade_impl(services: Any, config: Any, file: str, line: int, character: int, depth: int = 3) -> dict[str, Any]`
+`@register_tool(name="impact_cascade")`. Clamp depth 1-10. Pass `config.target_dir` as workspace_root to `_resolve_start_fqn`. Internal `_graph_walk` call uses `limit=100` (10x the graph tool's default 20 — fusion tools need wider reach). Compose: resolve → walk(directed=True, edge_kind="called_by") → annotate → build tree.
 
-### Step 9: Wire into `__init__.py`
+### Step 10: Wire into `__init__.py`
 Add `from . import fusion as fusion  # noqa: F401` to domain module imports.
 
-### Step 10: Verify live via MCP
+### Step 11: Verify live via MCP
 Call `impact_cascade` on a known central function via MCP tool. Verify tree, hop distances, type signatures.
 
 ## Success Criteria
@@ -103,11 +117,26 @@ Call `impact_cascade` on a known central function via MCP tool. Verify tree, hop
 - [ ] Output is structured tree: `{root: {fqn, hop_distance, type_signature, children}, total_nodes, max_depth}`
 - [ ] Depth clamped 1-10, default 3
 - [ ] Zero LLM/embedding calls — deterministic only
+- [ ] Directed traversal: only callers in tree, no callees (verified by negative assertion in tests)
+- [ ] Root with no callers → `{root: {..., children: []}, total_nodes: 1, max_depth: 0}`
+- [ ] NULL type_signatures → `null` in output nodes, no crash
 - [ ] All new code has failing tests before implementation
 - [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
+- [ ] `uv run pytest tests/mcp_server/test_queries_graph.py -v` → all pass (directed param tests)
+
+## Key Considerations
+- `character` param accepted in `_resolve_start_fqn` for API consistency but unused in DB range query — only `line` matters for `range_start`/`range_end` matching
+- Cycle detection relies on `_graph_walk`'s CTE `visited` list — no additional handling needed in fusion code
+- Edge semantics: `(from_fqn, to_fqn, "called_by")` means from_fqn is called by to_fqn → in tree, to_fqn is a child of from_fqn (to_fqn is the caller)
+- "Mechanical vs logic" classification: type_signature presence enables agent-side interpretation (signature change = mechanical impact, body-only change = logic impact). The tool provides the data; classification is agent-side, not computed here.
+- IN-clause parameterization for `_annotate_type_signatures`: generate `?` placeholders dynamically for DuckDB `WHERE fqn IN (?, ?, ...)` pattern
+- **Path normalization (adversarial):** `_resolve_start_fqn` must normalize `file` to relative path via `os.path.relpath(Path(file).resolve(), workspace_root)`. Without this, absolute paths or URIs silently return "no symbol" even when indexed. Follow `symbol_context_impl` pattern (lsp_tools.py:391).
+- **Walk limit (adversarial):** Internal `_graph_walk` call uses `limit=100`. The graph MCP tool defaults to 20 (suitable for interactive queries); fusion tools need wider reach for complete caller trees. 100 bounds memory while covering deep hierarchies.
+- **Tree root guard (adversarial):** `_build_caller_tree` should handle root_fqn missing from nodes list → return error dict. Prevents fragile coupling to upstream FQN-check always succeeding.
 
 ## Anti-Patterns
 - NO live LSP hover for type signatures — use symbols.type_signature column
 - NO `execute_tool` dispatch — direct function calls for internal composition
 - NO prose output — structured dicts only
-- NO reimplementing walk traversal — compose `_graph_walk` from graph.py
+- NO reimplementing walk traversal — compose `_graph_walk` from graph.py with `directed=True` parameter (forward-only edge traversal via `build_walk_query`)
+- NO bidirectional walk for impact_cascade — directed walk is mandatory to exclude callees from the caller tree

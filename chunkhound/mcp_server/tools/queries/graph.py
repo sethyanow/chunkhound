@@ -18,14 +18,31 @@ from .common import (
 
 
 def build_walk_query(
-    symbol: str, depth: int, edge_kind: str | None, limit: int
+    symbol: str,
+    depth: int,
+    edge_kind: str | None,
+    limit: int,
+    directed: bool = False,
 ) -> tuple[str, list[Any]]:
-    """Recursive CTE: find all reachable nodes from seed FQN, bidirectional.
+    """Recursive CTE: find all reachable nodes from seed FQN.
+
+    Args:
+        directed: When True, traverse forward edges only (from_fqn → to_fqn).
+            When False (default), traverse bidirectionally. Directed mode is
+            needed for impact_cascade (callers only, not callees).
 
     Returns (sql, params) where params are [symbol, depth, edge_kind?, limit].
     """
-    # Build the bidirectional edge subquery
-    bidir = bidirectional_edges()
+    # Edge subquery: bidirectional or forward-only
+    if directed:
+        forward = sqlglot.parse_one(
+            "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges",
+            dialect="duckdb",
+        )
+        edge_sql = forward.sql(dialect="duckdb")
+    else:
+        bidir = bidirectional_edges()
+        edge_sql = bidir.sql(dialect="duckdb")
 
     # Cycle tracking expressions
     append_expr, contains_expr = visited_tracking_columns("s2", "fqn")
@@ -39,7 +56,6 @@ def build_walk_query(
     params.append(limit)
 
     # Build the full recursive CTE as raw SQL composing the sqlglot fragments
-    bidir_sql = bidir.sql(dialect="duckdb")
     append_sql = append_expr.sql(dialect="duckdb")
     contains_sql = contains_expr.sql(dialect="duckdb")
 
@@ -56,7 +72,7 @@ def build_walk_query(
                    r.depth + 1,
                    {append_sql}
             FROM reachable r
-            JOIN ({bidir_sql}) e ON e.src = r.fqn
+            JOIN ({edge_sql}) e ON e.src = r.fqn
             JOIN symbols s2 ON s2.fqn = e.dst
             WHERE r.depth < ?
               AND NOT {contains_sql}

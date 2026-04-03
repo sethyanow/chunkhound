@@ -72,6 +72,7 @@ from .search import (
 # ---------------------------------------------------------------------------
 # Domain module imports — trigger @register_tool registration
 # ---------------------------------------------------------------------------
+from . import fusion as fusion  # noqa: F401
 from . import graph as graph  # noqa: F401
 from . import lsp_tools as lsp_tools  # noqa: F401
 from . import research as research  # noqa: F401
