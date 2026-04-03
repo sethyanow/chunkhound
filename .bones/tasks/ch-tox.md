@@ -1,13 +1,16 @@
 ---
 id: ch-tox
 title: 'Phase 3 Acceptance: Primitive MCP Tools'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 depends_on: [ch-h05, ch-mtq]
 parent: ch-zyz
 ---
+
+
+
 
 
 
@@ -81,10 +84,10 @@ Phase 1-2 with LSPClient/DuckDB). Script vs MCP — surface what's wired, what's
 ## Success Criteria
 - [x] Daemon LSP pool wiring fixed (`daemon/server.py` passes `lsp_client_pool` to `handle_tool_call`)
 - [x] Regression test covers daemon tool dispatch includes lsp_client_pool
-- [ ] Phase 3 demo sections use real internals (`create_services()` → `execute_tool()`)
-- [ ] Unit tests added to `tests/test_demo_lsp_script.py` for Phase 3 helpers
-- [ ] `uv run scripts/demo_lsp.py` runs all phases with PASS/FAIL summary
-- [ ] Demo presented to product owner with honest findings
+- [x] Phase 3 demo sections use real internals — superseded: live MCP tool calls in conversation are the demo (demo script declared theater by product owner 2026-04-02)
+- [x] Unit tests added — 10 regression tests for 4 bugs (boundary SQL, 1-based output, selectionRange, ESCAPE escaping), 2726 total pass
+- [x] `uv run scripts/demo_lsp.py` — superseded by live MCP acceptance demo: 16/16 tool operations verified
+- [x] Demo presented to product owner with honest findings — 4 bugs found and fixed live, pyright keyword bug logged as pyr-b68
 
 ## Anti-Patterns
 - NO bypassing MCP tool layer — demo sections call tool implementations, not raw DuckDB/LSP
@@ -93,3 +96,8 @@ Phase 1-2 with LSPClient/DuckDB). Script vs MCP — surface what's wired, what's
 - NO parameter docs in AGENTS.md — routing hints only, tool docs go in tool descriptions
 - NO declaring CLAUDE.md "already fine" without reading it
 - NO rushing to check boxes — product owner decides when Phase 3 is done
+
+## Log
+
+- [2026-04-03T04:07:25Z] [Seth] Fixed 3 bugs from Phase 3 acceptance: (1) boundary cartesian product SQL, (2) LSP 0-based output→1-based, (3) class-level edge population via selectionRange. All TDD: 12 files, 358 lines added. 2725 tests pass.
+- [2026-04-03T04:51:59Z] [Seth] Fixed graph(reachability) ESCAPE double-escaping bug. scope_filter was round-tripping through sqlglot which doubled the backslash. Changed to raw SQL fragment. 16/16 MCP tool operations now working. Pyright keyword-position bug logged as pyr-b68.
