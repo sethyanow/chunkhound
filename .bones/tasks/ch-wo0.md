@@ -1,12 +1,13 @@
 ---
 id: ch-wo0
 title: cross_language_check — exported symbol mismatches across scopes
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-dar
 ---
+
 
 
 
@@ -132,21 +133,21 @@ File: `tests/mcp_server/test_adversarial_decomp.py`
 Add `"cross_language_check"` to `EXPECTED_TOOLS` set. Update docstring count (9→10).
 
 ## Success Criteria
-- [ ] `_query_scope_symbols` returns grouped symbols by name for a scope prefix
-- [ ] `_extract_arity` parses parameter count from Python, TS, and C-style signatures
-- [ ] `_extract_arity` strips `self`/`cls` from Python signatures
-- [ ] `_extract_arity` returns `None` for missing/unparseable signatures (including unbalanced parens)
-- [ ] `_extract_arity` correctly handles generic types with commas (`dict[str, int]` → 1)
-- [ ] `_extract_arity` correctly handles trailing commas (`(x: int,)` → 1)
-- [ ] `_compare_scope_symbols` detects arity mismatches between matched names
-- [ ] `_compare_scope_symbols` detects kind mismatches (Function vs Class)
-- [ ] `_compare_scope_symbols` reports missing symbols (name in one scope but not other)
-- [ ] `_compare_scope_symbols` does NOT report mismatch when both arities are None
-- [ ] `cross_language_check_impl` registered in TOOL_REGISTRY via `@register_tool`
-- [ ] Output is structured: `{scope_a, scope_b, mismatches, missing_in_a, missing_in_b, total_compared, total_mismatches}`
-- [ ] Zero LLM/embedding calls — deterministic only
-- [ ] All new code has failing tests before implementation
-- [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
+- [x] `_query_scope_symbols` returns grouped symbols by name for a scope prefix
+- [x] `_extract_arity` parses parameter count from Python, TS, and C-style signatures
+- [x] `_extract_arity` strips `self`/`cls` from Python signatures
+- [x] `_extract_arity` returns `None` for missing/unparseable signatures (including unbalanced parens)
+- [x] `_extract_arity` correctly handles generic types with commas (`dict[str, int]` → 1)
+- [x] `_extract_arity` correctly handles trailing commas (`(x: int,)` → 1)
+- [x] `_compare_scope_symbols` detects arity mismatches between matched names
+- [x] `_compare_scope_symbols` detects kind mismatches (Function vs Class)
+- [x] `_compare_scope_symbols` reports missing symbols (name in one scope but not other)
+- [x] `_compare_scope_symbols` does NOT report mismatch when both arities are None
+- [x] `cross_language_check_impl` registered in TOOL_REGISTRY via `@register_tool`
+- [x] Output is structured: `{scope_a, scope_b, mismatches, missing_in_a, missing_in_b, total_compared, total_mismatches}`
+- [x] Zero LLM/embedding calls — deterministic only
+- [x] All new code has failing tests before implementation
+- [x] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
 
 ## Key Considerations
 - Arity extraction is a heuristic, not a parser. It handles common patterns (Python, TS, C) including generic type parameters with commas (e.g., `dict[str, int]` → 1 param, not 2) via nesting-aware comma counting. Will fail on truly exotic signatures (function pointers as params, C++ template metaprogramming). Acceptable for v1 — the tool flags potential mismatches, not proven ones.

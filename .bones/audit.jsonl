@@ -305,3 +305,4 @@
 {"timestamp":"2026-04-03T12:53:32.240172+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"blocks","to":"ch-wo0"}}
 {"timestamp":"2026-04-03T13:11:33.539341+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-wo0","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-03T13:17:22.537431+00:00","actor":"Seth","event_type":"logged","task_id":"ch-wo0","details":{"message":"SRE review: APPROVED with updates. (1) MAJOR: _extract_arity design upgraded to nesting-aware comma counting — dict[str,int] was miscounted. Added 5 test cases: generics, trailing comma, unbalanced parens. (2) MINOR: Step 2 switched from hand-rolled escape_like to scope_filter helper. (3) Adversarial: trailing commas, unbalanced parens, empty scope, __init__ fan-out, overlapping scopes — all addressed in skeleton."}}
+{"timestamp":"2026-04-03T13:33:51.030098+00:00","actor":"Seth","event_type":"closed","task_id":"ch-wo0","details":{"notes":null}}
