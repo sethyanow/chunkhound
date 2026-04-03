@@ -103,6 +103,65 @@ class TestWorkspaceSymbolsParsing:
         assert symbols[0].location_uri is None
 
 
+class TestParseSymbolsSelectionRange:
+    """Regression: _parse_symbols must capture selectionRange for accurate LSP operations.
+
+    Without selectionRange, find_references at range.start (the 'class'/'def' keyword)
+    returns nothing useful. selectionRange.start points to the symbol name.
+    """
+
+    @pytest.mark.asyncio
+    async def test_selection_range_parsed_from_document_symbol(self) -> None:
+        """DocumentSymbol with selectionRange populates selection_range fields on SymbolInfo."""
+        from chunkhound.lsp.client import LSPClient
+
+        raw_response = [
+            {
+                "name": "MyClass",
+                "kind": 5,
+                "range": {
+                    "start": {"line": 31, "character": 0},
+                    "end": {"line": 100, "character": 0},
+                },
+                "selectionRange": {
+                    "start": {"line": 31, "character": 6},
+                    "end": {"line": 31, "character": 13},
+                },
+                "children": [],
+            },
+        ]
+
+        symbols = LSPClient._parse_symbols(raw_response)
+        assert len(symbols) == 1
+        sym = symbols[0]
+        # range.start = keyword position
+        assert sym.range_start_line == 31
+        assert sym.range_start_char == 0
+        # selectionRange.start = name position
+        assert sym.selection_range_start_line == 31
+        assert sym.selection_range_start_char == 6
+
+    @pytest.mark.asyncio
+    async def test_missing_selection_range_defaults_to_none(self) -> None:
+        """SymbolInformation format (no selectionRange) → fields default to None."""
+        from chunkhound.lsp.client import LSPClient
+
+        raw_response = [
+            {
+                "name": "func",
+                "kind": 12,
+                "range": {
+                    "start": {"line": 5, "character": 0},
+                    "end": {"line": 10, "character": 0},
+                },
+            },
+        ]
+
+        symbols = LSPClient._parse_symbols(raw_response)
+        assert symbols[0].selection_range_start_line is None
+        assert symbols[0].selection_range_start_char is None
+
+
 class TestPopulateFilesWorkspaceSymbols:
     """
     Feature: populate_files calls workspaceSymbol after per-file loop

@@ -35,37 +35,46 @@ def format_edge(row: dict[str, Any]) -> dict[str, Any]:
 
 
 def location_to_dict(loc: Any) -> dict[str, Any]:
-    """Convert a Location dataclass to a clean dict."""
+    """Convert a Location dataclass to a clean dict.
+
+    LSP uses 0-based line/character; output is 1-based for user consumption.
+    """
     return {
         "file_path": _uri_to_path(loc.uri),
-        "line": loc.range_start_line,
-        "character": loc.range_start_char,
-        "end_line": loc.range_end_line,
-        "end_character": loc.range_end_char,
+        "line": loc.range_start_line + 1,
+        "character": loc.range_start_char + 1,
+        "end_line": loc.range_end_line + 1,
+        "end_character": loc.range_end_char + 1,
     }
 
 
 def call_item_to_dict(item: Any) -> dict[str, Any]:
-    """Convert a CallHierarchyItem to a clean dict."""
+    """Convert a CallHierarchyItem to a clean dict.
+
+    LSP uses 0-based line/character; output is 1-based for user consumption.
+    """
     return {
         "name": item.name,
         "kind": item.kind,
         "file_path": _uri_to_path(item.uri),
-        "line": item.range_start_line,
-        "character": item.range_start_char,
-        "end_line": item.range_end_line,
-        "end_character": item.range_end_char,
+        "line": item.range_start_line + 1,
+        "character": item.range_start_char + 1,
+        "end_line": item.range_end_line + 1,
+        "end_character": item.range_end_char + 1,
         "detail": item.detail,
     }
 
 
 def diagnostic_to_dict(diag: Any) -> dict[str, Any]:
-    """Convert a Diagnostic to a clean dict."""
+    """Convert a Diagnostic to a clean dict.
+
+    LSP uses 0-based line/character; output is 1-based for user consumption.
+    """
     return {
-        "line": diag.range_start_line,
-        "character": diag.range_start_char,
-        "end_line": diag.range_end_line,
-        "end_character": diag.range_end_char,
+        "line": diag.range_start_line + 1,
+        "character": diag.range_start_char + 1,
+        "end_line": diag.range_end_line + 1,
+        "end_character": diag.range_end_char + 1,
         "severity": diag.severity,
         "message": diag.message,
         "source": diag.source,

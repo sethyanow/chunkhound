@@ -78,10 +78,10 @@ async def _handle_hover(
     return {
         "contents": hover_result.contents,
         "range": {
-            "start_line": hover_result.range_start_line,
-            "start_character": hover_result.range_start_char,
-            "end_line": hover_result.range_end_line,
-            "end_character": hover_result.range_end_char,
+            "start_line": hover_result.range_start_line + 1,
+            "start_character": hover_result.range_start_char + 1,
+            "end_line": hover_result.range_end_line + 1,
+            "end_character": hover_result.range_end_char + 1,
         }
         if hover_result.range_start_line is not None
         else None,
@@ -116,7 +116,7 @@ LSP_DESCRIPTION = (
     "Execute LSP (Language Server Protocol) operations on source files. "
     "Provides code intelligence: go-to-definition, find references, "
     "implementations, callers, callees, hover info, and diagnostics. "
-    "Line and character are 0-based (LSP convention). "
+    "Line and character are 1-based (first line is 1, first character is 1). "
     "First call for a language may be slow (server startup)."
 )
 
@@ -149,8 +149,8 @@ async def lsp_impl(
         services: DatabaseServices instance
         config: Config instance (provides target_dir as workspace_root)
         file: Path to the source file
-        line: 0-based line number
-        character: 0-based character offset
+        line: 1-based line number
+        character: 1-based character offset
         operation: LSP operation to perform
     """
     # Guard: pool not ready (server still starting up)
@@ -192,7 +192,8 @@ async def lsp_impl(
 
     try:
         client = await lsp_client_pool.get(language_id, workspace_root)
-        return await handler(client, file_uri, line, character)
+        # Convert 1-based input to 0-based for LSP protocol
+        return await handler(client, file_uri, line - 1, character - 1)
 
     except LSPCapabilityError as e:
         return {
@@ -284,7 +285,7 @@ SYMBOL_CONTEXT_DESCRIPTION = (
     "Get a compound profile for a symbol at a given file position. "
     "Returns hover info, definition location, callers, callees, and "
     "graph neighborhood in one call — avoids multiple round-trips. "
-    "Line and character are 0-based (LSP convention)."
+    "Line and character are 1-based (first line is 1, first character is 1)."
 )
 
 
@@ -307,8 +308,8 @@ async def symbol_context_impl(
         services: DatabaseServices instance
         config: Config instance (provides target_dir as workspace_root)
         file: Path to the source file
-        line: 0-based line number
-        character: 0-based character offset
+        line: 1-based line number
+        character: 1-based character offset
     """
     # Guard: pool not ready
     if lsp_client_pool is None:
@@ -343,6 +344,10 @@ async def symbol_context_impl(
 
     # Get LSP client
     client = await lsp_client_pool.get(language_id, workspace_root)
+
+    # Convert 1-based input to 0-based for LSP protocol
+    line = line - 1
+    character = character - 1
 
     # 4 async LSP calls with broad exception catching
     async def _safe_hover() -> Any:

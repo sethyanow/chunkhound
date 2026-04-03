@@ -204,6 +204,50 @@ class TestBuildBoundaryQuery:
         scope_params = [p for p in params if isinstance(p, str) and "chunk\\_ound/" in p]
         assert len(scope_params) > 0
 
+    def test_boundary_filters_on_edge_file_columns(self) -> None:
+        """Regression: boundary WHERE must use e.from_file/e.to_file, not s1/s2.file_path.
+
+        Using symbol table file_path in the WHERE clause causes cartesian products
+        when FQNs are non-unique (e.g. __all__ in multiple __init__.py files).
+        """
+        sql, _ = build_boundary_query(scope="pkg/", limit=50)
+        lower = sql.lower()
+        # The LIKE conditions must reference the edge table's file columns
+        assert "e.from_file" in lower or "symbol_edges.from_file" in lower
+        assert "e.to_file" in lower or "symbol_edges.to_file" in lower
+        # Must NOT use s1.file_path or s2.file_path in WHERE (they produce cartesian products)
+        # Parse and check WHERE clause specifically — s1/s2.file_path may appear in SELECT
+        parsed = _parse_duckdb(sql)
+        where_sql = ""
+        for node in parsed.walk():
+            if isinstance(node, exp.Where):
+                where_sql = node.sql(dialect="duckdb").lower()
+                break
+        assert "s1.file_path" not in where_sql, "WHERE must not use s1.file_path (cartesian product bug)"
+        assert "s2.file_path" not in where_sql, "WHERE must not use s2.file_path (cartesian product bug)"
+
+    def test_boundary_joins_disambiguated_by_file(self) -> None:
+        """Regression: symbol JOINs must include file_path to prevent cartesian products.
+
+        JOIN symbols s1 ON e.from_fqn = s1.fqn AND e.from_file = s1.file_path
+        Without the file_path condition, non-unique FQNs match multiple symbols.
+        """
+        sql, _ = build_boundary_query(scope="pkg/", limit=50)
+        parsed = _parse_duckdb(sql)
+        # Extract JOIN ON conditions
+        join_conditions = []
+        for node in parsed.walk():
+            if isinstance(node, exp.Join):
+                on_clause = node.args.get("on")
+                if on_clause:
+                    join_conditions.append(on_clause.sql(dialect="duckdb").lower())
+        assert len(join_conditions) >= 2, f"Expected 2 JOINs, got {len(join_conditions)}"
+        # Each JOIN must include a file_path equality (not just fqn)
+        for i, cond in enumerate(join_conditions):
+            assert "file_path" in cond, (
+                f"JOIN {i + 1} missing file_path disambiguator: {cond}"
+            )
+
 
 # ---------------------------------------------------------------------------
 # build_overview_query

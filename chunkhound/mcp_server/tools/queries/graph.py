@@ -165,12 +165,12 @@ def build_boundary_query(scope: str, limit: int) -> tuple[str, list[Any]]:
             e.to_fqn, s2.name AS to_name, s2.kind AS to_kind, e.to_file,
             e.edge_kind
         FROM symbol_edges e
-        JOIN symbols s1 ON e.from_fqn = s1.fqn
-        JOIN symbols s2 ON e.to_fqn = s2.fqn
+        JOIN symbols s1 ON e.from_fqn = s1.fqn AND e.from_file = s1.file_path
+        JOIN symbols s2 ON e.to_fqn = s2.fqn AND e.to_file = s2.file_path
         WHERE (
-            (s1.file_path LIKE ? ESCAPE '\\' AND s2.file_path NOT LIKE ? ESCAPE '\\')
+            (e.from_file LIKE ? ESCAPE '\\' AND e.to_file NOT LIKE ? ESCAPE '\\')
             OR
-            (s1.file_path NOT LIKE ? ESCAPE '\\' AND s2.file_path LIKE ? ESCAPE '\\')
+            (e.from_file NOT LIKE ? ESCAPE '\\' AND e.to_file LIKE ? ESCAPE '\\')
         )
         LIMIT ?
     """

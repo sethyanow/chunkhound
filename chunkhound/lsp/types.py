@@ -99,6 +99,8 @@ class SymbolInfo:
     detail: str | None = None
     container_name: str | None = None
     location_uri: str | None = None
+    selection_range_start_line: int | None = None
+    selection_range_start_char: int | None = None
 
 
 @dataclass

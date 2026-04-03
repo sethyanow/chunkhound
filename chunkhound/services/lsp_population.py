@@ -432,10 +432,14 @@ class LSPPopulationService:
                     )
                 continue
 
+            # Prefer selectionRange (name position) over range (keyword position)
+            op_line = sym.selection_range_start_line if sym.selection_range_start_line is not None else sym.range_start_line
+            op_char = sym.selection_range_start_char if sym.selection_range_start_char is not None else sym.range_start_char
+
             try:
                 for edge_kind, operation in ops:
                     try:
-                        results = await operation(uri, sym.range_start_line, sym.range_start_char)
+                        results = await operation(uri, op_line, op_char)
                     except Exception:
                         logger.debug(
                             "Edge op %s failed for %s at %d:%d, skipping",

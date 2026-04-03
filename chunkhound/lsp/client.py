@@ -498,6 +498,16 @@ class LSPClient:
             end = rng.get("end", {})
             children_data = item.get("children", [])
             location_uri = location.get("uri")
+
+            # selectionRange: the name span (vs range which is the full definition)
+            sel_rng = item.get("selectionRange")
+            sel_start_line: int | None = None
+            sel_start_char: int | None = None
+            if sel_rng:
+                sel_start = sel_rng.get("start", {})
+                sel_start_line = sel_start.get("line")
+                sel_start_char = sel_start.get("character")
+
             symbols.append(
                 SymbolInfo(
                     name=item.get("name", ""),
@@ -510,6 +520,8 @@ class LSPClient:
                     container_name=item.get("containerName"),
                     children=cls._parse_symbols(children_data),
                     location_uri=location_uri,
+                    selection_range_start_line=sel_start_line,
+                    selection_range_start_char=sel_start_char,
                 )
             )
         return symbols

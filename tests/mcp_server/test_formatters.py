@@ -92,10 +92,10 @@ class TestLocationToDict:
         result = location_to_dict(loc)
         assert result == {
             "file_path": "/src/module.py",
-            "line": 10,
-            "character": 4,
-            "end_line": 10,
-            "end_character": 20,
+            "line": 11,
+            "character": 5,
+            "end_line": 11,
+            "end_character": 21,
         }
 
     def test_passthrough_non_file_uri(self) -> None:
@@ -132,7 +132,7 @@ class TestCallItemToDict:
         assert result["name"] == "my_function"
         assert result["kind"] == 12
         assert result["file_path"] == "/src/mod.py"
-        assert result["line"] == 5
+        assert result["line"] == 6  # 0-based 5 → 1-based 6
         assert result["detail"] == "mod.py"
 
     def test_none_detail(self) -> None:
@@ -153,6 +153,69 @@ class TestCallItemToDict:
         assert result["detail"] is None
 
 
+class TestLocationToDictOneBased:
+    """Regression: location_to_dict must output 1-based line/character."""
+
+    def test_zero_based_input_becomes_one_based_output(self) -> None:
+        """LSP returns 0-based; MCP users expect 1-based (line 1, char 1)."""
+        loc = Location(
+            uri="file:///src/mod.py",
+            range_start_line=0,
+            range_start_char=0,
+            range_end_line=9,
+            range_end_char=15,
+        )
+        result = location_to_dict(loc)
+        assert result["line"] == 1
+        assert result["character"] == 1
+        assert result["end_line"] == 10
+        assert result["end_character"] == 16
+
+
+class TestCallItemToDictOneBased:
+    """Regression: call_item_to_dict must output 1-based line/character."""
+
+    def test_zero_based_input_becomes_one_based_output(self) -> None:
+        item = CallHierarchyItem(
+            name="func",
+            kind=12,
+            uri="file:///a.py",
+            range_start_line=4,
+            range_start_char=3,
+            range_end_line=14,
+            range_end_char=0,
+            selection_range_start_line=4,
+            selection_range_start_char=8,
+            selection_range_end_line=4,
+            selection_range_end_char=12,
+            detail=None,
+        )
+        result = call_item_to_dict(item)
+        assert result["line"] == 5
+        assert result["character"] == 4
+        assert result["end_line"] == 15
+        assert result["end_character"] == 1
+
+
+class TestDiagnosticToDictOneBased:
+    """Regression: diagnostic_to_dict must output 1-based line/character."""
+
+    def test_zero_based_input_becomes_one_based_output(self) -> None:
+        diag = Diagnostic(
+            range_start_line=41,
+            range_start_char=0,
+            range_end_line=41,
+            range_end_char=9,
+            severity=1,
+            message="error",
+        )
+        result = diagnostic_to_dict(diag)
+        assert result["line"] == 42
+        assert result["character"] == 1
+        assert result["end_line"] == 42
+        assert result["end_character"] == 10
+
+
 class TestDiagnosticToDict:
     """diagnostic_to_dict converts a Diagnostic to a clean dict."""
 
@@ -169,10 +232,10 @@ class TestDiagnosticToDict:
         )
         result = diagnostic_to_dict(diag)
         assert result == {
-            "line": 42,
-            "character": 0,
-            "end_line": 42,
-            "end_character": 10,
+            "line": 43,  # 0-based 42 → 1-based 43
+            "character": 1,  # 0-based 0 → 1-based 1
+            "end_line": 43,
+            "end_character": 11,
             "severity": 1,
             "message": "Undefined variable",
             "source": "pyright",

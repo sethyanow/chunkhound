@@ -95,10 +95,10 @@ class TestLocationOperations:
         loc = result["results"][0]
         assert set(loc.keys()) == LOCATION_RESPONSE_KEYS
         assert loc["file_path"] == "/workspace/foo.py"  # URI stripped
-        assert loc["line"] == 10
-        assert loc["character"] == 4
-        assert loc["end_line"] == 10
-        assert loc["end_character"] == 20
+        assert loc["line"] == 11  # 0-based 10 → 1-based 11
+        assert loc["character"] == 5  # 0-based 4 → 1-based 5
+        assert loc["end_line"] == 11
+        assert loc["end_character"] == 21
 
     @pytest.mark.asyncio
     async def test_references_transforms_all_locations(self) -> None:
@@ -141,8 +141,8 @@ class TestLocationOperations:
         loc = result["results"][0]
         assert set(loc.keys()) == LOCATION_RESPONSE_KEYS
         assert loc["file_path"] == "/workspace/impl.py"
-        assert loc["line"] == 30
-        assert loc["end_line"] == 45
+        assert loc["line"] == 31  # 0-based 30 → 1-based 31
+        assert loc["end_line"] == 46  # 0-based 45 → 1-based 46
 
 
 class TestCallHierarchyOperations:
@@ -230,10 +230,10 @@ class TestHoverOperation:
         assert set(result.keys()) == {"contents", "range"}
         assert "def foo" in result["contents"]
         assert result["range"] == {
-            "start_line": 5,
-            "start_character": 0,
-            "end_line": 5,
-            "end_character": 3,
+            "start_line": 6,  # 0-based 5 → 1-based 6
+            "start_character": 1,  # 0-based 0 → 1-based 1
+            "end_line": 6,
+            "end_character": 4,
         }
 
     @pytest.mark.asyncio

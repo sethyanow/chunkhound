@@ -20,6 +20,67 @@ from tests.lsp.conftest import (
 pytestmark = pytest.mark.unit
 
 
+class TestEdgesUseSelectionRange:
+    """Regression: _edges_recursive must use selectionRange for LSP operations.
+
+    A class at line 31 has range.start=(31,0) pointing at the 'class' keyword
+    and selectionRange.start=(31,6) pointing at the class name. find_references
+    must be called at (31,6) to get useful results.
+    """
+
+    @pytest.mark.asyncio
+    async def test_edges_recursive_calls_lsp_at_selection_range(self, tmp_path: Path) -> None:
+        """LSP operations should use selectionRange position, not range position."""
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/mod.py")
+        _insert_symbols(provider, 1, "src/mod.py", [
+            ("MyClass", "MyClass", "Class", 31, 100),
+        ])
+
+        fqn_to_id = {"MyClass": 1}
+
+        # Track what positions find_references is called with
+        captured_positions: list[tuple[int, int]] = []
+
+        async def tracking_find_references(uri: str, line: int, char: int):
+            captured_positions.append((line, char))
+            return []
+
+        client = AsyncMock()
+        client.capabilities = {LSPCapability.REFERENCES}
+        client.find_references = tracking_find_references
+
+        # Class symbol with selectionRange at the name (31,6) not keyword (31,0)
+        class_sym = SymbolInfo(
+            name="MyClass",
+            kind=5,
+            range_start_line=31,
+            range_start_char=0,
+            range_end_line=100,
+            range_end_char=0,
+            children=[],
+            selection_range_start_line=31,
+            selection_range_start_char=6,
+        )
+
+        service = LSPPopulationService(provider=provider, pool=AsyncMock(), workspace_root=tmp_path)
+        await service._edges_recursive(
+            client=client,
+            uri="file:///src/mod.py",
+            symbols=[class_sym],
+            file_path="src/mod.py",
+            fqn_to_id=fqn_to_id,
+            parent_fqn=None,
+            lsp_server="pyright",
+            edges={},
+        )
+
+        assert len(captured_positions) >= 1, "find_references should have been called"
+        line, char = captured_positions[0]
+        assert line == 31, f"Expected selection_range line 31, got {line}"
+        assert char == 6, f"Expected selection_range char 6, got {char}"
+
+
 class TestCollectEdges:
     """
     Feature: Collect edges from LSP operations per symbol
