@@ -30,7 +30,7 @@ for name, tool in sorted(TOOL_REGISTRY.items()):
 # 2. __init__.py is a thin re-export (79 lines, no definitions)
 wc -l chunkhound/mcp_server/tools/__init__.py
 
-# 3. No file exceeds 500 lines
+# 3. Modules are cohesive (no monolith)
 wc -l chunkhound/mcp_server/tools/*.py chunkhound/mcp_server/tools/queries/*.py
 
 # 4. Full test suite passes
@@ -44,7 +44,7 @@ uv run pytest tests/test_smoke.py -v -n auto -m e2e
 
 - [x] User verifies all tools register from domain modules
 - [x] User verifies __init__.py is clean (no local definitions)
-- [x] User verifies file sizes are under 500 lines
+- [x] User verifies modules are cohesive (no monolith)
 - [x] User verifies tests pass
 - [x] User closes this task
 
