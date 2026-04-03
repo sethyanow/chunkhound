@@ -154,10 +154,11 @@ class TestRegistrationIntegrity:
         "graph",
         "get_stats",
         "impact_cascade",
+        "test_targeting",
     }
 
     def test_all_expected_tools_registered(self):
-        """All 8 tools present in TOOL_REGISTRY."""
+        """All 9 tools present in TOOL_REGISTRY."""
         from chunkhound.mcp_server.tools import TOOL_REGISTRY
 
         assert set(TOOL_REGISTRY.keys()) == self.EXPECTED_TOOLS

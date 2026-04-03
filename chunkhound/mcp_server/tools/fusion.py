@@ -10,7 +10,96 @@ from pathlib import Path
 from typing import Any
 
 from .graph import _graph_walk
+from .queries.common import escape_like
 from .registry import register_tool
+
+
+def _resolve_changed_to_fqns(
+    services: Any,
+    changed: list[str],
+    workspace_root: str,
+) -> list[str]:
+    """Resolve a mixed list of file paths and FQNs to a deduplicated FQN list.
+
+    Strings containing '::' are treated as FQNs and pass through unchanged.
+    Other strings are treated as file paths: normalized to relative paths via
+    os.path.relpath, then all symbols in that file are looked up.
+
+    Args:
+        services: DatabaseServices instance
+        changed: List of file paths or FQN strings
+        workspace_root: Project root for path normalization
+
+    Returns:
+        Deduplicated list of FQN strings.
+    """
+    if not changed:
+        return []
+
+    fqns: list[str] = []
+    seen: set[str] = set()
+
+    for item in changed:
+        if not item or not item.strip():
+            continue
+
+        if "::" in item:
+            # FQN — pass through
+            if item not in seen:
+                fqns.append(item)
+                seen.add(item)
+        else:
+            # File path — resolve to relative and query symbols
+            relative_path = os.path.relpath(
+                str(Path(item).resolve()), workspace_root
+            )
+            rows = services.provider.execute_query(
+                "SELECT DISTINCT fqn FROM symbols WHERE file_path = ?",
+                [relative_path],
+            )
+            for row in rows:
+                fqn = row["fqn"]
+                if fqn not in seen:
+                    fqns.append(fqn)
+                    seen.add(fqn)
+
+    return fqns
+
+
+def _collect_test_fqns(
+    services: Any,
+    test_scope: str | None = None,
+) -> dict[str, dict[str, str]]:
+    """Collect test entry point symbols from the symbols table.
+
+    Test functions are identified by kind='Function' and name starting
+    with 'test_'. An optional test_scope narrows results to files under
+    a specific path prefix.
+
+    Args:
+        services: DatabaseServices instance
+        test_scope: Optional path prefix to restrict test file lookup
+
+    Returns:
+        Dict mapping FQN → {name, file_path} for each test function.
+    """
+    sql = (
+        "SELECT fqn, name, file_path FROM symbols "
+        "WHERE kind = 'Function' AND name LIKE 'test_%'"
+    )
+    params: list[str] = []
+
+    if test_scope:
+        escaped = escape_like(test_scope)
+        sql += " AND file_path LIKE ?"
+        params.append(f"{escaped}%")
+
+    rows = services.provider.execute_query(sql, params)
+
+    return {
+        row["fqn"]: {"name": row["name"], "file_path": row["file_path"]}
+        for row in rows
+    }
 
 
 def _resolve_start_fqn(
@@ -242,4 +331,116 @@ async def impact_cascade_impl(
         "root": tree,
         "total_nodes": count_nodes(tree),
         "max_depth": max_tree_depth(tree),
+    }
+
+
+# ---------------------------------------------------------------------------
+# test_targeting tool
+# ---------------------------------------------------------------------------
+
+TEST_TARGETING_DESCRIPTION = """Minimal test set from changed symbols.
+
+Given changed files or symbol FQNs, walks their caller graph and intersects
+with test entry points to return the minimal set of tests affected by the
+changes. Each test includes hop_distance (shortest caller chain from any
+changed symbol).
+
+Use this to answer: "Which tests should I run after changing these files?"
+
+Parameters:
+  changed: List of file paths or symbol FQNs (strings with '::' are FQNs)
+  depth: How many hops of callers to traverse (1-10, default 3)
+  test_scope: Optional path prefix to restrict test file lookup
+"""
+
+
+@register_tool(
+    description=TEST_TARGETING_DESCRIPTION,
+    name="test_targeting",
+)
+async def test_targeting_impl(
+    services: Any,
+    config: Any,
+    changed: list[str],
+    depth: int = 3,
+    test_scope: str | None = None,
+) -> dict[str, Any]:
+    """Minimal test set from changed symbols.
+
+    Args:
+        services: DatabaseServices instance
+        config: Config instance (provides target_dir as workspace_root)
+        changed: List of file paths or symbol FQNs
+        depth: Caller hops to traverse (1-10, default 3)
+        test_scope: Optional path prefix to restrict test file lookup
+    """
+    # Early return on empty input
+    if not changed:
+        return {
+            "changed_symbols": [],
+            "tests": [],
+            "total_tests": 0,
+            "walk_depth": 0,
+        }
+
+    # Clamp depth 1-10
+    depth = max(1, min(10, depth))
+
+    # Resolve workspace root
+    workspace_root = str(
+        config.target_dir
+        if config and hasattr(config, "target_dir") and config.target_dir
+        else Path(".").resolve()
+    )
+
+    # Step 1: Resolve changed inputs to FQNs
+    resolved_fqns = _resolve_changed_to_fqns(services, changed, workspace_root)
+
+    # Step 2: Collect test entry points
+    test_dict = _collect_test_fqns(services, test_scope=test_scope)
+
+    # Step 3: Per-symbol walk, merge reachable FQNs with minimum depth
+    reachable: dict[str, int] = {}  # fqn → min depth
+
+    for symbol_fqn in resolved_fqns:
+        walk_result = _graph_walk(
+            services=services,
+            symbol=symbol_fqn,
+            depth=depth,
+            edge_kind="called_by",
+            limit=100,
+            directed=True,
+        )
+
+        # Defensive: skip if _graph_walk returns error dict
+        if "error" in walk_result:
+            continue
+
+        for node in walk_result["results"]:
+            fqn = node["fqn"]
+            node_depth = node["depth"]
+            if fqn not in reachable or node_depth < reachable[fqn]:
+                reachable[fqn] = node_depth
+
+    # Step 4: Intersect reachable FQNs with test set
+    test_fqns = set(test_dict.keys()) & set(reachable.keys())
+
+    tests = sorted(
+        [
+            {
+                "fqn": fqn,
+                "name": test_dict[fqn]["name"],
+                "file_path": test_dict[fqn]["file_path"],
+                "hop_distance": reachable[fqn],
+            }
+            for fqn in test_fqns
+        ],
+        key=lambda t: (t["hop_distance"], t["fqn"]),
+    )
+
+    return {
+        "changed_symbols": resolved_fqns,
+        "tests": tests,
+        "total_tests": len(tests),
+        "walk_depth": depth,
     }
