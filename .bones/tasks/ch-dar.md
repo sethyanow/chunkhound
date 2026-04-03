@@ -25,8 +25,8 @@ Scoped to parent epic R6:
 - R6: Fusion MCP tools (test_targeting, impact_cascade, cross_language_check, semantic_diff)
 
 ## Success Criteria
-- [ ] `test_targeting(changed_files_or_symbols)` returns minimal test set by walking callers graph and intersecting with test entry points
-- [ ] `test_targeting` correctly identifies test files via path patterns + symbol kind, not hardcoded paths
+- [x] `test_targeting(changed_files_or_symbols)` returns minimal test set by walking callers graph and intersecting with test entry points
+- [x] `test_targeting` correctly identifies test files via path patterns + symbol kind, not hardcoded paths
 - [x] `impact_cascade(file, line, char, depth)` returns transitive caller tree with hop distance + type signatures at each node
 - [x] `impact_cascade` annotates each node with enough info for agent to classify mechanical vs logic change
 - [ ] `cross_language_check(scope_a, scope_b)` compares exported symbols across scopes, returns mismatches in name/signature

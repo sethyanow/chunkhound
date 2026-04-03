@@ -1,12 +1,14 @@
 ---
 id: ch-zj0
 title: test_targeting — minimal test set from changed symbols
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-dar
 ---
+
+
 
 
 ## Context
@@ -105,17 +107,17 @@ Add `"test_targeting"` to `EXPECTED_TOOLS` set.
 Call `test_targeting` with a known changed file. Verify output shape.
 
 ## Success Criteria
-- [ ] `_resolve_changed_to_fqns` handles file paths, FQNs, and mixed input
-- [ ] `_collect_test_fqns` identifies test functions by kind + name pattern, not hardcoded paths
-- [ ] `_collect_test_fqns` respects optional `test_scope` path filter
-- [ ] `test_targeting_impl` registered in TOOL_REGISTRY via `@register_tool`
-- [ ] Output is structured: `{changed_symbols, tests: [{fqn, name, file_path, hop_distance}], total_tests, walk_depth}`
-- [ ] Returns empty tests list (not error) when no test callers found
-- [ ] Depth clamped 1-10, default 3
-- [ ] Zero LLM/embedding calls — deterministic only
-- [ ] Empty `changed` list returns `{changed_symbols: [], tests: [], total_tests: 0, walk_depth: 0}` (no DB queries)
-- [ ] All new code has failing tests before implementation
-- [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
+- [x] `_resolve_changed_to_fqns` handles file paths, FQNs, and mixed input
+- [x] `_collect_test_fqns` identifies test functions by kind + name pattern, not hardcoded paths
+- [x] `_collect_test_fqns` respects optional `test_scope` path filter
+- [x] `test_targeting_impl` registered in TOOL_REGISTRY via `@register_tool`
+- [x] Output is structured: `{changed_symbols, tests: [{fqn, name, file_path, hop_distance}], total_tests, walk_depth}`
+- [x] Returns empty tests list (not error) when no test callers found
+- [x] Depth clamped 1-10, default 3
+- [x] Zero LLM/embedding calls — deterministic only
+- [x] Empty `changed` list returns `{changed_symbols: [], tests: [], total_tests: 0, walk_depth: 0}` (no DB queries)
+- [x] All new code has failing tests before implementation
+- [x] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass (45/45)
 
 ## Key Considerations
 - Input heuristic (`"::"` = FQN, else file path) is imperfect — FQNs without `::` (top-level symbols) would be treated as files. Acceptable for v1 since top-level test functions aren't typically "changed symbols" in the calling pattern.
@@ -156,3 +158,7 @@ Call `test_targeting` with a known changed file. Verify output shape.
 - NO LLM/embedding calls — deterministic graph + DB composition
 - NO `execute_tool` dispatch — direct function calls for internal composition
 - NO prose output — structured dicts only
+
+## Log
+
+- [2026-04-03T12:49:05Z] [Seth] Completed: 11/11 success criteria met. 45 tests (16 TDD + 9 adversarial + 20 existing). SRE found 4 gaps (output data sourcing, hop_distance merge, empty input, LIKE escaping) — all fixed before impl. Full suite: 2776 passed.

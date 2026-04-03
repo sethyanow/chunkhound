@@ -298,3 +298,5 @@
 {"timestamp":"2026-04-03T07:29:17.908498+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"parent-child","to":"ch-zj0"}}
 {"timestamp":"2026-04-03T07:29:17.909033+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"blocks","to":"ch-zj0"}}
 {"timestamp":"2026-04-03T07:45:17.248510+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-zj0","details":{"actor":"Seth"}}
+{"timestamp":"2026-04-03T12:48:58.009052+00:00","actor":"Seth","event_type":"closed","task_id":"ch-zj0","details":{"notes":null}}
+{"timestamp":"2026-04-03T12:49:05.737385+00:00","actor":"Seth","event_type":"logged","task_id":"ch-zj0","details":{"message":"Completed: 11/11 success criteria met. 45 tests (16 TDD + 9 adversarial + 20 existing). SRE found 4 gaps (output data sourcing, hop_distance merge, empty input, LIKE escaping) — all fixed before impl. Full suite: 2776 passed."}}
