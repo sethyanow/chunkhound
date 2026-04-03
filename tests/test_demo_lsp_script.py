@@ -523,100 +523,126 @@ class TestDemoCrossFileEdgeHealth:
 
 
 class TestDemoSearchSymbols:
-    """Phase 3 Scenario: search(type=symbols) via execute_tool."""
+    """Phase 3 Scenario: search(type=symbols) result evaluation."""
 
-    def test_pass_when_symbols_found(self, demo_db: Path) -> None:
-        """Returns True when search returns matching symbols."""
+    def test_pass_when_symbols_found(self) -> None:
+        """Returns True when execute_tool result contains matching symbols."""
         from scripts.demo_lsp import demo_search_symbols
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            # demo_db fixture has symbols with "LSPClient", "start", "SymbolInfo", "main"
-            result = demo_search_symbols(conn, query="LSP")
-            assert result is True
-        finally:
-            conn.close()
+        fake_result = {
+            "results": [
+                {"fqn": "LSPClient", "name": "LSPClient", "kind": "Class",
+                 "language": "python", "file_path": "chunkhound/lsp/client.py",
+                 "range_start": 32, "range_end": 576, "type_signature": None},
+                {"fqn": "LSPClient::start", "name": "start", "kind": "Method",
+                 "language": "python", "file_path": "chunkhound/lsp/client.py",
+                 "range_start": 63, "range_end": 160, "type_signature": None},
+            ],
+            "pagination": {"offset": 0, "page_size": 10, "has_more": False, "total": 2},
+        }
+        assert demo_search_symbols(fake_result, query="LSP") is True
 
-    def test_fail_when_no_matches(self, demo_db: Path) -> None:
-        """Returns False when query matches nothing."""
+    def test_fail_when_no_results(self) -> None:
+        """Returns False when execute_tool result has empty results list."""
         from scripts.demo_lsp import demo_search_symbols
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            result = demo_search_symbols(conn, query="zzz_nonexistent_zzz")
-            assert result is False
-        finally:
-            conn.close()
+        fake_result = {
+            "results": [],
+            "pagination": {"offset": 0, "page_size": 10, "has_more": False, "total": 0},
+        }
+        assert demo_search_symbols(fake_result, query="zzz_nonexistent") is False
+
+    def test_fail_when_error_returned(self) -> None:
+        """Returns False when execute_tool returns an error dict."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        fake_result = {"error": "table_missing", "message": "symbols table not found"}
+        assert demo_search_symbols(fake_result, query="parse") is False
 
 
 class TestDemoGraphWalk:
-    """Phase 3 Scenario: graph(walk) via execute_tool."""
+    """Phase 3 Scenario: graph(walk) result evaluation."""
 
-    def test_pass_when_edges_found(self, demo_db: Path) -> None:
-        """Returns True when walk finds connected symbols with edges."""
+    def test_pass_when_edges_found(self) -> None:
+        """Returns True when walk result contains nodes and edges."""
         from scripts.demo_lsp import demo_graph_walk
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            # demo_db has edges: LSPClient::start -> SymbolInfo (references),
-            #                    LSPClient -> SymbolInfo (defines),
-            #                    main -> LSPClient (calls)
-            result = demo_graph_walk(conn, symbol="main")
-            assert result is True
-        finally:
-            conn.close()
+        fake_result = {
+            "results": [
+                {"fqn": "main", "name": "main", "kind": "Function",
+                 "file_path": "src/main.ts", "depth": 0},
+                {"fqn": "LSPClient", "name": "LSPClient", "kind": "Class",
+                 "file_path": "chunkhound/lsp/client.py", "depth": 1},
+            ],
+            "edges": [
+                {"from_symbol": "main", "to_symbol": "LSPClient",
+                 "edge_kind": "calls", "from_file": "src/main.ts",
+                 "to_file": "chunkhound/lsp/client.py"},
+            ],
+            "count": 2,
+        }
+        assert demo_graph_walk(fake_result, symbol="main") is True
 
-    def test_returns_false_when_no_edges(self, demo_db: Path) -> None:
-        """Returns False when walk finds the symbol but no outbound edges."""
+    def test_returns_false_when_no_edges(self) -> None:
+        """Returns False when walk finds the symbol but no edges."""
         from scripts.demo_lsp import demo_graph_walk
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            # SymbolInfo has no outbound edges in fixture
-            result = demo_graph_walk(conn, symbol="SymbolInfo")
-            assert result is False
-        finally:
-            conn.close()
+        fake_result = {
+            "results": [
+                {"fqn": "SymbolInfo", "name": "SymbolInfo", "kind": "Class",
+                 "file_path": "chunkhound/lsp/types.py", "depth": 0},
+            ],
+            "edges": [],
+            "count": 1,
+        }
+        assert demo_graph_walk(fake_result, symbol="SymbolInfo") is False
 
-    def test_returns_false_when_symbol_not_found(self, demo_db: Path) -> None:
-        """Returns False when the starting symbol doesn't exist."""
+    def test_returns_false_when_empty_results(self) -> None:
+        """Returns False when walk finds no symbols at all."""
         from scripts.demo_lsp import demo_graph_walk
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            result = demo_graph_walk(conn, symbol="NonexistentSymbol")
-            assert result is False
-        finally:
-            conn.close()
+        fake_result = {"results": [], "edges": [], "count": 0}
+        assert demo_graph_walk(fake_result, symbol="NonexistentSymbol") is False
+
+    def test_returns_false_on_error(self) -> None:
+        """Returns False when execute_tool returns an error dict."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        fake_result = {"error": "missing_parameter", "message": "walk requires 'symbol'"}
+        assert demo_graph_walk(fake_result, symbol="") is False
 
 
 class TestDemoGraphBoundary:
-    """Phase 3 Scenario: graph(boundary) via execute_tool."""
+    """Phase 3 Scenario: graph(boundary) result evaluation."""
 
-    def test_pass_when_cross_scope_edges_found(self, demo_db: Path) -> None:
-        """Returns True when boundary finds edges crossing the scope."""
+    def test_pass_when_cross_scope_edges_found(self) -> None:
+        """Returns True when boundary result contains cross-scope edges."""
         from scripts.demo_lsp import demo_graph_boundary
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            # demo_db has edge: main (src/main.ts) -> LSPClient (chunkhound/lsp/client.py)
-            # Scope "src/" should show this as a boundary edge
-            result = demo_graph_boundary(conn, scope="src/")
-            assert result is True
-        finally:
-            conn.close()
+        fake_result = {
+            "edges": [
+                {"from_symbol": "main", "from_name": "main", "from_kind": "Function",
+                 "from_file": "src/main.ts", "to_symbol": "LSPClient",
+                 "to_name": "LSPClient", "to_kind": "Class",
+                 "to_file": "chunkhound/lsp/client.py", "edge_kind": "calls"},
+            ],
+            "count": 1,
+        }
+        assert demo_graph_boundary(fake_result, scope="src/") is True
 
-    def test_returns_false_when_no_boundary_edges(self, demo_db: Path) -> None:
-        """Returns False when no edges cross the scope boundary."""
+    def test_returns_false_when_no_edges(self) -> None:
+        """Returns False when boundary result has empty edges list."""
         from scripts.demo_lsp import demo_graph_boundary
 
-        conn = duckdb.connect(str(demo_db), read_only=True)
-        try:
-            # Scope "nonexistent/" has no symbols, so no boundary edges
-            result = demo_graph_boundary(conn, scope="nonexistent/")
-            assert result is False
-        finally:
-            conn.close()
+        fake_result = {"edges": [], "count": 0}
+        assert demo_graph_boundary(fake_result, scope="nonexistent/") is False
+
+    def test_returns_false_on_error(self) -> None:
+        """Returns False when execute_tool returns an error dict."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        fake_result = {"error": "missing_parameter", "message": "boundary requires 'scope'"}
+        assert demo_graph_boundary(fake_result, scope="") is False
 
 
 class TestDemoLspDefinition:
@@ -721,6 +747,238 @@ class TestDemoSymbolContext:
         }
         result = await demo_symbol_context(fake_result)
         assert result is False
+
+
+# ── Phase 3: Adversarial battery ─────────────────────────────
+
+
+class TestAdversarialSearchSymbols:
+    """Adversarial: demo_search_symbols edge cases."""
+
+    def test_empty_dict(self) -> None:
+        """Empty dict with no keys — should return False, not crash."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        assert demo_search_symbols({}, query="x") is False
+
+    def test_missing_results_key(self) -> None:
+        """Dict with only pagination, no results key."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        assert demo_search_symbols(
+            {"pagination": {"total": 0}}, query="x",
+        ) is False
+
+    def test_unicode_symbol_names(self) -> None:
+        """Results with unicode names don't crash the display."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        fake_result = {
+            "results": [
+                {"fqn": "modüle::Klasse", "name": "Klasse",
+                 "kind": "Class", "language": "python",
+                 "file_path": "src/ünïcöde.py",
+                 "range_start": 1, "range_end": 10,
+                 "type_signature": None},
+            ],
+            "pagination": {"offset": 0, "page_size": 10,
+                           "has_more": False, "total": 1},
+        }
+        assert demo_search_symbols(fake_result, query="Klass") is True
+
+    def test_none_values_in_result_fields(self) -> None:
+        """None values for optional fields don't crash."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        fake_result = {
+            "results": [
+                {"fqn": None, "name": None, "kind": None,
+                 "language": None, "file_path": None,
+                 "range_start": None, "range_end": None,
+                 "type_signature": None},
+            ],
+            "pagination": {"offset": 0, "page_size": 10,
+                           "has_more": False, "total": 1},
+        }
+        # Should still return True — results list is non-empty
+        assert demo_search_symbols(fake_result, query="x") is True
+
+    def test_result_with_minimal_keys(self) -> None:
+        """Result dicts missing most keys — .get() defaults work."""
+        from scripts.demo_lsp import demo_search_symbols
+
+        fake_result = {"results": [{}]}
+        assert demo_search_symbols(fake_result, query="x") is True
+
+
+class TestAdversarialGraphWalk:
+    """Adversarial: demo_graph_walk edge cases."""
+
+    def test_empty_dict(self) -> None:
+        """Empty dict — should return False, not crash."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        assert demo_graph_walk({}, symbol="x") is False
+
+    def test_nodes_but_no_edges_key(self) -> None:
+        """Dict with results but missing edges key entirely."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        fake_result = {
+            "results": [
+                {"fqn": "A", "name": "A", "kind": "Class",
+                 "file_path": "a.py", "depth": 0},
+            ],
+            "count": 1,
+        }
+        assert demo_graph_walk(fake_result, symbol="A") is False
+
+    def test_self_referential_edge(self) -> None:
+        """Self-loop edge — from_symbol == to_symbol."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        fake_result = {
+            "results": [
+                {"fqn": "A", "name": "A", "kind": "Class",
+                 "file_path": "a.py", "depth": 0},
+            ],
+            "edges": [
+                {"from_symbol": "A", "to_symbol": "A",
+                 "edge_kind": "references", "from_file": "a.py",
+                 "to_file": "a.py"},
+            ],
+            "count": 1,
+        }
+        # Self-loops are valid edges — should return True
+        assert demo_graph_walk(fake_result, symbol="A") is True
+
+    def test_minimal_result_dicts(self) -> None:
+        """Nodes and edges with minimal keys."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        fake_result = {
+            "results": [{}],
+            "edges": [{}],
+            "count": 1,
+        }
+        assert demo_graph_walk(fake_result, symbol="x") is True
+
+    def test_none_values_in_node_fields(self) -> None:
+        """None values in node dicts don't crash display."""
+        from scripts.demo_lsp import demo_graph_walk
+
+        fake_result = {
+            "results": [
+                {"fqn": None, "name": None, "kind": None,
+                 "file_path": None, "depth": None},
+            ],
+            "edges": [
+                {"from_symbol": None, "to_symbol": None,
+                 "edge_kind": None, "from_file": None,
+                 "to_file": None},
+            ],
+            "count": 1,
+        }
+        assert demo_graph_walk(fake_result, symbol="x") is True
+
+
+class TestAdversarialGraphBoundary:
+    """Adversarial: demo_graph_boundary edge cases."""
+
+    def test_empty_dict(self) -> None:
+        """Empty dict — should return False, not crash."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        assert demo_graph_boundary({}, scope="x/") is False
+
+    def test_edge_from_file_matches_scope_prefix(self) -> None:
+        """Direction arrow depends on from_file.startswith(scope)."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        fake_result = {
+            "edges": [
+                {"from_symbol": "A", "from_name": "A",
+                 "from_kind": "Class",
+                 "from_file": "chunkhound/lsp/client.py",
+                 "to_symbol": "B", "to_name": "B",
+                 "to_kind": "Class",
+                 "to_file": "external/lib.py",
+                 "edge_kind": "calls"},
+            ],
+            "count": 1,
+        }
+        # from_file starts with scope -> "→" direction
+        assert demo_graph_boundary(
+            fake_result, scope="chunkhound/lsp/",
+        ) is True
+
+    def test_edge_from_file_outside_scope(self) -> None:
+        """from_file outside scope -> "←" direction."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        fake_result = {
+            "edges": [
+                {"from_symbol": "X", "from_name": "X",
+                 "from_kind": "Function",
+                 "from_file": "external/util.py",
+                 "to_symbol": "Y", "to_name": "Y",
+                 "to_kind": "Function",
+                 "to_file": "chunkhound/lsp/types.py",
+                 "edge_kind": "references"},
+            ],
+            "count": 1,
+        }
+        assert demo_graph_boundary(
+            fake_result, scope="chunkhound/lsp/",
+        ) is True
+
+    def test_edge_with_empty_from_file(self) -> None:
+        """Edge with empty from_file — .get() default handles it."""
+        from scripts.demo_lsp import demo_graph_boundary
+
+        fake_result = {
+            "edges": [{"edge_kind": "calls"}],
+            "count": 1,
+        }
+        assert demo_graph_boundary(fake_result, scope="x/") is True
+
+
+class TestAdversarialBuildDemoServices:
+    """Adversarial: _build_demo_services edge cases."""
+
+    def test_nonexistent_db_path(self, tmp_path: Path) -> None:
+        """Nonexistent path — DuckDB creates empty DB, query fails gracefully."""
+        from scripts.demo_lsp import _build_demo_services
+
+        # DuckDB creates a new file at this path (read_only=True fails)
+        bad_path = tmp_path / "does_not_exist.db"
+        with pytest.raises(Exception):
+            _build_demo_services(bad_path)
+
+
+class TestBuildDemoServices:
+    """Phase 3: _build_demo_services creates a usable services wrapper."""
+
+    def test_returns_services_with_provider(self, demo_db: Path) -> None:
+        """Services object has provider.execute_query that runs SQL."""
+        from scripts.demo_lsp import _build_demo_services
+
+        services = _build_demo_services(demo_db)
+        try:
+            rows = services.provider.execute_query(
+                "SELECT COUNT(*) AS cnt FROM symbols"
+            )
+            assert rows[0]["cnt"] == 4  # demo_db has 4 symbols
+        finally:
+            services.close()
+
+    def test_close_is_idempotent(self, demo_db: Path) -> None:
+        """Calling close() twice doesn't raise."""
+        from scripts.demo_lsp import _build_demo_services
+
+        services = _build_demo_services(demo_db)
+        services.close()
+        services.close()  # should not raise
 
 
 class TestPhase2ConnectionManagement:
