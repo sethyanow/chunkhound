@@ -68,11 +68,13 @@ Phase 1-2 with LSPClient/DuckDB). Script vs MCP — surface what's wired, what's
 ### Step 1: Fix daemon LSP pool wiring — DONE
 - Committed 99b5b014. Regression test in `tests/unit/test_daemon_lsp_pool_wiring.py`.
 
-### Step 2: Redo Phase 3 demo sections to use real internals
-- Current demo sections bypass MCP tool layer — use raw SQL instead of `execute_tool()`
-- Rewrite to: `create_services()` → real services → `execute_tool()` for every demo
-- Fix demo positions: target known symbol (LSPClient at line 31), not empty lines
-- If `create_services()` conflicts with MCP server's DB lock, that's a finding to surface
+### Step 2: Redo Phase 3 demo sections to use real internals — DONE
+- Rewrote demo_search_symbols, demo_graph_walk, demo_graph_boundary to evaluate execute_tool result dicts
+- Created _build_demo_services shim (read-only DuckDB wrapper) — avoids registry lock conflicts
+- Wired main() sections 11-13 through execute_tool with real tool dispatch
+- Import path fixed: chunkhound.mcp_server.tools → chunkhound.mcp_server.tools.registry
+- Adversarial battery (15 tests) found and fixed None-in-format-string bug: .get("key", "?") → .get("key") or "?"
+- Committed 899b9c86, pushed to dev. 64 unit tests passing
 
 ### Step 3: Run demo for product owner
 - `uv run scripts/demo_lsp.py` — all phases, PASS/FAIL summary
@@ -81,8 +83,8 @@ Phase 1-2 with LSPClient/DuckDB). Script vs MCP — surface what's wired, what's
 ## Success Criteria
 - [x] Daemon LSP pool wiring fixed (`daemon/server.py` passes `lsp_client_pool` to `handle_tool_call`)
 - [x] Regression test covers daemon tool dispatch includes lsp_client_pool
-- [ ] Phase 3 demo sections use real internals (`create_services()` → `execute_tool()`)
-- [ ] Unit tests added to `tests/test_demo_lsp_script.py` for Phase 3 helpers
+- [x] Phase 3 demo sections use real internals (`_build_demo_services()` → `execute_tool()`)
+- [x] Unit tests added to `tests/test_demo_lsp_script.py` for Phase 3 helpers
 - [ ] `uv run scripts/demo_lsp.py` runs all phases with PASS/FAIL summary
 - [ ] Demo presented to product owner with honest findings
 
