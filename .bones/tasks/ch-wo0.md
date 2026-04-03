@@ -11,6 +11,7 @@ parent: ch-dar
 
 
 
+
 ## Context
 Third Phase 4 fusion tool. Given two scope prefixes (file path prefixes),
 queries symbols in each scope, matches by name, and compares arity to find
@@ -178,3 +179,4 @@ Add `"cross_language_check"` to `EXPECTED_TOOLS` set. Update docstring count (9�
 ## Log
 
 - [2026-04-03T13:17:22Z] [Seth] SRE review: APPROVED with updates. (1) MAJOR: _extract_arity design upgraded to nesting-aware comma counting — dict[str,int] was miscounted. Added 5 test cases: generics, trailing comma, unbalanced parens. (2) MINOR: Step 2 switched from hand-rolled escape_like to scope_filter helper. (3) Adversarial: trailing commas, unbalanced parens, empty scope, __init__ fan-out, overlapping scopes — all addressed in skeleton.
+- [2026-04-03T13:36:34Z] [Seth] Debrief: SRE caught comma-in-generics design bug before implementation. scope_filter helper used instead of hand-rolled escape. All 15 criteria met, 86 tests (49 functional + 13 adversarial for cross_language_check). Next task ch-4h0 (semantic_diff) scoped — last fusion tool, uses pygit2 for git diff + range overlap for symbol mapping.
