@@ -5,6 +5,7 @@ into higher-level queries. All are deterministic — no LLM, no embeddings.
 """
 
 from typing import Any
+from unittest.mock import MagicMock
 
 import pytest
 
@@ -1527,3 +1528,732 @@ class TestCrossLanguageCheckAdversarial:
         assert result["total_compared"] == 1
         assert result["missing_in_a"] == []
         assert result["missing_in_b"] == []
+
+
+# ---------------------------------------------------------------------------
+# semantic_diff helpers
+# ---------------------------------------------------------------------------
+
+
+def _make_mock_line(origin: str, new_lineno: int) -> MagicMock:
+    """Create a mock pygit2 diff line."""
+    line = MagicMock()
+    line.origin = origin
+    line.new_lineno = new_lineno
+    return line
+
+
+def _make_mock_hunk(lines: list[MagicMock]) -> MagicMock:
+    """Create a mock pygit2 hunk."""
+    hunk = MagicMock()
+    hunk.lines = lines
+    return hunk
+
+
+def _make_mock_delta(
+    new_path: str,
+    status: int,
+    is_binary: bool = False,
+) -> MagicMock:
+    """Create a mock pygit2 delta."""
+    delta = MagicMock()
+    delta.new_file.path = new_path
+    delta.status = status
+    delta.is_binary = is_binary
+    return delta
+
+
+def _make_mock_patch(
+    delta: MagicMock,
+    hunks: list[MagicMock],
+) -> MagicMock:
+    """Create a mock pygit2 patch (iterable hunks)."""
+    patch = MagicMock()
+    patch.delta = delta
+    patch.hunks = hunks
+    return patch
+
+
+class TestGitChangedLines:
+    """_git_changed_lines: extract changed line numbers from pygit2 diff."""
+
+    def _mock_repo(self, patches: list[MagicMock], monkeypatch: Any) -> None:
+        """Wire up a mock pygit2.Repository that returns given patches as diff."""
+        import pygit2 as _pygit2
+
+        mock_commit = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.revparse_single.return_value.peel.return_value = mock_commit
+        mock_diff = MagicMock()
+        mock_diff.__iter__ = MagicMock(return_value=iter(patches))
+        mock_repo.diff.return_value = mock_diff
+
+        monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+
+    def test_returns_file_to_lines_mapping(self, monkeypatch: Any) -> None:
+        """Two refs with a known diff → dict mapping file_path → sorted 0-based lines."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        lines = [
+            _make_mock_line("+", 5),   # 0-based: 4
+            _make_mock_line(" ", 6),   # context, skip
+            _make_mock_line("+", 10),  # 0-based: 9
+        ]
+        hunk = _make_mock_hunk(lines)
+        delta = _make_mock_delta("src/mod.py", 3)  # MODIFIED
+        patch = _make_mock_patch(delta, [hunk])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "main", "feature")
+
+        assert isinstance(result, dict)
+        assert "src/mod.py" in result
+        assert result["src/mod.py"] == [4, 9]
+
+    def test_identical_refs_returns_empty(self, monkeypatch: Any) -> None:
+        """Same commit for base and head → empty dict (no patches)."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        self._mock_repo([], monkeypatch)
+
+        result = _git_changed_lines("/repo", "abc123", "abc123")
+
+        assert result == {}
+
+    def test_invalid_ref_returns_error_dict(self, monkeypatch: Any) -> None:
+        """Invalid ref → error dict with 'error' key."""
+        import pygit2 as _pygit2
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        mock_repo = MagicMock()
+        mock_repo.revparse_single.side_effect = KeyError("bad-ref")
+        monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+
+        result = _git_changed_lines("/repo", "bad-ref", "HEAD")
+
+        assert isinstance(result, dict)
+        assert "error" in result
+
+    def test_deleted_file_excluded(self, monkeypatch: Any) -> None:
+        """Deleted file (status=GIT_DELTA_DELETED=2) → not in result."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        delta = _make_mock_delta("removed.py", 2)  # DELETED
+        patch = _make_mock_patch(delta, [])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "main", "feature")
+
+        assert "removed.py" not in result
+        assert result == {}
+
+    def test_new_file_all_lines_changed(self, monkeypatch: Any) -> None:
+        """New file (status=GIT_DELTA_ADDED=1) → all lines collected."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        lines = [
+            _make_mock_line("+", 1),  # 0-based: 0
+            _make_mock_line("+", 2),  # 0-based: 1
+            _make_mock_line("+", 3),  # 0-based: 2
+        ]
+        hunk = _make_mock_hunk(lines)
+        delta = _make_mock_delta("new_file.py", 1)  # ADDED
+        patch = _make_mock_patch(delta, [hunk])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "main", "feature")
+
+        assert result["new_file.py"] == [0, 1, 2]
+
+    def test_binary_file_excluded(self, monkeypatch: Any) -> None:
+        """Binary file → skipped (delta.is_binary is True)."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        delta = _make_mock_delta("image.png", 3, is_binary=True)  # MODIFIED + binary
+        patch = _make_mock_patch(delta, [])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "main", "feature")
+
+        assert result == {}
+
+    def test_renamed_file_uses_new_path(self, monkeypatch: Any) -> None:
+        """Renamed file (status=GIT_DELTA_RENAMED=4) → uses delta.new_file.path."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        lines = [_make_mock_line("+", 7)]  # 0-based: 6
+        hunk = _make_mock_hunk(lines)
+        delta = _make_mock_delta("new_name.py", 4)  # RENAMED
+        patch = _make_mock_patch(delta, [hunk])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "main", "feature")
+
+        assert "new_name.py" in result
+        assert result["new_name.py"] == [6]
+
+    def test_empty_ref_returns_error_dict(self, monkeypatch: Any) -> None:
+        """Empty string ref → error dict."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        result = _git_changed_lines("/repo", "", "HEAD")
+
+        assert isinstance(result, dict)
+        assert "error" in result
+
+    def test_deletion_only_patch_excluded(self, monkeypatch: Any) -> None:
+        """File with only deletions (no '+' lines) → excluded from result."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        lines = [
+            _make_mock_line("-", -1),  # deletion
+            _make_mock_line("-", -1),  # deletion
+            _make_mock_line(" ", 5),   # context
+        ]
+        hunk = _make_mock_hunk(lines)
+        delta = _make_mock_delta("shrunk.py", 3)  # MODIFIED
+        patch = _make_mock_patch(delta, [hunk])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "main", "feature")
+
+        assert result == {}
+
+
+class TestMapLinesToSymbols:
+    """_map_lines_to_symbols: map changed lines to symbols via range overlap."""
+
+    def _sym_row(
+        self,
+        fqn: str,
+        name: str,
+        kind: str = "Function",
+        file_path: str = "src/mod.py",
+        type_signature: str | None = "(x: int) -> str",
+        range_start: int = 0,
+        range_end: int = 20,
+    ) -> dict[str, Any]:
+        """Build a canned symbol row matching the SELECT columns."""
+        return {
+            "fqn": fqn,
+            "name": name,
+            "kind": kind,
+            "file_path": file_path,
+            "type_signature": type_signature,
+            "range_start": range_start,
+            "range_end": range_end,
+        }
+
+    def test_overlapping_lines_returns_symbol(self) -> None:
+        """Changed lines within symbol range → symbol included with changed_lines."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym = self._sym_row("mod::func", "func", range_start=5, range_end=15)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"src/mod.py": [7, 10]})
+
+        assert len(result) == 1
+        assert result[0]["fqn"] == "mod::func"
+        assert result[0]["changed_lines"] == [7, 10]
+
+    def test_no_overlap_returns_empty(self) -> None:
+        """Changed lines outside any symbol range → empty result."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        # Symbol at lines 5-15, changed lines at 20-25
+        sym = self._sym_row("mod::func", "func", range_start=5, range_end=15)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"src/mod.py": [20, 25]})
+
+        assert result == []
+
+    def test_multiple_symbols_different_lines(self) -> None:
+        """Multiple symbols in same file, different changed lines → both returned."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym_a = self._sym_row("mod::func_a", "func_a", range_start=0, range_end=10)
+        sym_b = self._sym_row("mod::func_b", "func_b", range_start=20, range_end=30)
+        services = make_mock_services([[sym_a, sym_b]])
+
+        result = _map_lines_to_symbols(services, {"src/mod.py": [5, 25]})
+
+        fqns = {r["fqn"] for r in result}
+        assert fqns == {"mod::func_a", "mod::func_b"}
+
+    def test_range_start_changed_is_signature_change(self) -> None:
+        """Changed line == range_start → change_type is 'signature_change'."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym = self._sym_row("mod::func", "func", range_start=10, range_end=20)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"src/mod.py": [10, 15]})
+
+        assert len(result) == 1
+        assert result[0]["change_type"] == "signature_change"
+
+    def test_body_only_change(self) -> None:
+        """Changed lines NOT including range_start → change_type is 'body_only'."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym = self._sym_row("mod::func", "func", range_start=10, range_end=20)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"src/mod.py": [15, 18]})
+
+        assert len(result) == 1
+        assert result[0]["change_type"] == "body_only"
+
+    def test_empty_changed_lines_returns_empty(self) -> None:
+        """Empty changed_lines dict → empty result, no queries made."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        services = make_mock_services()
+
+        result = _map_lines_to_symbols(services, {})
+
+        assert result == []
+        services.provider.execute_query.assert_not_called()
+
+
+class TestSemanticDiffImpl:
+    """semantic_diff_impl: full integration — git diff → symbols → graph walk → output."""
+
+    def _mock_pygit2(self, monkeypatch: Any, patches: list[MagicMock]) -> None:
+        """Wire up pygit2.Repository mock for _git_changed_lines."""
+        import pygit2 as _pygit2
+
+        mock_commit = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.revparse_single.return_value.peel.return_value = mock_commit
+        mock_diff = MagicMock()
+        mock_diff.__iter__ = MagicMock(return_value=iter(patches))
+        mock_repo.diff.return_value = mock_diff
+
+        monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+
+    @pytest.mark.asyncio
+    async def test_signature_and_body_changes(self, monkeypatch: Any) -> None:
+        """One signature change + one body-only → correct output structure."""
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        # Git diff: two files changed
+        patch1_lines = [_make_mock_line("+", 11)]  # 0-based: 10 (= range_start → sig change)
+        patch1 = _make_mock_patch(
+            _make_mock_delta("src/a.py", 3), [_make_mock_hunk(patch1_lines)],
+        )
+        patch2_lines = [_make_mock_line("+", 26)]  # 0-based: 25 (body only, range_start=20)
+        patch2 = _make_mock_patch(
+            _make_mock_delta("src/b.py", 3), [_make_mock_hunk(patch2_lines)],
+        )
+        self._mock_pygit2(monkeypatch, [patch1, patch2])
+
+        # Query sequence:
+        # 1. _map_lines_to_symbols query for src/a.py
+        # 2. _map_lines_to_symbols query for src/b.py
+        # 3. _graph_walk for sym_a: walk query → nodes
+        # 4. _graph_walk for sym_a: edges query
+        # 5. _graph_walk for sym_b: walk query → nodes
+        # 6. _graph_walk for sym_b: edges query
+        # 7. _annotate_type_signatures: batch FQN lookup
+        sym_a = {
+            "fqn": "a::func_a", "name": "func_a", "kind": "Function",
+            "file_path": "src/a.py", "type_signature": "(x: int) -> str",
+            "range_start": 10, "range_end": 20,
+        }
+        sym_b = {
+            "fqn": "b::func_b", "name": "func_b", "kind": "Function",
+            "file_path": "src/b.py", "type_signature": "(y: str) -> bool",
+            "range_start": 20, "range_end": 30,
+        }
+        caller_node = {
+            "fqn": "test::test_a", "name": "test_a", "kind": "Function",
+            "file_path": "tests/test_a.py", "depth": 1,
+        }
+        caller_edge = {
+            "from_fqn": "a::func_a", "to_fqn": "test::test_a",
+            "edge_kind": "called_by", "from_file": "src/a.py", "to_file": "tests/test_a.py",
+        }
+        root_node_a = {
+            "fqn": "a::func_a", "name": "func_a", "kind": "Function",
+            "file_path": "src/a.py", "depth": 0,
+        }
+        root_node_b = {
+            "fqn": "b::func_b", "name": "func_b", "kind": "Function",
+            "file_path": "src/b.py", "depth": 0,
+        }
+
+        services = make_mock_services([
+            [sym_a],                          # map symbols for src/a.py
+            [sym_b],                          # map symbols for src/b.py
+            [root_node_a, caller_node],       # graph walk nodes for func_a
+            [caller_edge],                    # graph walk edges for func_a
+            [root_node_b],                    # graph walk nodes for func_b (no callers)
+            [],                               # graph walk edges for func_b
+            [{"fqn": "test::test_a", "type_signature": "() -> None"}],  # annotate sigs
+        ])
+
+        config = make_mock_config("/workspace")
+        result = await semantic_diff_impl(services=services, config=config, base="main", head="feature")
+
+        assert result["base"] == "main"
+        assert result["head"] == "feature"
+        assert result["total_changed"] == 2
+        assert result["summary"]["signature_changes"] == 1
+        assert result["summary"]["body_only"] == 1
+        assert len(result["changed_symbols"]) == 2
+        assert len(result["affected_callers"]) == 1
+        assert result["affected_callers"][0]["fqn"] == "test::test_a"
+        assert result["affected_callers"][0]["triggered_by"] == "a::func_a"
+
+    @pytest.mark.asyncio
+    async def test_no_changed_symbols_returns_empty(self, monkeypatch: Any) -> None:
+        """Diff in non-code files → no symbols matched → empty output."""
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        lines = [_make_mock_line("+", 5)]
+        patch = _make_mock_patch(
+            _make_mock_delta("README.md", 3), [_make_mock_hunk(lines)],
+        )
+        self._mock_pygit2(monkeypatch, [patch])
+
+        # map_lines_to_symbols returns no symbols for README.md
+        services = make_mock_services([
+            [],  # no symbols in README.md
+        ])
+
+        config = make_mock_config("/workspace")
+        result = await semantic_diff_impl(services=services, config=config, base="main", head="feature")
+
+        assert result["total_changed"] == 0
+        assert result["changed_symbols"] == []
+        assert result["affected_callers"] == []
+
+    @pytest.mark.asyncio
+    async def test_invalid_ref_returns_error(self, monkeypatch: Any) -> None:
+        """Invalid base ref → error dict propagated from _git_changed_lines."""
+        import pygit2 as _pygit2
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        mock_repo = MagicMock()
+        mock_repo.revparse_single.side_effect = KeyError("nonexistent")
+        monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+
+        config = make_mock_config("/workspace")
+        result = await semantic_diff_impl(
+            services=MagicMock(), config=config, base="nonexistent", head="HEAD",
+        )
+
+        assert "error" in result
+
+    def test_tool_registered_in_registry(self) -> None:
+        """semantic_diff is registered in TOOL_REGISTRY."""
+        from chunkhound.mcp_server.tools import TOOL_REGISTRY
+
+        assert "semantic_diff" in TOOL_REGISTRY
+
+
+# ---------------------------------------------------------------------------
+# Adversarial stress tests — semantic_diff components
+# ---------------------------------------------------------------------------
+
+
+class TestGitChangedLinesAdversarial:
+    """Adversarial structural patterns for _git_changed_lines."""
+
+    def _mock_repo(self, patches: list[MagicMock], monkeypatch: Any) -> None:
+        """Wire up a mock pygit2.Repository that returns given patches as diff."""
+        import pygit2 as _pygit2
+
+        mock_commit = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.revparse_single.return_value.peel.return_value = mock_commit
+        mock_diff = MagicMock()
+        mock_diff.__iter__ = MagicMock(return_value=iter(patches))
+        mock_repo.diff.return_value = mock_diff
+        monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+
+    def test_singular_one_line_change(self, monkeypatch: Any) -> None:
+        """Singular: exactly one addition line in one file."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        lines = [_make_mock_line("+", 1)]
+        patch = _make_mock_patch(
+            _make_mock_delta("x.py", 3), [_make_mock_hunk(lines)],
+        )
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "a", "b")
+
+        assert result == {"x.py": [0]}
+
+    def test_same_ref_both_sides(self, monkeypatch: Any) -> None:
+        """Self-referential: base == head (same string, not just same commit)."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        self._mock_repo([], monkeypatch)
+
+        result = _git_changed_lines("/repo", "HEAD", "HEAD")
+
+        assert result == {}
+
+    def test_multiple_hunks_same_file(self, monkeypatch: Any) -> None:
+        """Dense: two hunks in one file — lines from both hunks collected and sorted."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        hunk1 = _make_mock_hunk([_make_mock_line("+", 5), _make_mock_line("+", 6)])
+        hunk2 = _make_mock_hunk([_make_mock_line("+", 100), _make_mock_line("+", 101)])
+        patch = _make_mock_patch(_make_mock_delta("x.py", 3), [hunk1, hunk2])
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "a", "b")
+
+        assert result["x.py"] == [4, 5, 99, 100]
+
+    def test_git_error_not_a_repo(self, monkeypatch: Any) -> None:
+        """Dependency treachery: repo_path isn't a git repo → GitError caught."""
+        import pygit2 as _pygit2
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        monkeypatch.setattr(
+            _pygit2, "Repository",
+            MagicMock(side_effect=_pygit2.GitError("not a repo")),
+        )
+
+        result = _git_changed_lines("/not/a/repo", "main", "HEAD")
+
+        assert "error" in result
+
+    def test_many_files_in_diff(self, monkeypatch: Any) -> None:
+        """Dense: 50 files each with one changed line — all collected."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        patches = []
+        for i in range(50):
+            lines = [_make_mock_line("+", i + 1)]
+            patches.append(_make_mock_patch(
+                _make_mock_delta(f"file_{i}.py", 3), [_make_mock_hunk(lines)],
+            ))
+        self._mock_repo(patches, monkeypatch)
+
+        result = _git_changed_lines("/repo", "a", "b")
+
+        assert len(result) == 50
+        assert result["file_25.py"] == [25]
+
+    def test_copied_file_status(self, monkeypatch: Any) -> None:
+        """Type boundary: GIT_DELTA_COPIED (status=5) treated like added."""
+        from chunkhound.mcp_server.tools.fusion import _git_changed_lines
+
+        lines = [_make_mock_line("+", 3)]
+        patch = _make_mock_patch(
+            _make_mock_delta("copy.py", 5), [_make_mock_hunk(lines)],  # COPIED
+        )
+        self._mock_repo([patch], monkeypatch)
+
+        result = _git_changed_lines("/repo", "a", "b")
+
+        assert result == {"copy.py": [2]}
+
+
+class TestMapLinesToSymbolsAdversarial:
+    """Adversarial structural patterns for _map_lines_to_symbols."""
+
+    def _sym_row(
+        self, fqn: str, name: str, range_start: int, range_end: int,
+        kind: str = "Function", file_path: str = "x.py",
+        type_signature: str | None = "(x: int) -> str",
+    ) -> dict[str, Any]:
+        return {
+            "fqn": fqn, "name": name, "kind": kind, "file_path": file_path,
+            "type_signature": type_signature, "range_start": range_start,
+            "range_end": range_end,
+        }
+
+    def test_singular_one_symbol_one_line(self) -> None:
+        """Singular: one symbol, range covers exactly one line, that line changed."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym = self._sym_row("m::f", "f", range_start=5, range_end=5)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"x.py": [5]})
+
+        assert len(result) == 1
+        assert result[0]["change_type"] == "signature_change"  # range_start == changed line
+
+    def test_symbol_range_start_gt_range_end(self) -> None:
+        """Semantically hostile: symbol with range_start > range_end (malformed DB data)."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        # range_start=20, range_end=10 — inverted. The broad SQL uses
+        # range_start <= max(lines) AND range_end >= min(lines). With
+        # range_start=20, range_end=10, changed line=15:
+        # 20 <= 15 is False, so SQL excludes it. Safe.
+        sym = self._sym_row("m::bad", "bad", range_start=20, range_end=10)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"x.py": [15]})
+
+        # Even if SQL returns it (mock doesn't enforce SQL logic),
+        # intersection should be empty because range(20,10) contains nothing
+        assert result == []
+
+    def test_overlapping_symbols(self) -> None:
+        """Dense: two symbols whose ranges overlap, same changed line in both."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym_a = self._sym_row("m::outer", "outer", range_start=0, range_end=30)
+        sym_b = self._sym_row("m::inner", "inner", range_start=10, range_end=20)
+        services = make_mock_services([[sym_a, sym_b]])
+
+        result = _map_lines_to_symbols(services, {"x.py": [15]})
+
+        fqns = {r["fqn"] for r in result}
+        assert fqns == {"m::outer", "m::inner"}
+
+    def test_none_type_signature(self) -> None:
+        """Type boundary: symbol with type_signature=None."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym = self._sym_row("m::f", "f", range_start=5, range_end=15, type_signature=None)
+        services = make_mock_services([[sym]])
+
+        result = _map_lines_to_symbols(services, {"x.py": [10]})
+
+        assert len(result) == 1
+        assert result[0]["type_signature"] is None
+        assert result[0]["change_type"] == "body_only"
+
+    def test_multiple_files(self) -> None:
+        """Disconnected: changes in two unrelated files → separate queries, merged result."""
+        from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
+
+        sym_a = self._sym_row("a::f", "f", range_start=0, range_end=10, file_path="a.py")
+        sym_b = self._sym_row("b::g", "g", range_start=0, range_end=10, file_path="b.py")
+        services = make_mock_services([
+            [sym_a],  # query for a.py
+            [sym_b],  # query for b.py
+        ])
+
+        result = _map_lines_to_symbols(services, {"a.py": [5], "b.py": [5]})
+
+        fqns = {r["fqn"] for r in result}
+        assert fqns == {"a::f", "b::g"}
+
+
+class TestSemanticDiffImplAdversarial:
+    """Adversarial structural patterns for semantic_diff_impl."""
+
+    def _mock_pygit2(self, monkeypatch: Any, patches: list[MagicMock]) -> None:
+        import pygit2 as _pygit2
+
+        mock_commit = MagicMock()
+        mock_repo = MagicMock()
+        mock_repo.revparse_single.return_value.peel.return_value = mock_commit
+        mock_diff = MagicMock()
+        mock_diff.__iter__ = MagicMock(return_value=iter(patches))
+        mock_repo.diff.return_value = mock_diff
+        monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+
+    @pytest.mark.asyncio
+    async def test_depth_clamped_to_min_1(self, monkeypatch: Any) -> None:
+        """Type boundary: depth=0 → clamped to 1."""
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        # One file, one line changed, no symbols → empty result
+        lines = [_make_mock_line("+", 5)]
+        patch = _make_mock_patch(_make_mock_delta("x.py", 3), [_make_mock_hunk(lines)])
+        self._mock_pygit2(monkeypatch, [patch])
+
+        services = make_mock_services([
+            [],  # no symbols for x.py
+        ])
+        config = make_mock_config("/workspace")
+
+        # Should not crash with depth=0
+        result = await semantic_diff_impl(
+            services=services, config=config, base="a", head="b", depth=0,
+        )
+
+        assert result["total_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_depth_clamped_to_max_10(self, monkeypatch: Any) -> None:
+        """Type boundary: depth=999 → clamped to 10."""
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        lines = [_make_mock_line("+", 5)]
+        patch = _make_mock_patch(_make_mock_delta("x.py", 3), [_make_mock_hunk(lines)])
+        self._mock_pygit2(monkeypatch, [patch])
+
+        services = make_mock_services([
+            [],  # no symbols
+        ])
+        config = make_mock_config("/workspace")
+
+        result = await semantic_diff_impl(
+            services=services, config=config, base="a", head="b", depth=999,
+        )
+
+        assert result["total_changed"] == 0
+
+    @pytest.mark.asyncio
+    async def test_graph_walk_error_skipped(self, monkeypatch: Any) -> None:
+        """Dependency treachery: _graph_walk returns error for a symbol → skip, don't crash."""
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        lines = [_make_mock_line("+", 6)]  # 0-based: 5 = range_start → signature_change
+        patch = _make_mock_patch(_make_mock_delta("x.py", 3), [_make_mock_hunk(lines)])
+        self._mock_pygit2(monkeypatch, [patch])
+
+        sym = {
+            "fqn": "x::f", "name": "f", "kind": "Function", "file_path": "x.py",
+            "type_signature": "(x: int) -> str", "range_start": 5, "range_end": 15,
+        }
+        services = make_mock_services([
+            [sym],                    # map_lines_to_symbols
+            [],                       # graph walk: no nodes (empty → _graph_walk returns error-like)
+            [],                       # graph walk edges (also empty)
+            [],                       # annotate type signatures (no callers)
+        ])
+        config = make_mock_config("/workspace")
+
+        result = await semantic_diff_impl(
+            services=services, config=config, base="a", head="b",
+        )
+
+        # Should complete — changed_symbols present, no callers (walk returned nothing useful)
+        assert result["total_changed"] == 1
+        assert result["total_affected"] == 0
+
+    @pytest.mark.asyncio
+    async def test_second_run_idempotent(self, monkeypatch: Any) -> None:
+        """The second run: calling twice with same args → same result."""
+        from chunkhound.mcp_server.tools.fusion import semantic_diff_impl
+
+        lines = [_make_mock_line("+", 5)]
+        patch = _make_mock_patch(_make_mock_delta("x.py", 3), [_make_mock_hunk(lines)])
+
+        def setup() -> tuple[MagicMock, MagicMock]:
+            import pygit2 as _pygit2
+            mock_commit = MagicMock()
+            mock_repo = MagicMock()
+            mock_repo.revparse_single.return_value.peel.return_value = mock_commit
+            mock_diff = MagicMock()
+            mock_diff.__iter__ = MagicMock(return_value=iter([patch]))
+            mock_repo.diff.return_value = mock_diff
+            monkeypatch.setattr(_pygit2, "Repository", MagicMock(return_value=mock_repo))
+            svc = make_mock_services([[]])
+            return svc, make_mock_config("/workspace")
+
+        svc1, cfg1 = setup()
+        r1 = await semantic_diff_impl(services=svc1, config=cfg1, base="a", head="b")
+
+        svc2, cfg2 = setup()
+        r2 = await semantic_diff_impl(services=svc2, config=cfg2, base="a", head="b")
+
+        assert r1["total_changed"] == r2["total_changed"]
+        assert r1["summary"] == r2["summary"]

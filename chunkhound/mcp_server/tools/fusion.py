@@ -9,9 +9,143 @@ import os
 from pathlib import Path
 from typing import Any
 
+import pygit2
+
 from .graph import _graph_walk
 from .queries.common import escape_like, scope_filter
 from .registry import register_tool
+
+
+# ---------------------------------------------------------------------------
+# semantic_diff helpers — git integration
+# ---------------------------------------------------------------------------
+
+_GIT_DELTA_DELETED = 2
+
+
+def _git_changed_lines(
+    repo_path: str,
+    base: str,
+    head: str,
+) -> dict[str, list[int]] | dict[str, str]:
+    """Extract changed line numbers from a git diff between two refs.
+
+    Returns a dict mapping file_path → sorted list of 0-based changed line
+    numbers (addition-side only). Binary files and deleted files are excluded.
+
+    On error (invalid ref, bad repo), returns a dict with an 'error' key.
+
+    Args:
+        repo_path: Path to the git repository
+        base: Base git ref (branch, tag, SHA, HEAD~N, etc.)
+        head: Head git ref
+
+    Returns:
+        File→lines mapping, or error dict.
+    """
+    # Validate non-empty refs
+    if not base or not head:
+        return {"error": "invalid_ref", "message": "Base and head refs must be non-empty strings"}
+
+    try:
+        repo = pygit2.Repository(repo_path)
+        base_commit = repo.revparse_single(base).peel(pygit2.Commit)
+        head_commit = repo.revparse_single(head).peel(pygit2.Commit)
+    except (KeyError, pygit2.GitError) as e:
+        return {"error": "invalid_ref", "message": str(e)}
+
+    diff = repo.diff(base_commit, head_commit)
+
+    result: dict[str, list[int]] = {}
+    for patch in diff:
+        delta = patch.delta
+
+        # Skip binary files and deleted files
+        if delta.is_binary or delta.status == _GIT_DELTA_DELETED:
+            continue
+
+        file_path = delta.new_file.path
+        lines: list[int] = []
+
+        for hunk in patch.hunks:
+            for line in hunk.lines:
+                if line.origin == "+" and line.new_lineno > 0:
+                    lines.append(line.new_lineno - 1)  # Convert 1-based to 0-based
+
+        # Skip files with no addition lines (deletion-only patches)
+        if lines:
+            result[file_path] = sorted(lines)
+
+    return result
+
+
+def _map_lines_to_symbols(
+    services: Any,
+    changed_lines: dict[str, list[int]],
+) -> list[dict[str, Any]]:
+    """Map changed lines to symbols via range overlap and classify changes.
+
+    For each file with changed lines, queries symbols whose range overlaps the
+    changed region. Symbols with no actual overlapping lines are excluded.
+    Classification: range_start in changed_lines → "signature_change", else "body_only".
+
+    Args:
+        services: DatabaseServices instance
+        changed_lines: Dict mapping file_path → sorted list of 0-based changed line numbers
+
+    Returns:
+        List of symbol dicts with fqn, name, kind, file_path, type_signature,
+        change_type, and changed_lines.
+    """
+    if not changed_lines:
+        return []
+
+    result: list[dict[str, Any]] = []
+
+    for file_path, lines in changed_lines.items():
+        if not lines:
+            continue
+
+        min_line = min(lines)
+        max_line = max(lines)
+        line_set = set(lines)
+
+        # Broad query: symbols whose range overlaps [min_line, max_line]
+        rows = services.provider.execute_query(
+            "SELECT fqn, name, kind, file_path, type_signature, range_start, range_end "
+            "FROM symbols WHERE file_path = ? AND range_start <= ? AND range_end >= ?",
+            [file_path, max_line, min_line],
+        )
+
+        for row in rows:
+            # Narrow: intersect symbol range with actual changed lines
+            sym_lines = [
+                ln for ln in lines
+                if row["range_start"] <= ln <= row["range_end"]
+            ]
+
+            # Exclude symbols with no overlapping lines
+            if not sym_lines:
+                continue
+
+            # Classify: range_start touched → signature_change
+            change_type = (
+                "signature_change"
+                if row["range_start"] in line_set
+                else "body_only"
+            )
+
+            result.append({
+                "fqn": row["fqn"],
+                "name": row["name"],
+                "kind": row["kind"],
+                "file_path": row["file_path"],
+                "type_signature": row["type_signature"],
+                "change_type": change_type,
+                "changed_lines": sym_lines,
+            })
+
+    return result
 
 
 def _query_scope_symbols(
@@ -683,4 +817,119 @@ async def cross_language_check_impl(
         "missing_in_b": comparison["missing_in_b"],
         "total_compared": total_compared,
         "total_mismatches": len(comparison["mismatches"]),
+    }
+
+
+# ---------------------------------------------------------------------------
+# semantic_diff tool
+# ---------------------------------------------------------------------------
+
+SEMANTIC_DIFF_DESCRIPTION = """Behavior-level change classification between git refs.
+
+Given two git refs (branches, tags, SHAs, HEAD~N), identifies changed symbols,
+walks their caller graph, and classifies affected callers. Distinguishes
+signature changes (declaration line modified) from body-only changes.
+
+Use this to answer: "What changed between these commits and what's affected?"
+
+Parameters:
+  base: Base git ref (e.g., "main", "HEAD~3", commit SHA)
+  head: Head git ref (e.g., "feature-branch", "HEAD")
+  depth: How many hops of callers to traverse (1-10, default 3)
+"""
+
+
+@register_tool(
+    description=SEMANTIC_DIFF_DESCRIPTION,
+    name="semantic_diff",
+)
+async def semantic_diff_impl(
+    services: Any,
+    config: Any,
+    base: str,
+    head: str,
+    depth: int = 3,
+) -> dict[str, Any]:
+    """Behavior-level change classification between git refs.
+
+    Args:
+        services: DatabaseServices instance
+        config: Config instance (provides target_dir as workspace_root)
+        base: Base git ref
+        head: Head git ref
+        depth: Caller hops to traverse (1-10, default 3)
+    """
+    # Clamp depth 1-10
+    depth = max(1, min(10, depth))
+
+    # Resolve workspace root
+    workspace_root = str(
+        config.target_dir
+        if config and hasattr(config, "target_dir") and config.target_dir
+        else Path(".").resolve()
+    )
+
+    # Step 1: Get changed lines from git diff
+    changed_lines = _git_changed_lines(workspace_root, base, head)
+    if "error" in changed_lines:
+        return changed_lines  # type: ignore[return-value]
+
+    # Step 2: Map changed lines to symbols
+    changed_symbols = _map_lines_to_symbols(services, changed_lines)
+
+    # Step 3: Walk caller graph for each changed symbol
+    reachable: dict[str, dict[str, Any]] = {}  # fqn → {hop_distance, triggered_by}
+
+    for sym in changed_symbols:
+        walk_result = _graph_walk(
+            services=services,
+            symbol=sym["fqn"],
+            depth=depth,
+            edge_kind="called_by",
+            limit=100,
+            directed=True,
+        )
+
+        # Skip if _graph_walk returns error dict
+        if "error" in walk_result:
+            continue
+
+        for node in walk_result["results"]:
+            fqn = node["fqn"]
+            node_depth = node["depth"]
+            # Skip the root symbol itself (depth 0)
+            if node_depth == 0:
+                continue
+            if fqn not in reachable or node_depth < reachable[fqn]["hop_distance"]:
+                reachable[fqn] = {
+                    "fqn": fqn,
+                    "name": node["name"],
+                    "kind": node["kind"],
+                    "file_path": node["file_path"],
+                    "hop_distance": node_depth,
+                    "triggered_by": sym["fqn"],
+                }
+
+    # Step 4: Annotate affected callers with type signatures
+    affected_list = sorted(
+        reachable.values(),
+        key=lambda x: (x["hop_distance"], x["fqn"]),
+    )
+    _annotate_type_signatures(services, affected_list)
+
+    # Step 5: Build summary
+    sig_count = sum(1 for s in changed_symbols if s["change_type"] == "signature_change")
+    body_count = sum(1 for s in changed_symbols if s["change_type"] == "body_only")
+
+    return {
+        "base": base,
+        "head": head,
+        "changed_symbols": changed_symbols,
+        "affected_callers": affected_list,
+        "total_changed": len(changed_symbols),
+        "total_affected": len(affected_list),
+        "summary": {
+            "signature_changes": sig_count,
+            "body_only": body_count,
+        },
     }

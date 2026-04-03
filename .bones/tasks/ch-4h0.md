@@ -1,11 +1,13 @@
 ---
 id: ch-4h0
 title: semantic_diff — behavior-level change classification
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-dar
 ---
+
 
 ## Context
 Fourth and final Phase 4 fusion tool. Given two git refs (base and head),
@@ -81,12 +83,16 @@ Test class: `TestGitChangedLines`
 - Test: invalid ref → returns error dict with `"error"` key
 - Test: deleted file (in base, not in head) → excluded (no symbols to map)
 - Test: new file (not in base, in head) → all lines are changed
+- Test: binary file in diff → excluded (delta.is_binary skip)
+- Test: renamed file → uses delta.new_file.path, lines collected normally
+- Test: empty string ref → error dict (not crash)
+- Test: patch with only deletions (no "+" lines) → file excluded from result (empty line list skipped)
 Mock: pygit2.Repository (mock the diff object structure: patches → hunks → lines)
 
 ### Step 2: Implement `_git_changed_lines`
 File: `chunkhound/mcp_server/tools/fusion.py`
 Signature: `_git_changed_lines(repo_path: str, base: str, head: str) -> dict[str, list[int]] | dict[str, str]`
-Use pygit2: open repo, resolve refs via `repo.revparse_single(ref).peel(pygit2.Commit)`, compute diff, iterate patches. For each patch: skip deleted files (delta.status == GIT_DELTA_DELETED). For added/modified files: collect `line.new_lineno - 1` (convert to 0-based) for lines with `origin == "+"`. Return `{file_path: sorted_line_numbers}`. Catch pygit2 errors → error dict.
+Use pygit2: open repo, resolve refs via `repo.revparse_single(ref).peel(pygit2.Commit)`, compute diff, iterate patches. For each patch: skip if `delta.is_binary` or `delta.status == GIT_DELTA_DELETED` (constant=2). For all other statuses (ADDED=1, MODIFIED=3, RENAMED=4, COPIED=5): use `delta.new_file.path` as the file key, collect `line.new_lineno - 1` (convert to 0-based) for lines with `origin == "+"`. Return `{file_path: sorted_line_numbers}`. Catch `KeyError` (invalid refs) and `pygit2.GitError` (bad repo path) → error dict. Skip files with empty line lists after collection (deletion-only patches). Defensively check `new_lineno > 0` before 0-based conversion.
 
 ### Step 3: Write failing test — map changed lines to symbols
 File: `tests/mcp_server/test_fusion_tools.py`
@@ -102,7 +108,7 @@ Mock: `services.provider.execute_query` returns canned symbol rows with range_st
 ### Step 4: Implement `_map_lines_to_symbols`
 File: `chunkhound/mcp_server/tools/fusion.py`
 Signature: `_map_lines_to_symbols(services: Any, changed_lines: dict[str, list[int]]) -> list[dict[str, Any]]`
-For each file in changed_lines: query symbols overlapping the changed range: `SELECT fqn, name, kind, file_path, type_signature, range_start, range_end FROM symbols WHERE file_path = ? AND range_start <= ? AND range_end >= ?` where `?` is max(changed_lines) and min(changed_lines) respectively. For each symbol: intersect its [range_start, range_end] with changed_lines → `changed_lines` list. Classify: if range_start in changed_lines → "signature_change", else "body_only".
+For each file in changed_lines: query symbols overlapping the changed range: `SELECT fqn, name, kind, file_path, type_signature, range_start, range_end FROM symbols WHERE file_path = ? AND range_start <= ? AND range_end >= ?` where `?` is max(changed_lines) and min(changed_lines) respectively. For each symbol: intersect its [range_start, range_end] with changed_lines → `changed_lines` list. **Exclude symbols with empty intersection** (broad SQL returns candidates, Python narrows). Classify remaining: if range_start in changed_lines → "signature_change", else "body_only".
 
 ### Step 5: Write failing test — full tool integration
 File: `tests/mcp_server/test_fusion_tools.py`
@@ -117,13 +123,14 @@ Mock: pygit2.Repository (via monkeypatch), services.provider.execute_query (symb
 File: `chunkhound/mcp_server/tools/fusion.py`
 Signature: `async def semantic_diff_impl(services: Any, config: Any, base: str, head: str, depth: int = 3) -> dict[str, Any]`
 `@register_tool(name="semantic_diff")`. Compose:
-1. Resolve workspace_root from config
-2. `_git_changed_lines(workspace_root, base, head)` → if error, return it
-3. `_map_lines_to_symbols(services, changed_lines)` → changed_symbols
-4. For each changed symbol: `_graph_walk(services, symbol=fqn, depth=depth, edge_kind="called_by", limit=100, directed=True)` → collect callers. Deduplicate by FQN, keep min hop_distance. Track which changed symbol triggered each caller.
-5. `_annotate_type_signatures(services, affected_callers_list)`
-6. Build summary: count signature_changes vs body_only
-7. Return structured output
+1. **Clamp depth 1-10** (matching impact_cascade pattern)
+2. Resolve workspace_root from config
+3. `_git_changed_lines(workspace_root, base, head)` → if error, return it
+4. `_map_lines_to_symbols(services, changed_lines)` → changed_symbols
+5. For each changed symbol: `_graph_walk(services, symbol=fqn, depth=depth, edge_kind="called_by", limit=100, directed=True)`. **Check `if "error" in walk_result: continue`** before accessing results (symbol may be in diff but not in graph). Collect callers, deduplicate by FQN, keep min hop_distance. Track which changed symbol triggered each caller.
+6. `_annotate_type_signatures(services, affected_callers_list)`
+7. Build summary: count signature_changes vs body_only
+8. Return structured output
 
 ### Step 7: Wire — update expected tool count
 File: `tests/mcp_server/test_adversarial_decomp.py`
@@ -132,17 +139,21 @@ Add `"semantic_diff"` to `EXPECTED_TOOLS` set. Update docstring count (10→11).
 ## Success Criteria
 - [ ] `_git_changed_lines` returns file→line_numbers mapping from pygit2 diff
 - [ ] `_git_changed_lines` handles invalid refs with error dict (not exception)
-- [ ] `_git_changed_lines` excludes deleted files, includes new files
+- [ ] `_git_changed_lines` excludes deleted files, includes new files, skips binary files
+- [ ] `_git_changed_lines` handles renamed/copied files using delta.new_file.path
 - [ ] `_git_changed_lines` converts to 0-based line numbers (matching DB schema)
 - [ ] `_map_lines_to_symbols` maps changed lines to symbols via range overlap
 - [ ] `_map_lines_to_symbols` classifies changes: range_start touched → "signature_change", else "body_only"
 - [ ] `semantic_diff_impl` identifies changed symbols and walks their caller graph
+- [ ] `semantic_diff_impl` clamps depth to 1-10
+- [ ] `semantic_diff_impl` skips graph walk errors for individual symbols (doesn't abort)
 - [ ] `semantic_diff_impl` deduplicates affected callers by FQN with min hop_distance
 - [ ] `semantic_diff_impl` returns structured output with summary counts
 - [ ] `semantic_diff_impl` registered in TOOL_REGISTRY via `@register_tool`
 - [ ] Zero LLM/embedding calls — deterministic only
 - [ ] All new code has failing tests before implementation
 - [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
+- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (inherited from ch-dar gate)
 
 ## Key Considerations
 - pygit2 is already a dependency (v1.19.0). The diff API provides `Patch.delta.new_file.path`, `Hunk.lines[].new_lineno`, and `Line.origin` ("+", "-", " "). New file lines are origin "+".
@@ -152,6 +163,29 @@ Add `"semantic_diff"` to `EXPECTED_TOOLS` set. Update docstring count (10→11).
 - For refs: pygit2's `revparse_single` handles branch names, tags, SHAs, HEAD~N, etc. It raises `KeyError` on invalid refs.
 - The `_graph_walk` + `_annotate_type_signatures` composition is identical to impact_cascade's pattern. No new graph logic needed.
 - `affected_callers` includes a `triggered_by` field showing which changed symbol's caller graph reached this caller. If multiple changed symbols reach the same caller, use the one with shortest hop_distance.
+- **Binary files:** `delta.is_binary` is True for binary patches — skip them (no meaningful line numbers). Verified in pygit2 1.19.0.
+- **Renamed/copied files:** `delta.status` can be RENAMED(4) or COPIED(5). These are valid — use `delta.new_file.path` (works for all statuses). Don't filter by status whitelist; just skip DELETED and is_binary.
+- **Empty intersection filter:** The broad SQL `range_start <= max AND range_end >= min` catches all candidate symbols in the changed range. After per-symbol intersection with actual changed_lines, exclude symbols with zero overlapping lines.
+
+### Adversarial Failure Catalog (SRE)
+
+**_git_changed_lines — empty ref strings:** pygit2's `revparse_single("")` behavior is undefined. Validate non-empty before calling pygit2. KeyError catch covers most cases but explicit guard is cleaner.
+
+**_git_changed_lines — non-UTF-8 filenames:** Git allows arbitrary byte sequences in filenames. pygit2 on Python 3 returns str (UTF-8 decoded) — non-UTF-8 paths may raise. Catch and skip.
+
+**_git_changed_lines — GitError on bad repo_path:** If workspace_root isn't a git repo, pygit2 raises `GitError`, not `KeyError`. Error handler must catch both `KeyError` and `pygit2.GitError`.
+
+**_git_changed_lines — negative new_lineno edge case:** `origin == "+"` filter should exclude deletion-side lines, but defensively check `new_lineno > 0` before converting to 0-based.
+
+**_map_lines_to_symbols — empty line list per file:** A patch with only deletions (file modified but no additions) produces a file key with empty list. `min([])` / `max([])` raises `ValueError`. Guard: `if not lines: continue`.
+
+**_map_lines_to_symbols — path format mismatch:** pygit2 returns repo-relative paths. Symbols table stores paths as set during indexing. Paths match when indexed from repo root (standard flow). Stale or differently-rooted indexes silently miss symbols.
+
+**semantic_diff_impl — missing depth clamp:** Skeleton has `depth: int = 3` but no clamping. Must clamp 1-10, matching impact_cascade pattern.
+
+**semantic_diff_impl — _graph_walk error dict:** `_graph_walk` can return `{"error": ...}` when a symbol exists in diff but not in graph. Must check `if "error" in walk_result: continue` before accessing `walk_result["results"]`, same as test_targeting (fusion.py:597).
+
+**semantic_diff_impl — large symbol count:** 200+ changed symbols → 200+ sequential `_graph_walk` calls. Functional but slow. Accept for v1; batch/parallelize is future optimization.
 
 ## Anti-Patterns
 - NO hardcoded ref names — accept any valid git ref string
@@ -160,3 +194,4 @@ Add `"semantic_diff"` to `EXPECTED_TOOLS` set. Update docstring count (10→11).
 - NO LLM/embedding calls — deterministic comparison
 - NO prose output — structured dicts only
 - NO reading file content to detect signature changes — use range_start heuristic
+- NO processing binary files — skip patches where delta.is_binary is True
