@@ -1,12 +1,14 @@
 ---
 id: ch-ef9
 title: impact_cascade — transitive caller tree with type annotations
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-dar
 ---
+
+
 
 
 ## Context
@@ -110,19 +112,19 @@ Add `from . import fusion as fusion  # noqa: F401` to domain module imports.
 Call `impact_cascade` on a known central function via MCP tool. Verify tree, hop distances, type signatures.
 
 ## Success Criteria
-- [ ] `_resolve_start_fqn` converts 1-based input, returns FQN or error dict
-- [ ] `_annotate_type_signatures` batch-queries type_signature from symbols table
-- [ ] `_build_caller_tree` reconstructs hierarchical tree from flat walk output
-- [ ] `impact_cascade_impl` registered in TOOL_REGISTRY via `@register_tool`
-- [ ] Output is structured tree: `{root: {fqn, hop_distance, type_signature, children}, total_nodes, max_depth}`
-- [ ] Depth clamped 1-10, default 3
-- [ ] Zero LLM/embedding calls — deterministic only
-- [ ] Directed traversal: only callers in tree, no callees (verified by negative assertion in tests)
-- [ ] Root with no callers → `{root: {..., children: []}, total_nodes: 1, max_depth: 0}`
-- [ ] NULL type_signatures → `null` in output nodes, no crash
-- [ ] All new code has failing tests before implementation
-- [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
-- [ ] `uv run pytest tests/mcp_server/test_queries_graph.py -v` → all pass (directed param tests)
+- [x] `_resolve_start_fqn` converts 1-based input, returns FQN or error dict
+- [x] `_annotate_type_signatures` batch-queries type_signature from symbols table
+- [x] `_build_caller_tree` reconstructs hierarchical tree from flat walk output
+- [x] `impact_cascade_impl` registered in TOOL_REGISTRY via `@register_tool`
+- [x] Output is structured tree: `{root: {fqn, hop_distance, type_signature, children}, total_nodes, max_depth}`
+- [x] Depth clamped 1-10, default 3
+- [x] Zero LLM/embedding calls — deterministic only
+- [x] Directed traversal: only callers in tree, no callees (verified by negative assertion in tests)
+- [x] Root with no callers → `{root: {..., children: []}, total_nodes: 1, max_depth: 0}`
+- [x] NULL type_signatures → `null` in output nodes, no crash
+- [x] All new code has failing tests before implementation
+- [x] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass (20 tests)
+- [x] `uv run pytest tests/mcp_server/test_queries_graph.py -v` → all pass (40 tests)
 
 ## Key Considerations
 - `character` param accepted in `_resolve_start_fqn` for API consistency but unused in DB range query — only `line` matters for `range_start`/`range_end` matching
@@ -140,3 +142,7 @@ Call `impact_cascade` on a known central function via MCP tool. Verify tree, hop
 - NO prose output — structured dicts only
 - NO reimplementing walk traversal — compose `_graph_walk` from graph.py with `directed=True` parameter (forward-only edge traversal via `build_walk_query`)
 - NO bidirectional walk for impact_cascade — directed walk is mandatory to exclude callees from the caller tree
+
+## Log
+
+- [2026-04-03T07:23:11Z] [Seth] Implementation complete. 4 helpers + 1 tool. 20 tests (13 TDD + 7 adversarial). Adversarial battery found real bug: cycle in edges caused infinite recursion in _build_caller_tree — fixed with visited tracking. Directed walk param added to build_walk_query/graph_walk. format_edge renames from_fqn→from_symbol — tree builder handles both key formats.
