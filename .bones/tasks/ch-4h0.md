@@ -1,12 +1,13 @@
 ---
 id: ch-4h0
 title: semantic_diff — behavior-level change classification
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-dar
 ---
+
 
 
 ## Context
@@ -137,23 +138,23 @@ File: `tests/mcp_server/test_adversarial_decomp.py`
 Add `"semantic_diff"` to `EXPECTED_TOOLS` set. Update docstring count (10→11).
 
 ## Success Criteria
-- [ ] `_git_changed_lines` returns file→line_numbers mapping from pygit2 diff
-- [ ] `_git_changed_lines` handles invalid refs with error dict (not exception)
-- [ ] `_git_changed_lines` excludes deleted files, includes new files, skips binary files
-- [ ] `_git_changed_lines` handles renamed/copied files using delta.new_file.path
-- [ ] `_git_changed_lines` converts to 0-based line numbers (matching DB schema)
-- [ ] `_map_lines_to_symbols` maps changed lines to symbols via range overlap
-- [ ] `_map_lines_to_symbols` classifies changes: range_start touched → "signature_change", else "body_only"
-- [ ] `semantic_diff_impl` identifies changed symbols and walks their caller graph
-- [ ] `semantic_diff_impl` clamps depth to 1-10
-- [ ] `semantic_diff_impl` skips graph walk errors for individual symbols (doesn't abort)
-- [ ] `semantic_diff_impl` deduplicates affected callers by FQN with min hop_distance
-- [ ] `semantic_diff_impl` returns structured output with summary counts
-- [ ] `semantic_diff_impl` registered in TOOL_REGISTRY via `@register_tool`
-- [ ] Zero LLM/embedding calls — deterministic only
-- [ ] All new code has failing tests before implementation
-- [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (inherited from ch-dar gate)
+- [x] `_git_changed_lines` returns file→line_numbers mapping from pygit2 diff
+- [x] `_git_changed_lines` handles invalid refs with error dict (not exception)
+- [x] `_git_changed_lines` excludes deleted files, includes new files, skips binary files
+- [x] `_git_changed_lines` handles renamed/copied files using delta.new_file.path
+- [x] `_git_changed_lines` converts to 0-based line numbers (matching DB schema)
+- [x] `_map_lines_to_symbols` maps changed lines to symbols via range overlap
+- [x] `_map_lines_to_symbols` classifies changes: range_start touched → "signature_change", else "body_only"
+- [x] `semantic_diff_impl` identifies changed symbols and walks their caller graph
+- [x] `semantic_diff_impl` clamps depth to 1-10
+- [x] `semantic_diff_impl` skips graph walk errors for individual symbols (doesn't abort)
+- [x] `semantic_diff_impl` deduplicates affected callers by FQN with min hop_distance
+- [x] `semantic_diff_impl` returns structured output with summary counts
+- [x] `semantic_diff_impl` registered in TOOL_REGISTRY via `@register_tool`
+- [x] Zero LLM/embedding calls — deterministic only
+- [x] All new code has failing tests before implementation
+- [x] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass (120 pass)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (17 pass, inherited from ch-dar gate)
 
 ## Key Considerations
 - pygit2 is already a dependency (v1.19.0). The diff API provides `Patch.delta.new_file.path`, `Hunk.lines[].new_lineno`, and `Line.origin` ("+", "-", " "). New file lines are origin "+".

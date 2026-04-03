@@ -311,3 +311,4 @@
 {"timestamp":"2026-04-03T13:35:15.492315+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"blocks","to":"ch-4h0"}}
 {"timestamp":"2026-04-03T13:36:34.285520+00:00","actor":"Seth","event_type":"logged","task_id":"ch-wo0","details":{"message":"Debrief: SRE caught comma-in-generics design bug before implementation. scope_filter helper used instead of hand-rolled escape. All 15 criteria met, 86 tests (49 functional + 13 adversarial for cross_language_check). Next task ch-4h0 (semantic_diff) scoped — last fusion tool, uses pygit2 for git diff + range overlap for symbol mapping."}}
 {"timestamp":"2026-04-03T14:01:00.734610+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-4h0","details":{"actor":"Seth"}}
+{"timestamp":"2026-04-03T14:30:53.558689+00:00","actor":"Seth","event_type":"closed","task_id":"ch-4h0","details":{"notes":null}}

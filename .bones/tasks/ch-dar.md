@@ -35,12 +35,12 @@ Scoped to parent epic R6:
 - [x] `impact_cascade` annotates each node with enough info for agent to classify mechanical vs logic change
 - [x] `cross_language_check(scope_a, scope_b)` compares exported symbols across scopes, returns mismatches in name/signature
 - [x] `cross_language_check` works across different languages (e.g., Python bindings vs C extensions)
-- [ ] `semantic_diff(base, head)` identifies changed symbols, walks their impact, classifies affected callers
-- [ ] `semantic_diff` distinguishes between signature changes and body-only changes
-- [ ] All fusion tools return structured data (not prose), suitable for agent consumption or skill script input
-- [ ] All fusion tools are deterministic — no LLM calls, no embedding calls
-- [ ] `uv run pytest tests/test_fusion_tools.py -v` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [x] `semantic_diff(base, head)` identifies changed symbols, walks their impact, classifies affected callers
+- [x] `semantic_diff` distinguishes between signature changes and body-only changes
+- [x] All fusion tools return structured data (not prose), suitable for agent consumption or skill script input
+- [x] All fusion tools are deterministic — no LLM calls, no embedding calls
+- [x] `uv run pytest tests/test_fusion_tools.py -v` → all pass (120 pass)
+- [x] `uv run pytest tests/test_smoke.py -v -n auto` → all pass (17 pass)
 
 ## Anti-Patterns
 Inherited from parent epic, plus:
