@@ -1,0 +1,153 @@
+---
+id: ch-wo0
+title: cross_language_check — exported symbol mismatches across scopes
+status: open
+type: task
+priority: 1
+parent: ch-dar
+---
+
+## Context
+Third Phase 4 fusion tool. Given two scope prefixes (file path prefixes),
+queries symbols in each scope, matches by name, and compares arity to find
+binding mismatches. Pure symbols-table comparison — no graph walks, no LLM.
+Reuses `escape_like`, `@register_tool`, and `make_mock_services` patterns.
+
+**Blocked by:** ch-zj0 (test_targeting, closed — establishes scope query + escape patterns)
+**Unlocks:** `semantic_diff` (last fusion tool) + Phase 4 shared criteria
+
+## Requirements
+From ch-dar (Phase 4 epic) success criteria:
+- `cross_language_check(scope_a, scope_b)` compares exported symbols across scopes, returns mismatches in name/signature
+- Works across different languages (e.g., Python bindings vs C extensions)
+- Comparison is structural (name + arity), not string equality (ch-8e7 Key Considerations)
+- Deterministic — no LLM, no embeddings
+- Structured data output, not prose
+
+## Design
+
+**Composition:** `_query_scope_symbols(scope)` × 2 → `_compare_scope_symbols(a, b)` (uses `_extract_arity`) → structured output
+
+**Key decisions:**
+1. Scopes are file_path LIKE prefixes — the scope defines the language boundary (e.g., `"bindings/python/"` vs `"src/core/"`)
+2. Symbol matching is by `name` field — if two symbols in different scopes share a name, they're candidates
+3. Arity extraction from `type_signature` is heuristic: find content between `(` and matching `)`, strip `self`/`cls` first param, count remaining by `,` splits
+4. Mismatch types: `"arity"` (param count differs), `"kind"` (Function vs Class with same name). Both arities `None` → not a mismatch (insufficient data)
+5. Missing symbols: name in scope_a but not scope_b → `missing_in_b` (and vice versa)
+6. Multiple symbols with same name in one scope (overloads, different kinds) → report all pairs
+
+**Output shape:**
+```json
+{
+  "scope_a": "bindings/python/",
+  "scope_b": "src/core/",
+  "mismatches": [
+    {
+      "name": "process_data",
+      "scope_a": {"fqn": "...", "kind": "Function", "language": "python", "type_signature": "(data: bytes) -> str", "arity": 1},
+      "scope_b": {"fqn": "...", "kind": "Function", "language": "c", "type_signature": "int process_data(const char*, int)", "arity": 2},
+      "mismatch_type": "arity"
+    }
+  ],
+  "missing_in_a": [{"name": "core_only", "fqn": "...", "kind": "Function"}],
+  "missing_in_b": [{"name": "binding_only", "fqn": "...", "kind": "Function"}],
+  "total_compared": 15,
+  "total_mismatches": 3
+}
+```
+
+## Implementation
+
+### Step 1: Write failing test — query scope symbols
+File: `tests/mcp_server/test_fusion_tools.py` (extend)
+Test class: `TestQueryScopeSymbols`
+- Test: scope prefix returns `dict[str, list[dict]]` mapping name→[{fqn, kind, language, file_path, type_signature}]
+- Test: multiple symbols with same name (overloads) → all in the list for that name
+- Test: empty result → empty dict
+- Test: scope LIKE-escaped (verify `escape_like` used in query)
+Mock: `services.provider.execute_query` returns canned symbol rows
+
+### Step 2: Implement `_query_scope_symbols`
+File: `chunkhound/mcp_server/tools/fusion.py`
+Signature: `_query_scope_symbols(services: Any, scope: str) -> dict[str, list[dict[str, Any]]]`
+Query: `SELECT name, fqn, kind, language, file_path, type_signature FROM symbols WHERE file_path LIKE ? ESCAPE '\\'` with `escape_like(scope) + "%"`. Group rows by `name` into lists using `dict.setdefault`. Return dict.
+
+### Step 3: Write failing test — extract arity from type signature
+File: `tests/mcp_server/test_fusion_tools.py`
+Test class: `TestExtractArity`
+- Test: `"(self, x: int, y: str) -> bool"` → 2 (strips self)
+- Test: `"(cls, x: int) -> Foo"` → 1 (strips cls)
+- Test: `"(x: number, y: string) => boolean"` → 2 (TS-style)
+- Test: `"() -> None"` → 0
+- Test: `"(x: int) -> int"` → 1
+- Test: `None` → `None`
+- Test: `""` → `None`
+- Test: `"int process_data(const char*, int)"` → 2 (C-style, parens in middle)
+
+### Step 4: Implement `_extract_arity`
+File: `chunkhound/mcp_server/tools/fusion.py`
+Signature: `_extract_arity(type_signature: str | None) -> int | None`
+Heuristic: return `None` if input is None/empty. Find first `(` and its matching `)` (track nesting). Extract content between them. Strip leading `self,`/`cls,` (Python convention). If empty after strip → 0. Otherwise count commas + 1. No parens found → `None`.
+
+### Step 5: Write failing test — compare scope symbols
+File: `tests/mcp_server/test_fusion_tools.py`
+Test class: `TestCompareScopeSymbols`
+- Test: same name, same arity → no mismatch (matched)
+- Test: same name, different arity → mismatch with `mismatch_type: "arity"`
+- Test: same name, different kind (Function vs Class) → mismatch with `mismatch_type: "kind"`
+- Test: name only in scope_a → `missing_in_b`
+- Test: name only in scope_b → `missing_in_a`
+- Test: both arities None (no type_signature) → no mismatch (insufficient data)
+- Test: both scopes empty → empty output
+
+### Step 6: Implement `_compare_scope_symbols`
+File: `chunkhound/mcp_server/tools/fusion.py`
+Signature: `_compare_scope_symbols(symbols_a: dict[str, list[dict[str, Any]]], symbols_b: dict[str, list[dict[str, Any]]]) -> dict[str, Any]`
+Pure function. Name sets: `names_a`, `names_b`. Missing: symmetric difference. Matched: intersection. For each matched name: cross-product of entries from both sides. Compare kind first (mismatch if different). Then compare arity via `_extract_arity` (mismatch if both non-None and different). Return `{mismatches, missing_in_a, missing_in_b}`.
+
+### Step 7: Write failing test — full tool integration
+File: `tests/mcp_server/test_fusion_tools.py`
+Test class: `TestCrossLanguageCheckImpl`
+- Test: two scopes with overlapping names, one arity mismatch → correct structured output
+- Test: no overlapping names → only missing lists populated, mismatches empty
+- Test: empty scopes → `total_compared: 0, total_mismatches: 0`
+- Test: tool registered in TOOL_REGISTRY
+Mock: sequential `execute_query` calls (scope_a symbols, scope_b symbols)
+
+### Step 8: Implement `cross_language_check_impl`
+File: `chunkhound/mcp_server/tools/fusion.py`
+Signature: `async def cross_language_check_impl(services: Any, config: Any, scope_a: str, scope_b: str) -> dict[str, Any]`
+`@register_tool(name="cross_language_check")`. Compose: query scope_a → query scope_b → compare → build output with `{scope_a, scope_b, mismatches, missing_in_a, missing_in_b, total_compared, total_mismatches}`. `total_compared` = number of names in intersection.
+
+### Step 9: Wire — update expected tool count
+File: `tests/mcp_server/test_adversarial_decomp.py`
+Add `"cross_language_check"` to `EXPECTED_TOOLS` set. Update docstring count (9→10).
+
+## Success Criteria
+- [ ] `_query_scope_symbols` returns grouped symbols by name for a scope prefix
+- [ ] `_extract_arity` parses parameter count from Python, TS, and C-style signatures
+- [ ] `_extract_arity` strips `self`/`cls` from Python signatures
+- [ ] `_extract_arity` returns `None` for missing/unparseable signatures
+- [ ] `_compare_scope_symbols` detects arity mismatches between matched names
+- [ ] `_compare_scope_symbols` detects kind mismatches (Function vs Class)
+- [ ] `_compare_scope_symbols` reports missing symbols (name in one scope but not other)
+- [ ] `_compare_scope_symbols` does NOT report mismatch when both arities are None
+- [ ] `cross_language_check_impl` registered in TOOL_REGISTRY via `@register_tool`
+- [ ] Output is structured: `{scope_a, scope_b, mismatches, missing_in_a, missing_in_b, total_compared, total_mismatches}`
+- [ ] Zero LLM/embedding calls — deterministic only
+- [ ] All new code has failing tests before implementation
+- [ ] `uv run pytest tests/mcp_server/test_fusion_tools.py -v` → all pass
+
+## Key Considerations
+- Arity extraction is a heuristic, not a parser. It handles common patterns (Python, TS, C) but will fail on exotic signatures (template parameters, function pointers as params, etc.). Acceptable for v1 — the tool flags potential mismatches, not proven ones.
+- `self`/`cls` stripping is Python-specific. Other languages with receiver parameters (Go, Rust) may need similar handling in future.
+- Multiple symbols with same name in one scope (e.g., a Function and a Class both named `Config`) generate a cross-product of comparisons. For N×M entries this could be chatty, but typical codebases have few same-name collisions.
+- The tool doesn't filter by "exported" in a language-specific sense (Python `__all__`, JS `export`). It compares ALL symbols in each scope. Users narrow scope prefixes to compare only what matters.
+- `language` column in symbols table comes from LSP — it's the language_id used for server routing. Reliable for determining which language each side is.
+
+## Anti-Patterns
+- NO hardcoded language-specific type parsing — arity extraction is language-agnostic heuristic
+- NO live LSP calls — use indexed symbols table only
+- NO LLM/embedding calls — deterministic comparison
+- NO string equality for type_signature comparison — structural (arity) only
+- NO prose output — structured dicts only
