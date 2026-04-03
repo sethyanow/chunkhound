@@ -185,40 +185,6 @@ def demo_registry() -> None:
 
 # ── DB helper ─────────────────────────────────────────────────
 
-_temp_db: Path | None = None  # cleaned up in main()
-
-
-def _open_db(db_path: Path):
-    """Open DuckDB, snapshotting to a temp file if the original is locked."""
-    import duckdb
-
-    try:
-        return duckdb.connect(str(db_path), read_only=True)
-    except duckdb.IOException:
-        pass
-
-    # MCP server holds the lock — snapshot the file and read the copy
-    global _temp_db
-    if _temp_db is None:
-        fd, tmp_path = tempfile.mkstemp(suffix=".db")
-        os.close(fd)
-        _temp_db = Path(tmp_path)
-        shutil.copy2(db_path, _temp_db)
-        print(f"  (DB locked by MCP server — reading snapshot copy)\n")
-
-    return duckdb.connect(str(_temp_db), read_only=True)
-
-
-def _open_db_rw(db_path: Path):
-    """Open DuckDB with write access. Returns None if locked."""
-    import duckdb
-
-    try:
-        return duckdb.connect(str(db_path))
-    except duckdb.IOException:
-        return None
-
-
 # ── 3. Schema v2 ──────────────────────────────────────────────
 
 
