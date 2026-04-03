@@ -294,3 +294,6 @@
 {"timestamp":"2026-04-03T07:07:08.135585+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-ef9","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-03T07:23:11.289482+00:00","actor":"Seth","event_type":"logged","task_id":"ch-ef9","details":{"message":"Implementation complete. 4 helpers + 1 tool. 20 tests (13 TDD + 7 adversarial). Adversarial battery found real bug: cycle in edges caused infinite recursion in _build_caller_tree — fixed with visited tracking. Directed walk param added to build_walk_query/graph_walk. format_edge renames from_fqn→from_symbol — tree builder handles both key formats."}}
 {"timestamp":"2026-04-03T07:23:15.743949+00:00","actor":"Seth","event_type":"closed","task_id":"ch-ef9","details":{"notes":null}}
+{"timestamp":"2026-04-03T07:29:14.051581+00:00","actor":"Seth","event_type":"created","task_id":"ch-zj0","details":{}}
+{"timestamp":"2026-04-03T07:29:17.908498+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"parent-child","to":"ch-zj0"}}
+{"timestamp":"2026-04-03T07:29:17.909033+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-dar","details":{"kind":"blocks","to":"ch-zj0"}}

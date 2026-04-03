@@ -4,9 +4,11 @@ title: 'Phase 4: Fusion MCP Tools'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-zyz, ch-ef9]
+depends_on: [ch-zyz, ch-ef9, ch-zj0]
 parent: ch-8e7
 ---
+
+
 
 
 
