@@ -4,6 +4,8 @@ Fusion tools compose Phase 3 primitives (_graph_walk + symbols table)
 into higher-level queries. All are deterministic — no LLM, no embeddings.
 """
 
+from typing import Any
+
 import pytest
 
 from tests.lsp.mcp_tool_helpers import make_mock_config, make_mock_services
@@ -972,3 +974,556 @@ class TestTestTargetingAdversarial:
         # So we expect structured empty output with walk_depth set
         assert result["tests"] == []
         assert result["total_tests"] == 0
+
+
+# ---------------------------------------------------------------------------
+# cross_language_check: _query_scope_symbols
+# ---------------------------------------------------------------------------
+
+
+class TestQueryScopeSymbols:
+    """_query_scope_symbols: query symbols grouped by name for a scope prefix."""
+
+    def test_returns_grouped_dict_by_name(self) -> None:
+        """Scope prefix returns dict mapping name→[{fqn, kind, language, ...}]."""
+        services = make_mock_services([
+            [
+                {"name": "process", "fqn": "src::process", "kind": "Function",
+                 "language": "python", "file_path": "src/core/proc.py",
+                 "type_signature": "(data: bytes) -> str"},
+                {"name": "Config", "fqn": "src::Config", "kind": "Class",
+                 "language": "python", "file_path": "src/core/config.py",
+                 "type_signature": None},
+            ],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
+
+        result = _query_scope_symbols(services=services, scope="src/core/")
+
+        assert "process" in result
+        assert "Config" in result
+        assert len(result["process"]) == 1
+        entry = result["process"][0]
+        assert entry["fqn"] == "src::process"
+        assert entry["kind"] == "Function"
+        assert entry["language"] == "python"
+        assert entry["file_path"] == "src/core/proc.py"
+        assert entry["type_signature"] == "(data: bytes) -> str"
+
+    def test_multiple_symbols_same_name_grouped(self) -> None:
+        """Overloads: two symbols named 'init' in different files → both in list."""
+        services = make_mock_services([
+            [
+                {"name": "init", "fqn": "a::init", "kind": "Function",
+                 "language": "python", "file_path": "src/a.py",
+                 "type_signature": "() -> None"},
+                {"name": "init", "fqn": "b::init", "kind": "Function",
+                 "language": "c", "file_path": "src/b.c",
+                 "type_signature": "void init(void)"},
+            ],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
+
+        result = _query_scope_symbols(services=services, scope="src/")
+
+        assert len(result["init"]) == 2
+        fqns = {e["fqn"] for e in result["init"]}
+        assert fqns == {"a::init", "b::init"}
+
+    def test_empty_result_returns_empty_dict(self) -> None:
+        """No symbols in scope → empty dict, no error."""
+        services = make_mock_services([
+            [],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
+
+        result = _query_scope_symbols(services=services, scope="nonexistent/")
+
+        assert result == {}
+
+    def test_scope_uses_like_with_escape(self) -> None:
+        """Verify query uses LIKE with ESCAPE clause via scope_filter."""
+        services = make_mock_services([
+            [],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
+
+        _query_scope_symbols(services=services, scope="tests/100%_coverage/")
+
+        call_args = services.provider.execute_query.call_args
+        sql = call_args[0][0]
+        params = call_args[0][1]
+        assert "LIKE" in sql
+        assert "ESCAPE" in sql
+        # '%' and '_' should be escaped in the param
+        assert "\\%" in params[0]
+        assert "\\_" in params[0]
+
+
+# ---------------------------------------------------------------------------
+# cross_language_check: _extract_arity
+# ---------------------------------------------------------------------------
+
+
+class TestExtractArity:
+    """_extract_arity: heuristic parameter count from type signatures."""
+
+    def test_strips_self_from_python(self) -> None:
+        """'(self, x: int, y: str) -> bool' → 2 (self stripped)."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(self, x: int, y: str) -> bool") == 2
+
+    def test_strips_cls_from_python(self) -> None:
+        """'(cls, x: int) -> Foo' → 1 (cls stripped)."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(cls, x: int) -> Foo") == 1
+
+    def test_typescript_style(self) -> None:
+        """'(x: number, y: string) => boolean' → 2."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(x: number, y: string) => boolean") == 2
+
+    def test_empty_params(self) -> None:
+        """'() -> None' → 0."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("() -> None") == 0
+
+    def test_single_param(self) -> None:
+        """'(x: int) -> int' → 1."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(x: int) -> int") == 1
+
+    def test_none_input(self) -> None:
+        """None → None."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity(None) is None
+
+    def test_empty_string(self) -> None:
+        """'' → None."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("") is None
+
+    def test_c_style_parens_in_middle(self) -> None:
+        """'int process_data(const char*, int)' → 2 (C-style)."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("int process_data(const char*, int)") == 2
+
+    def test_generic_dict_with_comma(self) -> None:
+        """'(data: dict[str, int]) -> bool' → 1 (comma inside brackets)."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(data: dict[str, int]) -> bool") == 1
+
+    def test_nested_generics(self) -> None:
+        """'(items: list[tuple[int, str]]) -> None' → 1."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(items: list[tuple[int, str]]) -> None") == 1
+
+    def test_callable_with_nested_brackets(self) -> None:
+        """'(callback: Callable[[int, str], bool]) -> None' → 1."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(callback: Callable[[int, str], bool]) -> None") == 1
+
+    def test_trailing_comma(self) -> None:
+        """'(x: int,) -> None' → 1 (trailing comma ignored)."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(x: int,) -> None") == 1
+
+    def test_unbalanced_parens(self) -> None:
+        """'(x: int, y:' → None (truncated signature)."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(x: int, y:") is None
+
+
+# ---------------------------------------------------------------------------
+# cross_language_check: _compare_scope_symbols
+# ---------------------------------------------------------------------------
+
+
+class TestCompareScopeSymbols:
+    """_compare_scope_symbols: structural comparison of two scope symbol sets."""
+
+    def _sym(
+        self, fqn: str, kind: str = "Function",
+        language: str = "python", sig: str | None = "(x: int) -> int",
+    ) -> dict[str, Any]:
+        """Helper to build a symbol dict."""
+        return {
+            "fqn": fqn, "kind": kind, "language": language,
+            "file_path": f"{fqn.replace('::', '/')}.py",
+            "type_signature": sig,
+        }
+
+    def test_same_arity_no_mismatch(self) -> None:
+        """Same name, same arity → no mismatch reported."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"process": [self._sym("a::process", sig="(x: int) -> str")]}
+        b = {"process": [self._sym("b::process", sig="(y: str) -> int")]}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert result["mismatches"] == []
+        assert result["missing_in_a"] == []
+        assert result["missing_in_b"] == []
+
+    def test_arity_mismatch_detected(self) -> None:
+        """Same name, different arity → mismatch with type 'arity'."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"process": [self._sym("a::process", sig="(x: int) -> str")]}
+        b = {"process": [self._sym("b::process", sig="(x: int, y: str) -> int")]}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert len(result["mismatches"]) == 1
+        m = result["mismatches"][0]
+        assert m["name"] == "process"
+        assert m["mismatch_type"] == "arity"
+        assert m["scope_a"]["arity"] == 1
+        assert m["scope_b"]["arity"] == 2
+
+    def test_kind_mismatch_detected(self) -> None:
+        """Same name, different kind → mismatch with type 'kind'."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"Config": [self._sym("a::Config", kind="Function", sig="() -> dict")]}
+        b = {"Config": [self._sym("b::Config", kind="Class", sig=None)]}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert len(result["mismatches"]) == 1
+        assert result["mismatches"][0]["mismatch_type"] == "kind"
+
+    def test_missing_in_b(self) -> None:
+        """Name only in scope_a → appears in missing_in_b."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"only_a": [self._sym("a::only_a")]}
+        b: dict[str, list[dict[str, Any]]] = {}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert len(result["missing_in_b"]) == 1
+        assert result["missing_in_b"][0]["name"] == "only_a"
+
+    def test_missing_in_a(self) -> None:
+        """Name only in scope_b → appears in missing_in_a."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a: dict[str, list[dict[str, Any]]] = {}
+        b = {"only_b": [self._sym("b::only_b")]}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert len(result["missing_in_a"]) == 1
+        assert result["missing_in_a"][0]["name"] == "only_b"
+
+    def test_both_arities_none_no_mismatch(self) -> None:
+        """Both arities None (no type_signature) → no mismatch."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"init": [self._sym("a::init", sig=None)]}
+        b = {"init": [self._sym("b::init", sig=None)]}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert result["mismatches"] == []
+
+    def test_both_scopes_empty(self) -> None:
+        """Both scopes empty → empty output."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        result = _compare_scope_symbols({}, {})
+
+        assert result["mismatches"] == []
+        assert result["missing_in_a"] == []
+        assert result["missing_in_b"] == []
+
+
+# ---------------------------------------------------------------------------
+# cross_language_check: cross_language_check_impl (full tool integration)
+# ---------------------------------------------------------------------------
+
+
+class TestCrossLanguageCheckImpl:
+    """cross_language_check_impl: end-to-end composition of query + compare."""
+
+    @pytest.mark.asyncio
+    async def test_overlapping_names_with_mismatch(self) -> None:
+        """Two scopes with overlapping names, one arity mismatch → structured output."""
+        services = make_mock_services([
+            # 1. _query_scope_symbols for scope_a
+            [
+                {"name": "process", "fqn": "py::process", "kind": "Function",
+                 "language": "python", "file_path": "bindings/proc.py",
+                 "type_signature": "(data: bytes) -> str"},
+                {"name": "init", "fqn": "py::init", "kind": "Function",
+                 "language": "python", "file_path": "bindings/init.py",
+                 "type_signature": "() -> None"},
+            ],
+            # 2. _query_scope_symbols for scope_b
+            [
+                {"name": "process", "fqn": "c::process", "kind": "Function",
+                 "language": "c", "file_path": "src/core/proc.c",
+                 "type_signature": "int process(const char*, int)"},
+                {"name": "init", "fqn": "c::init", "kind": "Function",
+                 "language": "c", "file_path": "src/core/init.c",
+                 "type_signature": "void init(void)"},
+            ],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
+
+        result = await cross_language_check_impl(
+            services=services, config=None,
+            scope_a="bindings/", scope_b="src/core/",
+        )
+
+        assert result["scope_a"] == "bindings/"
+        assert result["scope_b"] == "src/core/"
+        assert result["total_compared"] == 2
+
+        # process: arity 1 vs 2 → mismatch
+        mismatch_names = {m["name"] for m in result["mismatches"]}
+        assert "process" in mismatch_names
+        assert result["total_mismatches"] == len(result["mismatches"])
+
+        assert result["missing_in_a"] == []
+        assert result["missing_in_b"] == []
+
+    @pytest.mark.asyncio
+    async def test_no_overlapping_names(self) -> None:
+        """No shared names → only missing lists populated."""
+        services = make_mock_services([
+            # scope_a
+            [
+                {"name": "alpha", "fqn": "a::alpha", "kind": "Function",
+                 "language": "python", "file_path": "a/alpha.py",
+                 "type_signature": "() -> None"},
+            ],
+            # scope_b
+            [
+                {"name": "beta", "fqn": "b::beta", "kind": "Function",
+                 "language": "c", "file_path": "b/beta.c",
+                 "type_signature": "void beta(void)"},
+            ],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
+
+        result = await cross_language_check_impl(
+            services=services, config=None,
+            scope_a="a/", scope_b="b/",
+        )
+
+        assert result["mismatches"] == []
+        assert result["total_compared"] == 0
+        assert len(result["missing_in_b"]) == 1
+        assert result["missing_in_b"][0]["name"] == "alpha"
+        assert len(result["missing_in_a"]) == 1
+        assert result["missing_in_a"][0]["name"] == "beta"
+
+    @pytest.mark.asyncio
+    async def test_empty_scopes(self) -> None:
+        """Both scopes empty → total_compared: 0, total_mismatches: 0."""
+        services = make_mock_services([
+            [],  # scope_a empty
+            [],  # scope_b empty
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
+
+        result = await cross_language_check_impl(
+            services=services, config=None,
+            scope_a="empty_a/", scope_b="empty_b/",
+        )
+
+        assert result["total_compared"] == 0
+        assert result["total_mismatches"] == 0
+        assert result["mismatches"] == []
+        assert result["missing_in_a"] == []
+        assert result["missing_in_b"] == []
+
+    def test_registered_in_tool_registry(self) -> None:
+        """cross_language_check is in TOOL_REGISTRY after import."""
+        from chunkhound.mcp_server.tools.fusion import cross_language_check_impl  # noqa: F401
+        from chunkhound.mcp_server.tools.registry import TOOL_REGISTRY
+
+        assert "cross_language_check" in TOOL_REGISTRY
+
+
+# ---------------------------------------------------------------------------
+# Adversarial stress tests — cross_language_check components
+# ---------------------------------------------------------------------------
+
+
+class TestExtractArityAdversarial:
+    """Adversarial: structural patterns for _extract_arity."""
+
+    def test_all_commas_no_params(self) -> None:
+        """'(,,,) -> None' — all commas, empty segments filtered → arity 0."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(,,,) -> None") == 0
+
+    def test_self_appears_twice(self) -> None:
+        """'(self, self, x: int) -> None' — only first self stripped → arity 2."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        # Strips leading 'self,' once, then 'self' and 'x: int' remain
+        assert _extract_arity("(self, self, x: int) -> None") == 2
+
+    def test_param_without_type_annotation(self) -> None:
+        """'(x) -> int' — param without colon-type → arity 1."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(x) -> int") == 1
+
+    def test_deeply_nested_generics(self) -> None:
+        """Deep nesting: dict[str, list[tuple[int, ...]]] counts as one param."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        sig = "(a: dict[str, list[tuple[int, ...]]], b: int) -> None"
+        assert _extract_arity(sig) == 2
+
+    def test_unicode_identifiers(self) -> None:
+        """Unicode param names — delimiter-based parser is transparent to content."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(données: str, über: int) -> None") == 2
+
+    def test_no_parens_at_all(self) -> None:
+        """String with no parentheses → None."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("int x") is None
+
+    def test_whitespace_only_between_parens(self) -> None:
+        """'(   ) -> None' — whitespace-only content → arity 0."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(   ) -> None") == 0
+
+    def test_self_as_only_param(self) -> None:
+        """'(self) -> None' — self stripped, nothing left → arity 0."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(self) -> None") == 0
+
+    def test_cls_as_only_param(self) -> None:
+        """'(cls) -> Foo' — cls stripped, nothing left → arity 0."""
+        from chunkhound.mcp_server.tools.fusion import _extract_arity
+
+        assert _extract_arity("(cls) -> Foo") == 0
+
+
+class TestCompareScopeSymbolsAdversarial:
+    """Adversarial: structural patterns for _compare_scope_symbols."""
+
+    def _sym(
+        self, fqn: str, kind: str = "Function",
+        language: str = "python", sig: str | None = "(x: int) -> int",
+    ) -> dict[str, Any]:
+        return {
+            "fqn": fqn, "kind": kind, "language": language,
+            "file_path": f"{fqn.replace('::', '/')}.py",
+            "type_signature": sig,
+        }
+
+    def test_dense_cross_product(self) -> None:
+        """3 overloads × 3 overloads = 9 comparisons — all arity mismatches."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"init": [
+            self._sym("a::init1", sig="() -> None"),
+            self._sym("a::init2", sig="(x: int) -> None"),
+            self._sym("a::init3", sig="(x: int, y: str) -> None"),
+        ]}
+        b = {"init": [
+            self._sym("b::init1", sig="(a: int, b: int, c: int) -> None"),
+            self._sym("b::init2", sig="(a: int, b: int, c: int, d: int) -> None"),
+            self._sym("b::init3", sig="(a: int, b: int, c: int, d: int, e: int) -> None"),
+        ]}
+
+        result = _compare_scope_symbols(a, b)
+
+        # 3×3 = 9 pairs, all have different arities
+        assert len(result["mismatches"]) == 9
+        # All should be arity mismatches (kinds all match as Function)
+        assert all(m["mismatch_type"] == "arity" for m in result["mismatches"])
+
+    def test_one_arity_none_other_not(self) -> None:
+        """One side has type_signature, other doesn't → arity mismatch (None vs N)."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"func": [self._sym("a::func", sig="(x: int) -> str")]}
+        b = {"func": [self._sym("b::func", sig=None)]}
+
+        result = _compare_scope_symbols(a, b)
+
+        # arity_a=1, arity_b=None → they differ, and not both-None
+        assert len(result["mismatches"]) == 1
+        assert result["mismatches"][0]["mismatch_type"] == "arity"
+
+    def test_kind_takes_priority_over_arity(self) -> None:
+        """Same name, different kind AND arity → reports 'kind', not 'arity'."""
+        from chunkhound.mcp_server.tools.fusion import _compare_scope_symbols
+
+        a = {"Config": [self._sym("a::Config", kind="Function", sig="(x: int) -> dict")]}
+        b = {"Config": [self._sym("b::Config", kind="Class", sig="(x: int, y: str) -> None")]}
+
+        result = _compare_scope_symbols(a, b)
+
+        assert len(result["mismatches"]) == 1
+        assert result["mismatches"][0]["mismatch_type"] == "kind"
+
+
+class TestCrossLanguageCheckAdversarial:
+    """Adversarial: structural patterns for cross_language_check_impl."""
+
+    @pytest.mark.asyncio
+    async def test_same_scope_both_sides(self) -> None:
+        """scope_a == scope_b → compares scope against itself, 0 mismatches."""
+        services = make_mock_services([
+            # First query (scope_a)
+            [
+                {"name": "func", "fqn": "x::func", "kind": "Function",
+                 "language": "python", "file_path": "x/func.py",
+                 "type_signature": "(x: int) -> str"},
+            ],
+            # Second query (scope_b) — same data
+            [
+                {"name": "func", "fqn": "x::func", "kind": "Function",
+                 "language": "python", "file_path": "x/func.py",
+                 "type_signature": "(x: int) -> str"},
+            ],
+        ])
+
+        from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
+
+        result = await cross_language_check_impl(
+            services=services, config=None,
+            scope_a="x/", scope_b="x/",
+        )
+
+        assert result["total_mismatches"] == 0
+        assert result["total_compared"] == 1
+        assert result["missing_in_a"] == []
+        assert result["missing_in_b"] == []

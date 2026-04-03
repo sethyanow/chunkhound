@@ -10,8 +10,189 @@ from pathlib import Path
 from typing import Any
 
 from .graph import _graph_walk
-from .queries.common import escape_like
+from .queries.common import escape_like, scope_filter
 from .registry import register_tool
+
+
+def _query_scope_symbols(
+    services: Any,
+    scope: str,
+) -> dict[str, list[dict[str, Any]]]:
+    """Query symbols grouped by name for a scope prefix.
+
+    Args:
+        services: DatabaseServices instance
+        scope: File path prefix to scope the query
+
+    Returns:
+        Dict mapping symbol name → list of symbol dicts, each with
+        fqn, kind, language, file_path, type_signature.
+    """
+    scope_sql, scope_params = scope_filter(scope)
+    sql = (
+        "SELECT name, fqn, kind, language, file_path, type_signature "
+        f"FROM symbols WHERE {scope_sql}"
+    )
+    rows = services.provider.execute_query(sql, scope_params)
+
+    grouped: dict[str, list[dict[str, Any]]] = {}
+    for row in rows:
+        entry = {
+            "fqn": row["fqn"],
+            "kind": row["kind"],
+            "language": row["language"],
+            "file_path": row["file_path"],
+            "type_signature": row["type_signature"],
+        }
+        grouped.setdefault(row["name"], []).append(entry)
+
+    return grouped
+
+
+def _extract_arity(type_signature: str | None) -> int | None:
+    """Extract parameter count from a type signature string.
+
+    Heuristic parser that handles Python, TypeScript, and C-style signatures.
+    Tracks nesting depth to avoid counting commas inside generic types.
+
+    Args:
+        type_signature: Type signature string, or None
+
+    Returns:
+        Parameter count, or None if signature is missing/unparseable.
+    """
+    if not type_signature:
+        return None
+
+    # Find first '(' and its matching ')' tracking nesting
+    open_idx = type_signature.find("(")
+    if open_idx == -1:
+        return None
+
+    depth = 1
+    close_idx = -1
+    for i in range(open_idx + 1, len(type_signature)):
+        ch = type_signature[i]
+        if ch == "(":
+            depth += 1
+        elif ch == ")":
+            depth -= 1
+            if depth == 0:
+                close_idx = i
+                break
+
+    if close_idx == -1:
+        return None  # unbalanced parens
+
+    content = type_signature[open_idx + 1 : close_idx].strip()
+
+    # Strip leading self/cls (Python convention)
+    for prefix in ("self,", "cls,"):
+        if content.startswith(prefix):
+            content = content[len(prefix) :].strip()
+            break
+        # Handle 'self' or 'cls' as only param
+        if content == prefix.rstrip(","):
+            return 0
+
+    if not content:
+        return 0
+
+    # Count commas at nesting depth 0 only
+    # Track [, (, {, < for generic type parameters
+    nesting = 0
+    segments = []
+    start = 0
+    for i, ch in enumerate(content):
+        if ch in "([{<":
+            nesting += 1
+        elif ch in ")]}>" and nesting > 0:
+            nesting -= 1
+        elif ch == "," and nesting == 0:
+            segments.append(content[start:i].strip())
+            start = i + 1
+
+    segments.append(content[start:].strip())
+
+    # Filter out empty segments (handles trailing commas)
+    segments = [s for s in segments if s]
+
+    return len(segments)
+
+
+def _compare_scope_symbols(
+    symbols_a: dict[str, list[dict[str, Any]]],
+    symbols_b: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    """Compare two scope symbol sets and find mismatches.
+
+    Pure function. For matched names (intersection), compares kind and arity
+    via cross-product. Reports missing symbols from symmetric difference.
+
+    Args:
+        symbols_a: Grouped symbols from scope A (name → [symbol dicts])
+        symbols_b: Grouped symbols from scope B (name → [symbol dicts])
+
+    Returns:
+        Dict with mismatches, missing_in_a, missing_in_b lists.
+    """
+    names_a = set(symbols_a.keys())
+    names_b = set(symbols_b.keys())
+
+    matched = names_a & names_b
+    only_a = names_a - names_b
+    only_b = names_b - names_a
+
+    mismatches: list[dict[str, Any]] = []
+
+    for name in sorted(matched):
+        entries_a = symbols_a[name]
+        entries_b = symbols_b[name]
+
+        # Cross-product comparison
+        for ea in entries_a:
+            for eb in entries_b:
+                # Kind mismatch takes priority
+                if ea["kind"] != eb["kind"]:
+                    mismatches.append({
+                        "name": name,
+                        "scope_a": {**ea, "arity": _extract_arity(ea.get("type_signature"))},
+                        "scope_b": {**eb, "arity": _extract_arity(eb.get("type_signature"))},
+                        "mismatch_type": "kind",
+                    })
+                    continue
+
+                # Arity comparison
+                arity_a = _extract_arity(ea.get("type_signature"))
+                arity_b = _extract_arity(eb.get("type_signature"))
+
+                # Both None → insufficient data, not a mismatch
+                if arity_a is None and arity_b is None:
+                    continue
+
+                if arity_a != arity_b:
+                    mismatches.append({
+                        "name": name,
+                        "scope_a": {**ea, "arity": arity_a},
+                        "scope_b": {**eb, "arity": arity_b},
+                        "mismatch_type": "arity",
+                    })
+
+    # Build missing lists
+    missing_in_b = [
+        {"name": name, "fqn": symbols_a[name][0]["fqn"], "kind": symbols_a[name][0]["kind"]}
+        for name in sorted(only_a)
+    ]
+    missing_in_a = [
+        {"name": name, "fqn": symbols_b[name][0]["fqn"], "kind": symbols_b[name][0]["kind"]}
+        for name in sorted(only_b)
+    ]
+
+    return {
+        "mismatches": mismatches,
+        "missing_in_a": missing_in_a,
+        "missing_in_b": missing_in_b,
+    }
 
 
 def _resolve_changed_to_fqns(
@@ -443,4 +624,63 @@ async def test_targeting_impl(
         "tests": tests,
         "total_tests": len(tests),
         "walk_depth": depth,
+    }
+
+
+# ---------------------------------------------------------------------------
+# cross_language_check tool
+# ---------------------------------------------------------------------------
+
+CROSS_LANGUAGE_CHECK_DESCRIPTION = """Compare exported symbols across two scopes.
+
+Given two file path prefixes (scopes), queries all symbols in each scope,
+matches by name, and compares arity to find binding mismatches. Pure
+symbols-table comparison — deterministic, no LLM, no graph walks.
+
+Use this to answer: "Do the Python bindings match the C core API?"
+
+Parameters:
+  scope_a: File path prefix for the first scope (e.g., "bindings/python/")
+  scope_b: File path prefix for the second scope (e.g., "src/core/")
+"""
+
+
+@register_tool(
+    description=CROSS_LANGUAGE_CHECK_DESCRIPTION,
+    name="cross_language_check",
+)
+async def cross_language_check_impl(
+    services: Any,
+    config: Any,
+    scope_a: str,
+    scope_b: str,
+) -> dict[str, Any]:
+    """Compare exported symbols across two scopes.
+
+    Args:
+        services: DatabaseServices instance
+        config: Config instance (unused — no workspace root needed)
+        scope_a: File path prefix for first scope
+        scope_b: File path prefix for second scope
+    """
+    # Query symbols in each scope
+    symbols_a = _query_scope_symbols(services, scope_a)
+    symbols_b = _query_scope_symbols(services, scope_b)
+
+    # Compare
+    comparison = _compare_scope_symbols(symbols_a, symbols_b)
+
+    # Count names in intersection
+    names_a = set(symbols_a.keys())
+    names_b = set(symbols_b.keys())
+    total_compared = len(names_a & names_b)
+
+    return {
+        "scope_a": scope_a,
+        "scope_b": scope_b,
+        "mismatches": comparison["mismatches"],
+        "missing_in_a": comparison["missing_in_a"],
+        "missing_in_b": comparison["missing_in_b"],
+        "total_compared": total_compared,
+        "total_mismatches": len(comparison["mismatches"]),
     }
