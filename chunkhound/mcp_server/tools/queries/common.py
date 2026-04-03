@@ -30,20 +30,20 @@ def bidirectional_edges() -> exp.Union:
 
 def scope_filter(
     scope: str, column: str = "file_path"
-) -> tuple[exp.Expr, list[Any]]:
+) -> tuple[str, list[Any]]:
     """Generate a LIKE clause with ESCAPE for scope filtering.
 
-    Returns (expression, params) where expression is a LIKE condition
+    Returns (sql_fragment, params) where sql_fragment is a raw SQL condition
     and params contains the escaped scope pattern with wildcard.
+
+    Uses raw SQL instead of sqlglot expression to avoid double-escaping
+    the backslash in the ESCAPE clause.
     """
     escaped = escape_like(scope)
     pattern = escaped + "%"
 
-    like_expr = sqlglot.parse_one(
-        f"{column} LIKE ? ESCAPE '\\\\'",
-        dialect="duckdb",
-    )
-    return like_expr, [pattern]
+    sql_fragment = f"{column} LIKE ? ESCAPE '\\'"
+    return sql_fragment, [pattern]
 
 
 def visited_tracking_columns(

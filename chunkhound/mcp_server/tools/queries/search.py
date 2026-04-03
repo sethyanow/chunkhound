@@ -36,8 +36,8 @@ def _build_symbol_conditions(
         params.extend([like_pattern, like_pattern])
 
     if path:
-        scope_expr, scope_params = scope_filter(path)
-        conditions.append(scope_expr.sql(dialect="duckdb"))
+        scope_sql, scope_params = scope_filter(path)
+        conditions.append(scope_sql)
         params.extend(scope_params)
 
     if type_filter:

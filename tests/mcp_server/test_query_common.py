@@ -54,8 +54,7 @@ class TestScopeFilter:
     """scope_filter() generates a LIKE clause with ESCAPE and placeholder."""
 
     def test_generates_like_with_escape(self) -> None:
-        expr, params = scope_filter("src/auth")
-        sql = expr.sql(dialect="duckdb")
+        sql, params = scope_filter("src/auth")
         assert "LIKE" in sql
         assert "ESCAPE" in sql
 
@@ -69,9 +68,25 @@ class TestScopeFilter:
         assert params[0] == "path\\_with\\%special%"
 
     def test_column_defaults_to_file_path(self) -> None:
-        expr, _ = scope_filter("src")
-        sql = expr.sql(dialect="duckdb")
+        sql, _ = scope_filter("src")
         assert "file_path" in sql.lower()
+
+    def test_escape_clause_is_single_backslash(self) -> None:
+        """Regression: ESCAPE clause must contain exactly one backslash for DuckDB.
+
+        The sqlglot round-trip was double-escaping, producing ESCAPE '\\\\' (2 chars)
+        instead of ESCAPE '\\' (1 char). DuckDB raises SyntaxException for multi-char.
+        """
+        sql, _ = scope_filter("pkg/")
+        import re
+        match = re.search(r"ESCAPE\s+'(.*?)'", sql)
+        assert match is not None, f"No ESCAPE clause found in: {sql}"
+        escape_val = match.group(1)
+        # Must be exactly one backslash character in the raw SQL string
+        assert escape_val == "\\", (
+            f"ESCAPE value should be single backslash, got {repr(escape_val)} "
+            f"({len(escape_val)} chars). Full SQL: {sql}"
+        )
 
 
 class TestVisitedTrackingColumns:

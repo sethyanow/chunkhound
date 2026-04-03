@@ -195,12 +195,12 @@ class TestScopeFilterAdversarial:
 
     def test_empty_scope_matches_everything(self) -> None:
         """Empty scope produces pattern '%' — matches all rows."""
-        expr, params = scope_filter("")
+        sql, params = scope_filter("")
         assert params[0] == "%"
 
     def test_scope_is_percent(self) -> None:
         """Scope '%' must be escaped so it doesn't match everything."""
-        expr, params = scope_filter("%")
+        sql, params = scope_filter("%")
         assert params[0] == "\\%%"
 
     def test_scope_is_underscore(self) -> None:
@@ -208,8 +208,7 @@ class TestScopeFilterAdversarial:
         assert params[0] == "\\_%"
 
     def test_custom_column_name(self) -> None:
-        expr, _ = scope_filter("src", column="s.file_path")
-        sql = expr.sql(dialect="duckdb")
+        sql, _ = scope_filter("src", column="s.file_path")
         assert "s.file_path" in sql
 
 

@@ -105,8 +105,7 @@ def build_reachability_all_symbols_query(scope: str) -> tuple[str, list[Any]]:
 
     Returns (sql, params) with scope pattern param.
     """
-    scope_expr, scope_params = scope_filter(scope)
-    scope_sql = scope_expr.sql(dialect="duckdb")
+    scope_sql, scope_params = scope_filter(scope)
 
     sql = f"""
         SELECT fqn, name, kind, file_path
@@ -126,8 +125,7 @@ def build_reachability_reachable_query(scope: str) -> tuple[str, list[Any]]:
 
     Returns (sql, params) with two scope pattern params.
     """
-    scope_expr, scope_params = scope_filter(scope)
-    scope_sql = scope_expr.sql(dialect="duckdb")
+    scope_sql, scope_params = scope_filter(scope)
 
     sql = f"""
         WITH RECURSIVE reachable AS (
