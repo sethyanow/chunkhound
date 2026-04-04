@@ -32,7 +32,7 @@ def _build_symbol_conditions(
     if query:
         escaped = escape_like(query)
         like_pattern = f"%{escaped}%"
-        conditions.append("(name LIKE ? ESCAPE '\\' OR fqn LIKE ? ESCAPE '\\')")
+        conditions.append("(name LIKE ? ESCAPE '!' OR fqn LIKE ? ESCAPE '!')")
         params.extend([like_pattern, like_pattern])
 
     if path:
@@ -42,7 +42,7 @@ def _build_symbol_conditions(
 
     if type_filter:
         escaped_type = escape_like(type_filter)
-        conditions.append("type_signature LIKE ? ESCAPE '\\'")
+        conditions.append("type_signature LIKE ? ESCAPE '!'")
         params.append(f"%{escaped_type}%")
 
     return conditions, params
@@ -228,7 +228,7 @@ def build_type_filter_query(
     sql = f"""
         SELECT DISTINCT s.file_path, s.range_start, s.range_end
         FROM symbols s
-        WHERE ({where_clause}) AND s.type_signature LIKE ? ESCAPE '\\'
+        WHERE ({where_clause}) AND s.type_signature LIKE ? ESCAPE '!'
     """
 
     parsed = sqlglot.parse_one(sql, dialect="duckdb")

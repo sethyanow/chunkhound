@@ -1141,7 +1141,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             existing = self._executor_get_file_by_path(
                 conn, state, str(file.path), False
             )
-            if existing:
+            if existing and isinstance(existing, dict):
                 # File exists, update it
                 file_id = existing["id"]
                 self._executor_update_file(
@@ -1186,7 +1186,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 existing = self._executor_get_file_by_path(
                     conn, state, str(file.path), False
                 )
-                if existing and "id" in existing:
+                if existing and isinstance(existing, dict) and "id" in existing:
                     logger.info(f"Returning existing file ID for {file.path}")
                     return existing["id"]
             raise
@@ -1898,7 +1898,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 escaped = escape_like_pattern(normalized)
                 like = f"{escaped}%"
                 files_row = conn.execute(
-                    "SELECT COUNT(*) FROM files WHERE path LIKE ? ESCAPE '\\'",
+                    "SELECT COUNT(*) FROM files WHERE path LIKE ? ESCAPE '!'",
                     [like],
                 ).fetchone()
                 chunks_row = conn.execute(
@@ -1906,7 +1906,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     SELECT COUNT(*)
                     FROM chunks c
                     JOIN files f ON c.file_id = f.id
-                    WHERE f.path LIKE ? ESCAPE '\\'
+                    WHERE f.path LIKE ? ESCAPE '!'
                     """,
                     [like],
                 ).fetchone()
@@ -1935,7 +1935,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 escaped = escape_like_pattern(normalized)
                 like = f"{escaped}%"
                 rows = conn.execute(
-                    "SELECT path FROM files WHERE path LIKE ? ESCAPE '\\' ORDER BY path",
+                    "SELECT path FROM files WHERE path LIKE ? ESCAPE '!' ORDER BY path",
                     [like],
                 ).fetchall()
             else:
@@ -2141,7 +2141,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 params.append(threshold)
 
             if path_like is not None:
-                query += " AND f.path LIKE ? ESCAPE '\\'"
+                query += " AND f.path LIKE ? ESCAPE '!'"
                 params.append(path_like)
 
             # Get total count for pagination
@@ -2161,7 +2161,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 count_params.extend([query_embedding, threshold])
 
             if path_like is not None:
-                count_query += " AND f.path LIKE ? ESCAPE '\\'"
+                count_query += " AND f.path LIKE ? ESCAPE '!'"
                 # Substring match for consistency with main query
                 count_params.append(path_like)
 
@@ -2254,7 +2254,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             if normalized_path is not None:
                 escaped_path = escape_like_pattern(normalized_path)
-                where_conditions.append("f.path LIKE ? ESCAPE '\\'")
+                where_conditions.append("f.path LIKE ? ESCAPE '!'")
                 if fuzzy_path:
                     params.append(f"%{escaped_path}%")
                 else:
@@ -2445,7 +2445,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             params: list[Any] = [target_embedding, provider, model, chunk_id]
             if normalized_path is not None:
                 escaped_path = escape_like_pattern(normalized_path)
-                path_condition = "AND f.path LIKE ? ESCAPE '\\'"
+                path_condition = "AND f.path LIKE ? ESCAPE '!'"
                 if fuzzy_path:
                     params.append(f"%{escaped_path}%")
                 else:
@@ -2563,7 +2563,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     path_pattern = f"%{escaped_path}%"
                 else:
                     path_pattern = f"{escaped_path}%"
-                path_condition = "AND f.path LIKE ? ESCAPE '\\'"
+                path_condition = "AND f.path LIKE ? ESCAPE '!'"
                 query_params.insert(-1, path_pattern)  # Insert before limit
 
             # Build threshold condition

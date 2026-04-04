@@ -71,6 +71,7 @@ OPTIONAL FILTERS:
 
 OUTPUT: {results: [{file_path, content, start_line, end_line}], pagination}"""
 
+
 # CODE_RESEARCH_DESCRIPTION moved to research.py (owns the code_research tool)
 
 

@@ -406,7 +406,7 @@ def _collect_test_fqns(
 
     if test_scope:
         escaped = escape_like(test_scope)
-        sql += " AND file_path LIKE ?"
+        sql += " AND file_path LIKE ? ESCAPE '!'"
         params.append(f"{escaped}%")
 
     rows = services.provider.execute_query(sql, params)

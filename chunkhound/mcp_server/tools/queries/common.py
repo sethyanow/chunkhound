@@ -6,9 +6,17 @@ import sqlglot
 from sqlglot import exp
 
 
-def escape_like(value: str) -> str:
-    """Escape LIKE-special characters in a user-provided string."""
-    return value.replace("\\", "\\\\").replace("%", "\\%").replace("_", "\\_")
+def escape_like(value: str, escape_char: str = "!") -> str:
+    """Escape LIKE-special characters in a user-provided string.
+
+    Uses '!' as the escape character to avoid backslash-in-SQL-string
+    issues when fragments are round-tripped through sqlglot.
+    """
+    return (
+        value.replace(escape_char, escape_char + escape_char)
+        .replace("%", escape_char + "%")
+        .replace("_", escape_char + "_")
+    )
 
 
 def bidirectional_edges() -> exp.Union:
@@ -42,7 +50,7 @@ def scope_filter(
     escaped = escape_like(scope)
     pattern = escaped + "%"
 
-    sql_fragment = f"{column} LIKE ? ESCAPE '\\'"
+    sql_fragment = f"{column} LIKE ? ESCAPE '!'"
     return sql_fragment, [pattern]
 
 

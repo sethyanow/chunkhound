@@ -236,8 +236,8 @@ class TestBuildBoundaryQuery:
     def test_scope_escaping(self) -> None:
         """Special chars in scope get LIKE-escaped in params."""
         _, params = build_boundary_query(scope="chunk_ound/", limit=50)
-        # At least one param should contain the escaped scope
-        scope_params = [p for p in params if isinstance(p, str) and "chunk\\_ound/" in p]
+        # At least one param should contain the escaped scope (underscore escaped with !)
+        scope_params = [p for p in params if isinstance(p, str) and "chunk!_ound/" in p]
         assert len(scope_params) > 0
 
     def test_boundary_filters_on_edge_file_columns(self) -> None:

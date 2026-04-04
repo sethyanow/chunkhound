@@ -390,7 +390,7 @@ class TestAdversarialSymbolSearch:
         )
         _roundtrip(sql)
         name_param = params[0]
-        assert r"\%" in name_param
+        assert "!%" in name_param
 
 
 class TestAdversarialSymbolOverlap:
@@ -455,7 +455,7 @@ class TestAdversarialTypeFilter:
         _roundtrip(sql)
         # The type_filter param should have escaped %
         filter_param = params[-1]
-        assert r"\%" in filter_param
+        assert "!%" in filter_param
 
     def test_identical_result_entries(self) -> None:
         """Duplicate results produce valid SQL with duplicate OR conditions."""

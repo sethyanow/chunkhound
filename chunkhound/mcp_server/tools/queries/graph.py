@@ -182,9 +182,9 @@ def build_boundary_query(scope: str, limit: int) -> tuple[str, list[Any]]:
         JOIN symbols s1 ON e.from_fqn = s1.fqn AND e.from_file = s1.file_path
         JOIN symbols s2 ON e.to_fqn = s2.fqn AND e.to_file = s2.file_path
         WHERE (
-            (e.from_file LIKE ? ESCAPE '\\' AND e.to_file NOT LIKE ? ESCAPE '\\')
+            (e.from_file LIKE ? ESCAPE '!' AND e.to_file NOT LIKE ? ESCAPE '!')
             OR
-            (e.from_file NOT LIKE ? ESCAPE '\\' AND e.to_file LIKE ? ESCAPE '\\')
+            (e.from_file NOT LIKE ? ESCAPE '!' AND e.to_file LIKE ? ESCAPE '!')
         )
         LIMIT ?
     """
@@ -206,7 +206,7 @@ def build_overview_query(
     if scope:
         escaped = escape_like(scope)
         pattern = escaped + "%"
-        scope_clause = "WHERE s.file_path LIKE ? ESCAPE '\\'"
+        scope_clause = "WHERE s.file_path LIKE ? ESCAPE '!'"
         params.append(pattern)
 
     sql = f"""
