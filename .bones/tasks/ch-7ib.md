@@ -1,11 +1,13 @@
 ---
 id: ch-7ib
 title: 'Phase 4 Acceptance: Fusion MCP Tools'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-dar
 ---
+
 
 ## Context
 Phase 4 implementation complete — all 4 fusion tools pass 120 tests.

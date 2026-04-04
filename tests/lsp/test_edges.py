@@ -907,6 +907,76 @@ class TestDeleteSymbolsWithCrossFileEdges:
         assert 2 in file_ids, "File B should have symbols after reindex"
 
     @pytest.mark.asyncio
+    async def test_reindex_new_edges_reference_stale_symbols(self, tmp_path: Path) -> None:
+        """
+        Regression: Full populate_files where File A's new edges reference
+        File B's OLD symbols. When File B is repopulated, delete_file_edges
+        must also remove edges inserted by File A's populate_file pass that
+        point to File B's (about-to-be-deleted) symbols.
+
+        Root cause: populate_file for A inserts edges with to_symbol_id
+        pointing to B's old symbols. When B is processed, delete_file_edges
+        removes edges WHERE to_symbol_id IN (B's symbols) — but only if
+        B's old symbols are still in the symbols table at that point.
+        If _batch_insert_edges for A ran between B's delete and B's insert,
+        the FK would fire.
+        """
+        provider = _make_provider(tmp_path)
+        _insert_file(provider, 1, "src/a.py")
+        _insert_file(provider, 2, "src/b.py")
+
+        # Prior run: both files have symbols
+        provider.execute_query(
+            "INSERT INTO symbols (id, fqn, name, kind, language, file_id, file_path, "
+            "range_start, range_end, confidence, lsp_server) VALUES "
+            "(10001, 'Foo', 'Foo', 'class', 'python', 1, 'src/a.py', 0, 10, 1.0, 'pyright'), "
+            "(10002, 'Bar', 'Bar', 'class', 'python', 2, 'src/b.py', 0, 10, 1.0, 'pyright')"
+        )
+
+        # Build mock client: A's "definition" operation points to B's symbol
+        b_uri = (tmp_path / "src" / "b.py").as_uri()
+        client = AsyncMock()
+        client.capabilities = frozenset({
+            LSPCapability.DOCUMENT_SYMBOL, LSPCapability.HOVER,
+            LSPCapability.DEFINITION,
+        })
+        client.document_symbols = AsyncMock(return_value=_sample_symbols())
+        client.notify_did_open = AsyncMock()
+        client.notify_did_close = AsyncMock()
+        client.hover = AsyncMock(return_value=None)
+        # Definition points to B's symbol — this creates a cross-file edge
+        client.go_to_definition = AsyncMock(return_value=[
+            Location(uri=b_uri, range_start_line=5, range_start_char=0,
+                     range_end_line=8, range_end_char=0),
+        ])
+        client.find_references = AsyncMock(return_value=[])
+        client.go_to_implementation = AsyncMock(return_value=[])
+        client.incoming_calls = AsyncMock(return_value=[])
+        client.outgoing_calls = AsyncMock(return_value=[])
+        client.workspace_symbols = AsyncMock(return_value=[])
+
+        pool = AsyncMock()
+        pool.get = AsyncMock(return_value=client)
+
+        for name in ("src/a.py", "src/b.py"):
+            f = tmp_path / name
+            f.parent.mkdir(parents=True, exist_ok=True)
+            f.write_text("class Greeter:\n    def greet(self): ...\n\ndef main(): ...\n")
+
+        service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
+
+        # File A is populated first — inserts edges TO B's OLD symbols (id=10002).
+        # File B is populated second — must delete those edges before deleting symbols.
+        # This must NOT raise ConstraintError.
+        await service.populate_files()
+
+        # Both files should have new symbols
+        rows = provider.execute_query("SELECT file_id FROM symbols")
+        file_ids = {r["file_id"] for r in rows}
+        assert 1 in file_ids
+        assert 2 in file_ids
+
+    @pytest.mark.asyncio
     async def test_delete_edges_before_symbols_ordering(self, tmp_path: Path) -> None:
         """
         Verify edges are deleted BEFORE symbols so FK constraints don't fire.
