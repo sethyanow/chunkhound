@@ -25,15 +25,15 @@ Scoped to parent epic R7, R8:
 
 ## Success Criteria
 - [ ] GraphWalkExpander integrated into UnifiedSearch alongside existing semantic MultiHopStrategy
-- [ ] Expander takes seed chunks from initial semantic search → resolves to symbols via range overlap → walks symbol_edges 1-2 hops → returns additional chunks
+- [x] Expander takes seed chunks from initial semantic search → resolves to symbols via range overlap → walks symbol_edges 1-2 hops → returns additional chunks
 - [ ] Semantic expander and graph expander are independent — either can return empty without breaking the other
 - [ ] Both expanders' results merged and deduped on chunk_id before feeding into existing reranker
-- [ ] Depth configurable (default 2 hops)
-- [ ] Edge kind filtering available (e.g., expand only via `calls` edges, not `references`)
+- [x] Depth configurable (default 2 hops)
+- [x] Edge kind filtering available (e.g., expand only via `calls` edges, not `references`)
 - [ ] Prompt templates exist in `chunkhound/services/research/prompts/graph_patterns/`
 - [ ] code_research BFS uses templates when encountering structural sub-questions (type chain tracing, call graph scope, test coverage mapping, etc.)
 - [ ] Measurable: code_research on a structural topic returns chunks that semantic-only search misses
-- [ ] `uv run pytest tests/test_graph_expander.py -v` → all pass
+- [x] `uv run pytest tests/test_graph_expander.py -v` → all pass (15 tests)
 - [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
 
 ## Anti-Patterns

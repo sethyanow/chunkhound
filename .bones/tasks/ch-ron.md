@@ -108,16 +108,16 @@ Add `GraphWalkExpander` to `chunkhound/services/search/__init__.py` exports.
 `uv run pytest -m "unit or integration or e2e" tests/ -v > /tmp/test_suite_ch_ron.out 2>&1`
 
 ## Success Criteria
-- [ ] `GraphWalkExpander` class exists at `chunkhound/services/search/graph_walk_expander.py`
-- [ ] Chunk → symbol resolution via range overlap works (file_path + line range intersection)
-- [ ] Symbol graph walk uses recursive CTE on `symbol_edges`, configurable depth (default 2)
-- [ ] Discovered symbols resolved back to chunks via range overlap
-- [ ] Results deduped against seed set using `(file_path, start_line, end_line)` tuple keys
-- [ ] `edge_kind` parameter filters the walk to specific edge types
-- [ ] Empty `symbols`/`symbol_edges` tables → returns `[]` gracefully
-- [ ] Exported from `chunkhound/services/search/__init__.py`
-- [ ] `uv run pytest tests/test_graph_expander.py -v` → all pass
-- [ ] Full test suite passes
+- [x] `GraphWalkExpander` class exists at `chunkhound/services/search/graph_walk_expander.py`
+- [x] Chunk → symbol resolution via range overlap works (file_path + line range intersection)
+- [x] Symbol graph walk uses recursive CTE on `symbol_edges`, configurable depth (default 2)
+- [x] Discovered symbols resolved back to chunks via range overlap
+- [x] Results deduped against seed set using `(file_path, start_line, end_line)` tuple keys
+- [x] `edge_kind` parameter filters the walk to specific edge types
+- [x] Empty `symbols`/`symbol_edges` tables → returns `[]` gracefully
+- [x] Exported from `chunkhound/services/search/__init__.py`
+- [x] `uv run pytest tests/test_graph_expander.py -v` → all pass (15 tests)
+- [x] Full test suite passes (2885 passed, 0 failed)
 
 ## Key Considerations
 - `build_structural_walk_query` currently lacks `edge_kind` — extend it (adding optional parameter, conditionally adding `AND e.edge_kind = ?` clause)
