@@ -331,3 +331,6 @@
 {"timestamp":"2026-04-05T01:32:38.842883+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-z2o","details":{"kind":"blocks","to":"ch-ron"}}
 {"timestamp":"2026-04-05T01:59:43.503365+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-ron","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-05T02:17:56.420804+00:00","actor":"Seth","event_type":"closed","task_id":"ch-ron","details":{"notes":null}}
+{"timestamp":"2026-04-05T02:21:06.744352+00:00","actor":"Seth","event_type":"created","task_id":"ch-ic6","details":{}}
+{"timestamp":"2026-04-05T02:21:15.139922+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-z2o","details":{"kind":"parent-child","to":"ch-ic6"}}
+{"timestamp":"2026-04-05T02:21:15.140310+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-z2o","details":{"kind":"blocks","to":"ch-ic6"}}

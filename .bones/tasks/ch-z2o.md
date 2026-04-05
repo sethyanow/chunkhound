@@ -4,9 +4,11 @@ title: 'Phase 5: Search Pipeline + code_research'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-dar, ch-ron]
+depends_on: [ch-dar, ch-ron, ch-ic6]
 parent: ch-8e7
 ---
+
+
 
 
 
