@@ -1,12 +1,13 @@
 ---
 id: ch-xml
 title: Graph-aware prompt templates for code_research BFS
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-z2o
 ---
+
 
 
 **Blocked by:** ch-8mu (GraphWalkExpander wired into UnifiedSearch — graph data now flows through code_research pipeline)
@@ -91,13 +92,13 @@ File: `chunkhound/services/research/v1/question_generator.py`
 `uv run pytest -m "unit or integration or e2e" tests/ -v > /tmp/test_suite_ch_xml.out 2>&1`
 
 ## Success Criteria
-- [ ] 5 template files exist in `chunkhound/services/prompts/graph_patterns/`
-- [ ] Each template exports `PATTERN` and `PROMPT_AUGMENTATION`
-- [ ] `ALL_PATTERNS` is importable from `graph_patterns.__init__`
-- [ ] Structural root queries produce augmented follow-up prompts
-- [ ] Non-structural root queries produce unaugmented follow-up prompts
-- [ ] No changes to BFS exploration flow or question filtering logic
-- [ ] Full test suite passes
+- [x] 5 template files exist in `chunkhound/services/prompts/graph_patterns/`
+- [x] Each template exports `PATTERN` and `PROMPT_AUGMENTATION`
+- [x] `ALL_PATTERNS` is importable from `graph_patterns.__init__`
+- [x] Structural root queries produce augmented follow-up prompts
+- [x] Non-structural root queries produce unaugmented follow-up prompts
+- [x] No changes to BFS exploration flow or question filtering logic
+- [x] Full test suite passes
 
 ## Anti-Patterns
 - NO hardcoded routing (if query == "type chain" → use template) — pattern matching via regex

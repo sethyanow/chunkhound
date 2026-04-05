@@ -54,7 +54,7 @@ R10. Infrastructure fixes — semantic search path scoping tightened to strict p
 - [x] search(type: symbols) and search(type: structural) return results with type_filter support
 - [x] All 4 fusion tools return correct results (test_targeting, impact_cascade, cross_language_check, semantic_diff)
 - [ ] Graph walk expander produces chunks in code_research that semantic search alone misses
-- [ ] Prompt templates used by code_research BFS for structural sub-questions
+- [x] Prompt templates used by code_research BFS for structural sub-questions
 - [ ] All 5 skill scripts executable via workflow.py with SKILL.md discovery
 - [x] Path scoping fix prevents semantic search result leakage across directories
 - [ ] Git-aware indexing reflects staged state
