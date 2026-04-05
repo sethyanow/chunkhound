@@ -15,10 +15,13 @@ The models follow these principles:
 from chunkhound.core.models.chunk import Chunk
 from chunkhound.core.models.embedding import Embedding, EmbeddingResult
 from chunkhound.core.models.file import File
+from chunkhound.core.models.symbol import EdgeRow, SymbolRow
 
 __all__ = [
     "File",
     "Chunk",
     "Embedding",
     "EmbeddingResult",
+    "SymbolRow",
+    "EdgeRow",
 ]

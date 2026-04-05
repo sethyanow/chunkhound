@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING, Any
 from loguru import logger
 
 from chunkhound.core.models import Chunk, File
+from chunkhound.core.models.symbol import EdgeRow, SymbolRow
 from chunkhound.embeddings import EmbeddingManager
 from chunkhound.file_discovery_cache import FileDiscoveryCache
 from chunkhound.providers.database.serial_executor import SerialDatabaseExecutor
@@ -352,6 +353,40 @@ class SerialDatabaseProvider(ABC):
             logger.debug("delete_chunks_batch not supported by this provider")
             return
         await self._execute_in_db_thread("delete_chunks_batch", chunk_ids)
+
+    # Async symbol/edge CRUD variants
+
+    async def insert_symbols_batch_async(self, symbols: list[SymbolRow]) -> None:
+        """Async variant of insert_symbols_batch."""
+        if not symbols:
+            return
+        await self._execute_in_db_thread("insert_symbols_batch", symbols)
+
+    async def delete_symbols_by_file_async(self, file_id: int) -> None:
+        """Async variant of delete_symbols_by_file."""
+        await self._execute_in_db_thread("delete_symbols_by_file", file_id)
+
+    async def delete_edges_by_file_async(self, file_id: int) -> None:
+        """Async variant of delete_edges_by_file."""
+        await self._execute_in_db_thread("delete_edges_by_file", file_id)
+
+    async def query_symbols_by_file_async(
+        self, file_id: int
+    ) -> list[dict[str, Any]]:
+        """Async variant of query_symbols_by_file."""
+        return await self._execute_in_db_thread("query_symbols_by_file", file_id)
+
+    async def query_symbol_fqns_by_file_async(
+        self, file_id: int
+    ) -> dict[str, int]:
+        """Async variant of query_symbol_fqns_by_file."""
+        return await self._execute_in_db_thread("query_symbol_fqns_by_file", file_id)
+
+    async def insert_edges_batch_async(self, edges: list[EdgeRow]) -> None:
+        """Async variant of insert_edges_batch."""
+        if not edges:
+            return
+        await self._execute_in_db_thread("insert_edges_batch", edges)
 
     def search_chunks_regex(
         self, pattern: str, file_path: str | None = None

@@ -235,8 +235,6 @@ class LSPPopulationService:
 
     async def populate_files(self) -> None:
         """Populate symbols for all indexed files. Used by batch indexing path."""
-        import asyncio
-
         from chunkhound.core.types.common import Language
 
         rows = await self._provider.execute_query_async(

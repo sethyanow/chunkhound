@@ -23,7 +23,8 @@ import duckdb
 from loguru import logger
 
 from chunkhound.core.models import Chunk, Embedding, File
-from chunkhound.core.types.common import ChunkType, Language
+from chunkhound.core.models.symbol import EdgeRow, SymbolRow
+from chunkhound.core.types.common import ChunkType, FilePath, Language, Timestamp
 from chunkhound.core.utils import normalize_path_for_lookup
 
 # Import existing components that will be used by the provider
@@ -1256,8 +1257,8 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             return File(
                 id=file_dict["id"],
-                path=Path(file_dict["path"]).as_posix(),
-                mtime=mtime,
+                path=FilePath(Path(file_dict["path"]).as_posix()),
+                mtime=Timestamp(mtime),
                 language=language if language is not None else Language.UNKNOWN,
                 size_bytes=size_bytes,
             )
@@ -1537,7 +1538,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     end_byte=chunk_dict["end_byte"],
                     language=Language(chunk_dict["language"])
                     if chunk_dict["language"]
-                    else None,
+                    else Language.UNKNOWN,
                     metadata=chunk_dict["metadata"],
                 )
                 chunks.append(chunk)
@@ -2165,7 +2166,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 WHERE e.provider = ? AND e.model = ?
             """
 
-            count_params = [provider, model]
+            count_params: list[Any] = [provider, model]
 
             if threshold is not None:
                 count_query += f" AND array_cosine_similarity(e.embedding, ?::FLOAT[{query_dims}]) >= ?"
@@ -2629,17 +2630,27 @@ class DuckDBProvider(SerialDatabaseProvider):
             logger.error(f"Failed to search by embedding: {e}")
             return []
 
-    def search_text(self, query: str, limit: int = 10) -> list[dict[str, Any]]:
+    def search_text(
+        self, query: str, page_size: int = 10, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform full-text search on code content."""
-        return self._execute_in_db_thread_sync("search_text", query, limit)
+        return self._execute_in_db_thread_sync("search_text", query, page_size, offset)
 
     def _executor_search_text(
-        self, conn: Any, state: dict[str, Any], query: str, limit: int
-    ) -> list[dict[str, Any]]:
+        self, conn: Any, state: dict[str, Any], query: str, page_size: int, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Executor method for search_text - runs in DB thread."""
         try:
             # Simple text search using LIKE operator
             search_pattern = f"%{query}%"
+
+            # Count total matches first
+            count_row = conn.execute(
+                "SELECT COUNT(*) FROM chunks c JOIN files f ON c.file_id = f.id "
+                "WHERE c.code LIKE ? OR c.symbol LIKE ?",
+                [search_pattern, search_pattern],
+            ).fetchone()
+            total = count_row[0] if count_row else 0
 
             results = conn.execute(
                 """
@@ -2656,12 +2667,12 @@ class DuckDBProvider(SerialDatabaseProvider):
                 JOIN files f ON c.file_id = f.id
                 WHERE c.code LIKE ? OR c.symbol LIKE ?
                 ORDER BY f.path, c.start_line
-                LIMIT ?
+                LIMIT ? OFFSET ?
             """,
-                [search_pattern, search_pattern, limit],
+                [search_pattern, search_pattern, page_size, offset],
             ).fetchall()
 
-            return [
+            result_list = [
                 {
                     "chunk_id": result[0],
                     "name": result[1],
@@ -2669,15 +2680,23 @@ class DuckDBProvider(SerialDatabaseProvider):
                     "chunk_type": result[3],
                     "start_line": result[4],
                     "end_line": result[5],
-                    "file_path": result[6],  # Keep stored format
+                    "file_path": result[6],
                     "language": result[7],
                 }
                 for result in results
             ]
 
+            pagination = {
+                "offset": offset,
+                "page_size": page_size,
+                "total": total,
+                "has_more": offset + page_size < total,
+            }
+            return result_list, pagination
+
         except Exception as e:
             logger.error(f"Failed to perform text search: {e}")
-            return []
+            return [], {"error": str(e)}
 
     def get_stats(self) -> dict[str, int]:
         """Get database statistics (file count, chunk count, etc.)."""
@@ -2856,7 +2875,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Executor method for rollback_transaction - runs in DB thread."""
         try:
             conn.execute("ROLLBACK")
-        except duckdb.TransactionException:
+        except duckdb.TransactionException:  # type: ignore[attr-defined]  # exists at runtime, missing from stubs
             # No active transaction — defensive rollback in except handlers is safe.
             logger.warning("Rollback skipped (no active transaction)")
         state["transaction_active"] = False
@@ -2897,3 +2916,435 @@ class DuckDBProvider(SerialDatabaseProvider):
                 )
         except Exception:
             pass
+
+    # ── Symbol/Edge CRUD Protocol Methods ─────────────────────────
+
+    _SYMBOL_BATCH_SIZE = 500  # 12 params/row × 500 = 6000 params (well under DuckDB limit)
+    _EDGE_BATCH_SIZE = 500    # 9 params/row × 500 = 4500 params
+
+    @staticmethod
+    def _rows_to_dicts(conn: Any, rows: list[Any]) -> list[dict[str, Any]]:
+        """Convert fetchall() rows to list of dicts using cursor description."""
+        if not rows:
+            return []
+        cols = [desc[0] for desc in conn.description]
+        return [dict(zip(cols, row)) for row in rows]
+
+    def insert_symbols_batch(self, symbols: list[SymbolRow]) -> None:
+        """Batch insert symbol rows with internal chunking."""
+        if not symbols:
+            return
+        self._execute_in_db_thread_sync("insert_symbols_batch", symbols)
+
+    def _executor_insert_symbols_batch(
+        self, conn: Any, state: dict[str, Any], symbols: list[SymbolRow]
+    ) -> None:
+        if not symbols:
+            return
+        cols = (
+            "fqn, name, kind, language, file_id, file_path, "
+            "range_start, range_end, parent_fqn, confidence, lsp_server, type_signature"
+        )
+        for i in range(0, len(symbols), self._SYMBOL_BATCH_SIZE):
+            batch = symbols[i : i + self._SYMBOL_BATCH_SIZE]
+            placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch))
+            flat: list[Any] = []
+            for s in batch:
+                flat.extend([
+                    s["fqn"], s["name"], s["kind"], s["language"],
+                    s["file_id"], s["file_path"],
+                    s["range_start"], s["range_end"],
+                    s.get("parent_fqn"), s["confidence"], s["lsp_server"],
+                    s.get("type_signature"),
+                ])
+            conn.execute(f"INSERT INTO symbols ({cols}) VALUES {placeholders}", flat)
+
+    def delete_symbols_by_file(self, file_id: int) -> None:
+        """Delete all symbols for a given file_id."""
+        self._execute_in_db_thread_sync("delete_symbols_by_file", file_id)
+
+    def _executor_delete_symbols_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> None:
+        conn.execute("DELETE FROM symbols WHERE file_id = ?", [file_id])
+
+    def delete_edges_by_file(self, file_id: int) -> None:
+        """Delete all edges referencing symbols belonging to this file."""
+        self._execute_in_db_thread_sync("delete_edges_by_file", file_id)
+
+    def _executor_delete_edges_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> None:
+        conn.execute(
+            "DELETE FROM symbol_edges WHERE "
+            "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
+            "to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)",
+            [file_id, file_id],
+        )
+
+    def query_symbols_by_file(self, file_id: int) -> list[dict[str, Any]]:
+        """Return all symbols for a given file_id."""
+        return self._execute_in_db_thread_sync("query_symbols_by_file", file_id)
+
+    def _executor_query_symbols_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            "SELECT * FROM symbols WHERE file_id = ?", [file_id]
+        ).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def query_symbols_by_range(
+        self, file_path: str, line: int
+    ) -> dict[str, Any] | None:
+        """Return the innermost symbol containing the given line."""
+        return self._execute_in_db_thread_sync("query_symbols_by_range", file_path, line)
+
+    def _executor_query_symbols_by_range(
+        self, conn: Any, state: dict[str, Any], file_path: str, line: int
+    ) -> dict[str, Any] | None:
+        rows = conn.execute(
+            "SELECT * FROM symbols "
+            "WHERE file_path = ? AND range_start <= ? AND range_end >= ? "
+            "ORDER BY (range_end - range_start) ASC LIMIT 1",
+            [file_path, line, line],
+        ).fetchall()
+        dicts = self._rows_to_dicts(conn, rows)
+        return dicts[0] if dicts else None
+
+    def query_symbols_by_range_overlap(
+        self, file_path: str, min_line: int, max_line: int
+    ) -> list[dict[str, Any]]:
+        """Return all symbols whose range overlaps [min_line, max_line]."""
+        return self._execute_in_db_thread_sync(
+            "query_symbols_by_range_overlap", file_path, min_line, max_line
+        )
+
+    def _executor_query_symbols_by_range_overlap(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        file_path: str,
+        min_line: int,
+        max_line: int,
+    ) -> list[dict[str, Any]]:
+        rows = conn.execute(
+            "SELECT * FROM symbols "
+            "WHERE file_path = ? AND range_start <= ? AND range_end >= ?",
+            [file_path, max_line, min_line],
+        ).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def query_symbol_fqns_by_file(self, file_id: int) -> dict[str, int]:
+        """Return {fqn: symbol_id} mapping for all symbols in a file."""
+        return self._execute_in_db_thread_sync("query_symbol_fqns_by_file", file_id)
+
+    def _executor_query_symbol_fqns_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> dict[str, int]:
+        rows = conn.execute(
+            "SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]
+        ).fetchall()
+        return {row[1]: row[0] for row in rows}
+
+    def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
+        """Check whether a symbol with the given FQN and file_path exists."""
+        return self._execute_in_db_thread_sync(
+            "query_symbols_by_fqn_exists", fqn, file_path
+        )
+
+    def _executor_query_symbols_by_fqn_exists(
+        self, conn: Any, state: dict[str, Any], fqn: str, file_path: str
+    ) -> bool:
+        rows = conn.execute(
+            "SELECT 1 FROM symbols WHERE fqn = ? AND file_path = ? LIMIT 1",
+            [fqn, file_path],
+        ).fetchall()
+        return len(rows) > 0
+
+    def insert_edges_batch(self, edges: list[EdgeRow]) -> None:
+        """Batch insert edge rows with internal chunking."""
+        if not edges:
+            return
+        self._execute_in_db_thread_sync("insert_edges_batch", edges)
+
+    def _executor_insert_edges_batch(
+        self, conn: Any, state: dict[str, Any], edges: list[EdgeRow]
+    ) -> None:
+        if not edges:
+            return
+        cols = (
+            "from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, "
+            "to_file, edge_kind, confidence, lsp_server"
+        )
+        for i in range(0, len(edges), self._EDGE_BATCH_SIZE):
+            batch = edges[i : i + self._EDGE_BATCH_SIZE]
+            placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch))
+            flat: list[Any] = []
+            for e in batch:
+                flat.extend([
+                    e["from_symbol_id"], e["from_fqn"], e["from_file"],
+                    e["to_symbol_id"], e["to_fqn"], e["to_file"],
+                    e["edge_kind"], e["confidence"], e["lsp_server"],
+                ])
+            conn.execute(f"INSERT INTO symbol_edges ({cols}) VALUES {placeholders}", flat)
+
+    # ── Graph Query Protocol Methods ──────────────────────────────
+
+    def graph_walk(
+        self,
+        seed_fqns: list[str],
+        depth: int,
+        directed: bool,
+        edge_kind: str | None,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Walk connected symbols from seed FQNs."""
+        if not seed_fqns:
+            return [], []
+        return self._execute_in_db_thread_sync(
+            "graph_walk", seed_fqns, depth, directed, edge_kind, limit
+        )
+
+    def _executor_graph_walk(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        seed_fqns: list[str],
+        depth: int,
+        directed: bool,
+        edge_kind: str | None,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        if not seed_fqns:
+            return [], []
+
+        # Build edge subquery based on direction
+        if directed:
+            edge_sql = "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges"
+        else:
+            edge_sql = (
+                "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges "
+                "UNION ALL "
+                "SELECT to_fqn AS src, from_fqn AS dst, edge_kind FROM symbol_edges"
+            )
+
+        # Build seed placeholders — one seed per CTE UNION branch
+        seed_placeholders = ", ".join(["?"] * len(seed_fqns))
+        params: list[Any] = list(seed_fqns) + [depth]
+
+        edge_filter_sql = ""
+        if edge_kind:
+            edge_filter_sql = "AND e.edge_kind = ?"
+            params.append(edge_kind)
+        params.append(limit)
+
+        sql = f"""
+            WITH RECURSIVE reachable AS (
+                SELECT s.fqn, s.name, s.kind, s.file_path, 0 AS depth,
+                       [s.fqn] AS visited
+                FROM symbols s
+                WHERE s.fqn IN ({seed_placeholders})
+
+                UNION ALL
+
+                SELECT s2.fqn, s2.name, s2.kind, s2.file_path,
+                       r.depth + 1,
+                       list_concat(r.visited, [s2.fqn])
+                FROM reachable r
+                JOIN ({edge_sql}) e ON e.src = r.fqn
+                JOIN symbols s2 ON s2.fqn = e.dst
+                WHERE r.depth < ?
+                  AND NOT list_contains(r.visited, s2.fqn)
+                  {edge_filter_sql}
+            )
+            SELECT DISTINCT fqn, name, kind, file_path, depth
+            FROM reachable
+            ORDER BY depth, fqn
+            LIMIT ?
+        """
+        node_rows = conn.execute(sql, params).fetchall()
+        nodes = self._rows_to_dicts(conn, node_rows)
+
+        if not nodes:
+            return [], []
+
+        # Fetch edges between discovered nodes
+        fqns = [n["fqn"] for n in nodes]
+        edge_ph = ", ".join(["?"] * len(fqns))
+        edge_params: list[Any] = list(fqns) + list(fqns)
+        edge_filter = ""
+        if edge_kind:
+            edge_filter = "AND e.edge_kind = ?"
+            edge_params.append(edge_kind)
+
+        edge_sql_q = f"""
+            SELECT e.from_fqn, e.to_fqn, e.edge_kind, e.from_file, e.to_file
+            FROM symbol_edges e
+            WHERE e.from_fqn IN ({edge_ph})
+              AND e.to_fqn IN ({edge_ph})
+              {edge_filter}
+        """
+        edge_rows = conn.execute(edge_sql_q, edge_params).fetchall()
+        edges = self._rows_to_dicts(conn, edge_rows)
+
+        return nodes, edges
+
+    def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
+        """Find unreachable symbols within a scope prefix."""
+        return self._execute_in_db_thread_sync("graph_reachability", scope)
+
+    def _executor_graph_reachability(
+        self, conn: Any, state: dict[str, Any], scope: str
+    ) -> list[dict[str, Any]]:
+        pattern = escape_like_pattern(scope) + "%"
+
+        # All symbols in scope
+        all_rows = conn.execute(
+            "SELECT fqn, name, kind, file_path FROM symbols WHERE file_path LIKE ? ESCAPE '!'",
+            [pattern],
+        ).fetchall()
+        all_symbols = self._rows_to_dicts(conn, all_rows)
+
+        # Reachable via outbound edges (forward-only CTE)
+        reach_sql = f"""
+            WITH RECURSIVE reachable AS (
+                SELECT DISTINCT s.fqn FROM symbols s
+                WHERE s.file_path LIKE ? ESCAPE '!'
+
+                UNION
+
+                SELECT DISTINCT s2.fqn
+                FROM reachable r
+                JOIN symbol_edges e ON e.from_fqn = r.fqn
+                JOIN symbols s2 ON s2.fqn = e.to_fqn
+                WHERE s2.file_path LIKE ? ESCAPE '!'
+            )
+            SELECT fqn FROM reachable
+        """
+        reachable_rows = conn.execute(reach_sql, [pattern, pattern]).fetchall()
+        reachable_fqns = {r[0] for r in reachable_rows}
+
+        return [s for s in all_symbols if s["fqn"] not in reachable_fqns]
+
+    def graph_boundary(self, scope: str, limit: int) -> list[dict[str, Any]]:
+        """Find cross-boundary edges for a scope prefix."""
+        return self._execute_in_db_thread_sync("graph_boundary", scope, limit)
+
+    def _executor_graph_boundary(
+        self, conn: Any, state: dict[str, Any], scope: str, limit: int
+    ) -> list[dict[str, Any]]:
+        pattern = escape_like_pattern(scope) + "%"
+        sql = """
+            SELECT
+                e.from_fqn, s1.name AS from_name, s1.kind AS from_kind, e.from_file,
+                e.to_fqn, s2.name AS to_name, s2.kind AS to_kind, e.to_file,
+                e.edge_kind
+            FROM symbol_edges e
+            JOIN symbols s1 ON e.from_fqn = s1.fqn AND e.from_file = s1.file_path
+            JOIN symbols s2 ON e.to_fqn = s2.fqn AND e.to_file = s2.file_path
+            WHERE (
+                (e.from_file LIKE ? ESCAPE '!' AND e.to_file NOT LIKE ? ESCAPE '!')
+                OR
+                (e.from_file NOT LIKE ? ESCAPE '!' AND e.to_file LIKE ? ESCAPE '!')
+            )
+            LIMIT ?
+        """
+        rows = conn.execute(sql, [pattern, pattern, pattern, pattern, limit]).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def graph_overview(self, scope: str | None, limit: int) -> list[dict[str, Any]]:
+        """Get top symbols by edge connectivity."""
+        return self._execute_in_db_thread_sync("graph_overview", scope, limit)
+
+    def _executor_graph_overview(
+        self, conn: Any, state: dict[str, Any], scope: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        scope_clause = ""
+        params: list[Any] = []
+        if scope:
+            pattern = escape_like_pattern(scope) + "%"
+            scope_clause = "WHERE s.file_path LIKE ? ESCAPE '!'"
+            params.append(pattern)
+        params.append(limit)
+
+        sql = f"""
+            WITH edge_counts AS (
+                SELECT s.fqn, s.name, s.kind, s.file_path,
+                       COUNT(*) AS total_edges
+                FROM symbols s
+                JOIN (
+                    SELECT from_fqn AS fqn FROM symbol_edges
+                    UNION ALL
+                    SELECT to_fqn AS fqn FROM symbol_edges
+                ) AS all_refs ON all_refs.fqn = s.fqn
+                {scope_clause}
+                GROUP BY s.fqn, s.name, s.kind, s.file_path
+            )
+            SELECT fqn, name, kind, file_path, total_edges
+            FROM edge_counts
+            ORDER BY total_edges DESC
+            LIMIT ?
+        """
+        rows = conn.execute(sql, params).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
+        """Resolve seed chunks to symbol FQNs via range overlap."""
+        if not chunks:
+            return []
+        return self._execute_in_db_thread_sync("symbol_overlap", chunks)
+
+    def _executor_symbol_overlap(
+        self, conn: Any, state: dict[str, Any], chunks: list[dict[str, Any]]
+    ) -> list[str]:
+        if not chunks:
+            return []
+        conditions: list[str] = []
+        params: list[Any] = []
+        for chunk in chunks:
+            conditions.append(
+                "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
+            )
+            params.extend([chunk["file_path"], chunk["end_line"], chunk["start_line"]])
+
+        where = " OR ".join(conditions)
+        sql = f"SELECT DISTINCT s.fqn FROM symbols s WHERE {where}"
+        rows = conn.execute(sql, params).fetchall()
+        return [row[0] for row in rows]
+
+    def chunk_resolution(self, fqns: list[str]) -> list[dict[str, Any]]:
+        """Resolve symbol FQNs to chunks via file_id + range overlap."""
+        if not fqns:
+            return []
+        return self._execute_in_db_thread_sync("chunk_resolution", fqns)
+
+    def _executor_chunk_resolution(
+        self, conn: Any, state: dict[str, Any], fqns: list[str]
+    ) -> list[dict[str, Any]]:
+        if not fqns:
+            return []
+        ph = ", ".join(["?"] * len(fqns))
+        sql = f"""
+            SELECT DISTINCT c.id AS chunk_id, f.path AS file_path,
+                   c.code AS content, c.start_line, c.end_line
+            FROM chunks c
+            JOIN files f ON c.file_id = f.id
+            JOIN symbols s ON s.file_id = f.id
+              AND s.range_start >= c.start_line
+              AND s.range_end <= c.end_line
+            WHERE s.fqn IN ({ph})
+        """
+        rows = conn.execute(sql, list(fqns)).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def symbol_stats(self) -> dict[str, Any]:
+        """Return symbol and edge counts."""
+        return self._execute_in_db_thread_sync("symbol_stats")
+
+    def _executor_symbol_stats(
+        self, conn: Any, state: dict[str, Any]
+    ) -> dict[str, Any]:
+        sym_count = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
+        edge_count = conn.execute("SELECT COUNT(*) FROM symbol_edges").fetchone()[0]
+        return {"symbol_count": sym_count, "edge_count": edge_count}
