@@ -10,18 +10,19 @@ pytestmark = pytest.mark.unit
 
 def test_escape_like_pattern_parameterized_keeps_quotes() -> None:
     escaped = escape_like_pattern("scope_%[path]'\\name", escape_quotes=False)
-    assert "\\%" in escaped
-    assert "\\_" in escaped
-    assert "\\[" in escaped
-    assert "\\\\" in escaped
+    assert "!%" in escaped
+    assert "!_" in escaped
+    assert "![" in escaped
+    # Backslash is not a LIKE metacharacter — passes through unchanged
+    assert "\\" in escaped
     assert "''" not in escaped
     assert "'" in escaped
 
 
 def test_escape_like_pattern_interpolated_escapes_quotes() -> None:
     escaped = escape_like_pattern("scope_%[path]'\\name", escape_quotes=True)
-    assert "\\%" in escaped
-    assert "\\_" in escaped
-    assert "\\[" in escaped
-    assert "\\\\" in escaped
+    assert "!%" in escaped
+    assert "!_" in escaped
+    assert "![" in escaped
+    assert "\\" in escaped
     assert "''" in escaped

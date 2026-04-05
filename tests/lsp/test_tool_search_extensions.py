@@ -196,11 +196,11 @@ class TestTypeFilter:
         assert "LIKE" in symbols_query
         # The parameter should have escaped underscores
         params = calls[0][0][1]
-        # Find the type_filter param — should have backslash-escaped underscore
+        # Find the type_filter param — should have !-escaped underscore
         type_filter_params = [p for p in params if isinstance(p, str) and "my" in p]
         assert len(type_filter_params) >= 1
-        # Escaped underscore: my\_type
-        assert r"my\_type" in type_filter_params[0]
+        # Escaped underscore: my!_type
+        assert "my!_type" in type_filter_params[0]
 
 
 # ---------------------------------------------------------------------------
@@ -366,7 +366,7 @@ class TestAdversarialSearchSymbols:
         calls = services.provider.execute_query.call_args_list
         params = calls[0][0][1]
         name_param = params[0]  # First LIKE param
-        assert r"\%" in name_param
+        assert "!%" in name_param
 
     @pytest.mark.asyncio
     async def test_query_with_underscore(self) -> None:
@@ -380,7 +380,7 @@ class TestAdversarialSearchSymbols:
         calls = services.provider.execute_query.call_args_list
         params = calls[0][0][1]
         name_param = params[0]
-        assert r"\_" in name_param
+        assert "!_" in name_param
 
     @pytest.mark.asyncio
     async def test_path_with_underscore_escaped(self) -> None:
@@ -393,9 +393,9 @@ class TestAdversarialSearchSymbols:
 
         calls = services.provider.execute_query.call_args_list
         params = calls[0][0][1]
-        # Path param should have escaped underscore
+        # Path param should have !-escaped underscore
         path_params = [p for p in params if isinstance(p, str) and "module" in p]
-        assert any(r"\_" in p for p in path_params)
+        assert any("!_" in p for p in path_params)
 
     @pytest.mark.asyncio
     async def test_large_offset_beyond_total(self) -> None:

@@ -55,6 +55,7 @@ class _FakeChunksTable:
 
 def test_escape_like_pattern_handles_metacharacters() -> None:
     escaped = _escape_like_pattern("scope_%[path]'\\name")
+    # LanceDB uses backslash as escape char (Lance/DataFusion requirement)
     assert "\\%" in escaped
     assert "\\_" in escaped
     assert "\\[" in escaped

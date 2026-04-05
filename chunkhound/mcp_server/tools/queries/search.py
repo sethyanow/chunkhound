@@ -1,4 +1,4 @@
-"""sqlglot query builders for search MCP tool operations.
+"""Query builders for search MCP tool operations.
 
 Each function returns (sql, params) — pure functions with no side effects.
 Compose shared fragments from common.py for bidirectional edges, scope
@@ -6,8 +6,6 @@ filtering, and cycle tracking.
 """
 
 from typing import Any
-
-import sqlglot
 
 from .common import (
     bidirectional_edges,
@@ -73,8 +71,7 @@ def build_symbol_search_query(
     """
     params.extend([limit, offset])
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_symbol_count_query(
@@ -91,8 +88,7 @@ def build_symbol_count_query(
 
     sql = f"SELECT COUNT(*) AS total FROM symbols WHERE {where_clause}"
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_symbol_overlap_query(
@@ -117,8 +113,7 @@ def build_symbol_overlap_query(
     where_clause = " OR ".join(conditions)
     sql = f"SELECT DISTINCT s.fqn, s.file_id FROM symbols s WHERE {where_clause}"
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_structural_walk_query(
@@ -167,8 +162,7 @@ def build_structural_walk_query(
         LIMIT ?
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_chunk_resolution_query(
@@ -195,8 +189,7 @@ def build_chunk_resolution_query(
         WHERE s.fqn IN ({placeholders})
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), list(fqns)
+    return sql, list(fqns)
 
 
 def build_type_filter_query(
@@ -231,5 +224,4 @@ def build_type_filter_query(
         WHERE ({where_clause}) AND s.type_signature LIKE ? ESCAPE '!'
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params

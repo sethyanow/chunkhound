@@ -1,4 +1,9 @@
-"""Reusable sqlglot query fragments for MCP tool query builders."""
+"""Reusable query fragments for MCP tool query builders.
+
+sqlglot is used here only for building complex AST fragments (bidirectional
+edges, cycle tracking). Query builders compose these rendered fragments via
+f-string — no final sqlglot round-trip.
+"""
 
 from typing import Any
 
@@ -9,8 +14,7 @@ from sqlglot import exp
 def escape_like(value: str, escape_char: str = "!") -> str:
     """Escape LIKE-special characters in a user-provided string.
 
-    Uses '!' as the escape character to avoid backslash-in-SQL-string
-    issues when fragments are round-tripped through sqlglot.
+    Uses '!' as the escape character (avoids backslash ambiguity in SQL strings).
     """
     return (
         value.replace(escape_char, escape_char + escape_char)
@@ -43,9 +47,6 @@ def scope_filter(
 
     Returns (sql_fragment, params) where sql_fragment is a raw SQL condition
     and params contains the escaped scope pattern with wildcard.
-
-    Uses raw SQL instead of sqlglot expression to avoid double-escaping
-    the backslash in the ESCAPE clause.
     """
     escaped = escape_like(scope)
     pattern = escaped + "%"

@@ -274,17 +274,21 @@ class TestEscapeLike:
     """_escape_like: pure function for LIKE-safe string encoding."""
 
     def test_percent(self) -> None:
-        assert _escape_like("chunk%ound") == "chunk\\%ound"
+        assert _escape_like("chunk%ound") == "chunk!%ound"
 
     def test_underscore(self) -> None:
-        assert _escape_like("chunk_ound") == "chunk\\_ound"
+        assert _escape_like("chunk_ound") == "chunk!_ound"
 
-    def test_backslash_escaped_first(self) -> None:
-        """Backslash must be escaped before % and _ to avoid double-escaping."""
-        assert _escape_like("path\\to") == "path\\\\to"
+    def test_escape_char_doubled(self) -> None:
+        """The escape char itself (!) is doubled."""
+        assert _escape_like("path!to") == "path!!to"
+
+    def test_backslash_not_special(self) -> None:
+        """Backslash is not a LIKE metacharacter — passes through unchanged."""
+        assert _escape_like("path\\to") == "path\\to"
 
     def test_all_special_chars(self) -> None:
-        assert _escape_like("a%b_c\\d") == "a\\%b\\_c\\\\d"
+        assert _escape_like("a%b_c!d") == "a!%b!_c!!d"
 
     def test_empty_string(self) -> None:
         assert _escape_like("") == ""
@@ -413,7 +417,7 @@ class TestGraphAdversarial:
 
         call_args = services.provider.execute_query.call_args_list[0]
         params = call_args[0][1]
-        assert "chunk\\_ound/" in params[0]
+        assert "chunk!_ound/" in params[0]
 
     @pytest.mark.asyncio
     async def test_overview_single_symbol(self) -> None:

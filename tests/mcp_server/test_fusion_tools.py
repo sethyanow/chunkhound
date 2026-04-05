@@ -842,8 +842,8 @@ class TestCollectTestFqnsAdversarial:
 
         call_args = services.provider.execute_query.call_args
         params = call_args[0][1]
-        # '%' should be escaped to '\%' in the LIKE pattern
-        assert "\\%" in params[0]
+        # '%' should be escaped to '!%' in the LIKE pattern
+        assert "!%" in params[0]
 
     def test_scope_with_underscore_escaped(self) -> None:
         """test_scope containing '_' is LIKE-escaped, not treated as wildcard."""
@@ -857,8 +857,8 @@ class TestCollectTestFqnsAdversarial:
 
         call_args = services.provider.execute_query.call_args
         params = call_args[0][1]
-        # '_' should be escaped to '\_' in the LIKE pattern
-        assert "\\_" in params[0]
+        # '_' should be escaped to '!_' in the LIKE pattern
+        assert "!_" in params[0]
 
 
 class TestTestTargetingAdversarial:
@@ -1060,9 +1060,9 @@ class TestQueryScopeSymbols:
         params = call_args[0][1]
         assert "LIKE" in sql
         assert "ESCAPE" in sql
-        # '%' and '_' should be escaped in the param
-        assert "\\%" in params[0]
-        assert "\\_" in params[0]
+        # '%' and '_' should be escaped with '!' in the param
+        assert "!%" in params[0]
+        assert "!_" in params[0]
 
 
 # ---------------------------------------------------------------------------

@@ -137,9 +137,10 @@ def _deserialize_metadata(metadata_json: str | None) -> dict:
 def _escape_like_pattern(value: str) -> str:
     """Escape SQL LIKE metacharacters for prefix matching.
 
-    Uses backslash as the escape character (paired with ESCAPE '\\').
+    Uses backslash as the escape character — Lance/DataFusion only supports
+    backslash for ESCAPE, not arbitrary characters like '!'.
     """
-    return escape_like_pattern(value, escape_quotes=True)
+    return escape_like_pattern(value, escape_quotes=True, escape_char="\\")
 
 
 def _iter_batches(values: list[int], batch_size: int) -> list[list[int]]:

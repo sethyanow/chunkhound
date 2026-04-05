@@ -172,17 +172,21 @@ class TestEscapeLikeDense:
     """Adversarial: strings made entirely of special characters."""
 
     def test_all_percents(self) -> None:
-        assert escape_like("%%%") == "\\%\\%\\%"
+        assert escape_like("%%%") == "!%!%!%"
 
     def test_all_underscores(self) -> None:
-        assert escape_like("___") == "\\_\\_\\_"
+        assert escape_like("___") == "!_!_!_"
 
-    def test_all_backslashes(self) -> None:
-        # 3 literal backslashes → each doubled = 6 literal backslashes
-        assert escape_like("\\\\\\") == "\\\\\\\\\\\\"
+    def test_all_exclamation_marks(self) -> None:
+        """The escape char itself (!) is doubled."""
+        assert escape_like("!!!") == "!!!!!!"
+
+    def test_backslashes_pass_through(self) -> None:
+        """Backslash is not special with ! escape char."""
+        assert escape_like("\\\\\\") == "\\\\\\"
 
     def test_alternating_specials(self) -> None:
-        assert escape_like("%_%\\") == "\\%\\_\\%\\\\"
+        assert escape_like("%_!\\") == "!%!_!!\\"
 
 
 # ---------------------------------------------------------------------------
@@ -201,11 +205,11 @@ class TestScopeFilterAdversarial:
     def test_scope_is_percent(self) -> None:
         """Scope '%' must be escaped so it doesn't match everything."""
         sql, params = scope_filter("%")
-        assert params[0] == "\\%%"
+        assert params[0] == "!%%"
 
     def test_scope_is_underscore(self) -> None:
         _, params = scope_filter("_")
-        assert params[0] == "\\_%"
+        assert params[0] == "!_%"
 
     def test_custom_column_name(self) -> None:
         sql, _ = scope_filter("src", column="s.file_path")

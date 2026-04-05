@@ -1,4 +1,4 @@
-"""Tests for chunkhound.mcp_server.tools.queries.common — sqlglot query fragments."""
+"""Tests for chunkhound.mcp_server.tools.queries.common — query fragments."""
 
 import pytest
 import sqlglot
@@ -65,26 +65,21 @@ class TestScopeFilter:
 
     def test_escapes_special_chars_in_scope(self) -> None:
         _, params = scope_filter("path_with%special")
-        assert params[0] == "path\\_with\\%special%"
+        assert params[0] == "path!_with!%special%"
 
     def test_column_defaults_to_file_path(self) -> None:
         sql, _ = scope_filter("src")
         assert "file_path" in sql.lower()
 
-    def test_escape_clause_is_single_backslash(self) -> None:
-        """Regression: ESCAPE clause must contain exactly one backslash for DuckDB.
-
-        The sqlglot round-trip was double-escaping, producing ESCAPE '\\\\' (2 chars)
-        instead of ESCAPE '\\' (1 char). DuckDB raises SyntaxException for multi-char.
-        """
+    def test_escape_clause_uses_exclamation(self) -> None:
+        """ESCAPE clause must use '!' — a single character DuckDB accepts."""
         sql, _ = scope_filter("pkg/")
         import re
         match = re.search(r"ESCAPE\s+'(.*?)'", sql)
         assert match is not None, f"No ESCAPE clause found in: {sql}"
         escape_val = match.group(1)
-        # Must be exactly one backslash character in the raw SQL string
-        assert escape_val == "\\", (
-            f"ESCAPE value should be single backslash, got {repr(escape_val)} "
+        assert escape_val == "!", (
+            f"ESCAPE value should be '!', got {repr(escape_val)} "
             f"({len(escape_val)} chars). Full SQL: {sql}"
         )
 
@@ -119,16 +114,21 @@ class TestEscapeLike:
     """escape_like escapes LIKE-special characters."""
 
     def test_percent(self) -> None:
-        assert escape_like("chunk%ound") == "chunk\\%ound"
+        assert escape_like("chunk%ound") == "chunk!%ound"
 
     def test_underscore(self) -> None:
-        assert escape_like("chunk_ound") == "chunk\\_ound"
+        assert escape_like("chunk_ound") == "chunk!_ound"
 
-    def test_backslash_escaped_first(self) -> None:
-        assert escape_like("path\\to") == "path\\\\to"
+    def test_escape_char_doubled(self) -> None:
+        """The escape char itself (!) is doubled."""
+        assert escape_like("path!to") == "path!!to"
+
+    def test_backslash_not_special(self) -> None:
+        """Backslash is not a LIKE metacharacter — passes through unchanged."""
+        assert escape_like("path\\to") == "path\\to"
 
     def test_all_special_chars(self) -> None:
-        assert escape_like("a%b_c\\d") == "a\\%b\\_c\\\\d"
+        assert escape_like("a%b_c!d") == "a!%b!_c!!d"
 
     def test_empty_string(self) -> None:
         assert escape_like("") == ""

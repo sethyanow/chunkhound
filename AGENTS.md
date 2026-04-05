@@ -12,8 +12,7 @@ Purpose: Transform codebases into searchable knowledge bases for AI assistants
 - NEVER Use forward references (quotes) in type annotations unless needed
 
 **ALWAYS:**
-- ALWAYS Run smoke tests before committing: `uv run pytest tests/test_smoke.py -v -n auto`
-- ALWAYS Run full test suite before pushing to a PR: `uv run pytest -m "unit or integration or e2e or acceptance" tests/ -v`
+- ALWAYS Run full test suite before committing: `uv run pytest -m "unit or integration or e2e" tests/ -v`
 - ALWAYS Batch embeddings (min: 100, max: provider_limit)
 - ALWAYS Use uv for all Python operations
 - ALWAYS Update version via: `uv run scripts/update_version.py`
@@ -26,9 +25,8 @@ typecheck: uv run mypy chunkhound
 test:      uv run pytest                                # unit tests only (default)
 test-intg: uv run pytest -m integration                 # integration tests
 test-e2e:  uv run pytest -m e2e                         # e2e tests
-test-all:  uv run pytest -m "unit or integration or e2e"  # everything (minus acceptance)
+test-all:  uv run pytest -m "unit or integration or e2e"  # full suite — run before committing
 test-acc:  uv run pytest -m acceptance                    # acceptance tests (need VCR cassettes)
-smoke:     uv run pytest tests/test_smoke.py -v -n auto  # MANDATORY before commits
 format:    uv run ruff format chunkhound
 
 # Running
@@ -60,8 +58,8 @@ NEVER manually edit version strings - ALWAYS create git tags instead.
 # 1. Create version tag
 uv run scripts/update_version.py X.Y.Z
 
-# 2. Run smoke tests (MANDATORY)
-uv run pytest tests/test_smoke.py -v -n auto
+# 2. Run full test suite (MANDATORY)
+uv run pytest -m "unit or integration or e2e" tests/ -v
 
 # 3. Prepare release
 ./scripts/prepare_release.sh
@@ -87,7 +85,7 @@ uv publish
 - `--config` does NOT override a project-local `.chunkhound.json` for DB path — always use explicit `--db` when the target project has its own config
 
 ## PROJECT_MAINTENANCE
-- Smoke tests are mandatory guardrails
+- Full test suite is the mandatory pre-commit guardrail
 - Run `uv run mypy chunkhound` during reviews to catch Optional/type boundary issues
 - All code patterns should be self-documenting
 - LSP Diagnostics are issues to be resolved when seen not triaged away

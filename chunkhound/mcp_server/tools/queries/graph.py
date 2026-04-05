@@ -1,4 +1,4 @@
-"""sqlglot query builders for graph MCP tool operations.
+"""Query builders for graph MCP tool operations.
 
 Each function returns (sql, params) — pure functions with no side effects.
 Compose shared fragments from common.py for bidirectional edges, scope
@@ -6,8 +6,6 @@ filtering, and cycle tracking.
 """
 
 from typing import Any
-
-import sqlglot
 
 from .common import (
     bidirectional_edges,
@@ -35,11 +33,7 @@ def build_walk_query(
     """
     # Edge subquery: bidirectional or forward-only
     if directed:
-        forward = sqlglot.parse_one(
-            "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges",
-            dialect="duckdb",
-        )
-        edge_sql = forward.sql(dialect="duckdb")
+        edge_sql = "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges"
     else:
         bidir = bidirectional_edges()
         edge_sql = bidir.sql(dialect="duckdb")
@@ -55,7 +49,7 @@ def build_walk_query(
         params.append(edge_kind)
     params.append(limit)
 
-    # Build the full recursive CTE as raw SQL composing the sqlglot fragments
+    # Render AST fragments to SQL strings, then compose
     append_sql = append_expr.sql(dialect="duckdb")
     contains_sql = contains_expr.sql(dialect="duckdb")
 
@@ -84,9 +78,7 @@ def build_walk_query(
         LIMIT ?
     """
 
-    # Parse through sqlglot for validation and normalization
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_walk_edges_query(
@@ -112,8 +104,7 @@ def build_walk_edges_query(
           {edge_filter}
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_reachability_all_symbols_query(scope: str) -> tuple[str, list[Any]]:
@@ -129,8 +120,7 @@ def build_reachability_all_symbols_query(scope: str) -> tuple[str, list[Any]]:
         WHERE {scope_sql}
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), scope_params
+    return sql, scope_params
 
 
 def build_reachability_reachable_query(scope: str) -> tuple[str, list[Any]]:
@@ -160,9 +150,8 @@ def build_reachability_reachable_query(scope: str) -> tuple[str, list[Any]]:
         SELECT fqn FROM reachable
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
     params: list[Any] = scope_params + scope_params
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_boundary_query(scope: str, limit: int) -> tuple[str, list[Any]]:
@@ -189,9 +178,8 @@ def build_boundary_query(scope: str, limit: int) -> tuple[str, list[Any]]:
         LIMIT ?
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
     params: list[Any] = [pattern, pattern, pattern, pattern, limit]
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_overview_query(
@@ -229,8 +217,7 @@ def build_overview_query(
     """
 
     params.append(limit)
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), params
+    return sql, params
 
 
 def build_overview_breakdown_query(fqns: list[str]) -> tuple[str, list[Any]]:
@@ -248,5 +235,4 @@ def build_overview_breakdown_query(fqns: list[str]) -> tuple[str, list[Any]]:
         GROUP BY s.fqn, e.edge_kind
     """
 
-    parsed = sqlglot.parse_one(sql, dialect="duckdb")
-    return parsed.sql(dialect="duckdb"), list(fqns)
+    return sql, list(fqns)
