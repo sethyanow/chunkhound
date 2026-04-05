@@ -11,6 +11,7 @@ parent: ch-z2o
 
 
 
+
 **Blocked by:** ch-ic6 (GraphWalkExpander wired into MCP search tool)
 **Unlocks:** Prompt template tasks (graph data available in code_research pipeline); sub-epic criterion 1; parent epic criterion "Graph walk expander produces chunks in code_research that semantic search alone misses"
 
@@ -144,3 +145,7 @@ File: `chunkhound/services/research/shared/unified_search.py`
 **Resource Exhaustion: large semantic result sets** — Query expansion could produce 500+ seed chunks → walk_limit of 15,000 → large resolution IN clause. Mitigation: bounded by walk_limit; in practice page_size=30 keeps seed sets small (~150 after dedup). Not blocking; cap on seed chunk count is a future optimization if profiling shows issues.
 
 **Temporal Betrayal: concurrent symbol population** — Background LSP population may be writing while expand() reads. Consequence: incomplete expansion (missing symbols/edges). Mitigation: acceptable by design — expansion is best-effort enrichment, read-only, no corruption risk.
+
+## Log
+
+- [2026-04-05T03:43:43Z] [Seth] Debrief: Clean implementation — 2 production files changed (13 lines in unified_search.py, 2 lines in graph_walk_expander.py), 6 new tests. Adversarial testing found concatenation order bug: step 6 semantic loop is last-wins, so graph chunks must prepend semantic results (graph_chunks + semantic_results) to preserve semantic priority on chunk_id collision. Fixed and regression tested. Reflections: skeleton's 'simple concatenation + step 6 dedup handles it' was almost right but missed last-wins semantics. SRE's error handling addition was essential (try/except wasn't in original skeleton). No user corrections needed.
