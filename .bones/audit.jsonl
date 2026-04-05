@@ -344,3 +344,4 @@
 {"timestamp":"2026-04-05T02:58:06.819199+00:00","actor":"Seth","event_type":"logged","task_id":"ch-z2o","details":{"message":"ch-ic6 closed. MCP search(type=structural) now uses GraphWalkExpander. Next: ch-8mu wires expander into UnifiedSearch (code_research pipeline). Critical gap found: graph chunks lack chunk_id needed for step 6 dedup — ch-8mu adds c.id AS chunk_id to resolution query."}}
 {"timestamp":"2026-04-05T03:18:56.171056+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-8mu","details":{"actor":"Seth"}}
 {"timestamp":"2026-04-05T03:18:56.338015+00:00","actor":"Seth","event_type":"updated","task_id":"ch-8mu","details":{"status":"active"}}
+{"timestamp":"2026-04-05T03:39:55.975133+00:00","actor":"Seth","event_type":"closed","task_id":"ch-8mu","details":{"notes":null}}

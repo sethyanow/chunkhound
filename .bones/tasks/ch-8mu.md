@@ -1,12 +1,13 @@
 ---
 id: ch-8mu
 title: Wire GraphWalkExpander into UnifiedSearch
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-z2o
 ---
+
 
 
 
@@ -119,7 +120,7 @@ File: `chunkhound/services/research/shared/unified_search.py`
 - [x] `get_chunk_id()` works on graph chunks (returns real chunk_id)
 - [x] Step 6 dedup correctly handles both semantic and graph chunks
 - [x] Graph expansion failure degrades gracefully (warning logged, semantic results returned)
-- [ ] Full test suite passes
+- [x] Full test suite passes
 
 ## Anti-Patterns
 - NO changing MultiHopStrategy behavior — graph expansion is additive alongside it
