@@ -10,6 +10,7 @@ owner: Seth
 
 
 
+
 **Blocked by:** nothing — foundation fix
 **Unlocks:** ch-zn5 connection architecture becomes solvable by backend switch. Phase 5 acceptance and Phase 6 resume on clean foundation. LanceDB becomes viable for graph features.
 
@@ -182,7 +183,7 @@ Replace 3 inlined SQL calls with: `provider.symbol_overlap()`, `provider.graph_w
 Grep for `execute_query` calls touching symbols/symbol_edges tables. Verify zero remain outside provider implementations. Also verify `mcp_server/tools/queries/` directory has no remaining symbol/graph/edge SQL (pure search queries like semantic/regex may remain if they don't touch symbols).
 
 ## Success Criteria
-- [ ] `DatabaseProvider` protocol declares all symbol/edge/graph methods (CRUD + read queries + graph queries)
+- [x] `DatabaseProvider` protocol declares all symbol/edge/graph methods (CRUD + read queries + graph queries)
 - [ ] `DuckDBProvider` implements all new protocol methods (existing SQL in `_executor_*`)
 - [ ] `LanceDBProvider` implements all new protocol methods (Lance tables + Python graph walk with visited tracking)
 - [ ] `lsp_population.py` has zero `execute_query` calls — protocol methods only
@@ -252,3 +253,4 @@ Grep for `execute_query` calls touching symbols/symbol_edges tables. Verify zero
 
 - [2026-04-05T23:14:37Z] [Seth] SRE review complete. Findings: (1) Added graph_walk_expander.py as missing caller (3 raw SQL calls). (2) Added 4 missing protocol methods for fusion.py helpers: query_symbols_by_scope, query_test_symbols, query_symbol_type_signatures, query_distinct_fqns_by_file_path, query_symbols_by_range_overlap, query_symbols_by_fqn_exists. (3) Added LanceDB BFS cycle detection requirement. (4) Added Key Considerations section with 5 edge cases. (5) Updated callers list with precise line numbers and query descriptions. (6) Expanded Steps 14-16 into Steps 14-18 for clearer caller migration scope. No design changes — all additions are gap-fills for callers the skeleton missed.
 - [2026-04-05T23:17:10Z] [Seth] Adversarial planning complete. 6 failure catalog entries: (1) DuckDB batch param limits — chunk at 500 rows. (2) LanceDB BFS frontier explosion — cap frontier at 10K. (3) Delete-insert atomicity gap — document caller responsibility. (4) Return shape contracts — test dict keys on both providers. (5) workspace symbols TOCTOU race — accept-and-dedup. (6) LanceDB LIKE/ESCAPE semantics — test explicitly, fall back to startswith. Added 2 new success criteria: cyclic edge termination, large batch chunking.
+- [2026-04-05T23:22:01Z] [Seth] Steps 1-4 complete. Protocol fully declared: 9 symbol/edge CRUD methods (+ 6 async variants), 7 graph query methods, 4 symbol read query methods, 2 data types (SymbolRow, EdgeRow). 23 unit tests passing. Committed and pushed. SC1 checked.
