@@ -108,10 +108,10 @@ class LSPPopulationService:
             )
 
             if rows:
-                self._batch_insert(rows)
+                await self._batch_insert(rows)
 
             # Query back symbol IDs for edge collection
-            fqn_rows = self._provider.execute_query(
+            fqn_rows = await self._provider.execute_query_async(
                 "SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]
             )
             fqn_to_id = {row["fqn"]: row["id"] for row in fqn_rows}
@@ -125,7 +125,7 @@ class LSPPopulationService:
 
         # Batch insert edges (pure DB write — safe after didClose)
         if edges:
-            self._batch_insert_edges(edges)
+            await self._batch_insert_edges(edges)
 
         return PopulateResult.POPULATED
 
@@ -212,13 +212,13 @@ class LSPPopulationService:
                 )
         return rows
 
-    def _batch_insert(self, rows: list[tuple]) -> None:
+    async def _batch_insert(self, rows: list[tuple]) -> None:
         """Single batch INSERT for all symbols from one file."""
         if not rows:
             return
         placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(rows))
         flat_params = [val for row in rows for val in row]
-        self._provider.execute_query(
+        await self._provider.execute_query_async(
             "INSERT INTO symbols "
             "(fqn, name, kind, language, file_id, file_path, "
             "range_start, range_end, parent_fqn, confidence, lsp_server, "
@@ -239,7 +239,7 @@ class LSPPopulationService:
 
         from chunkhound.core.types.common import Language
 
-        rows = self._provider.execute_query(
+        rows = await self._provider.execute_query_async(
             "SELECT id, path FROM files"
         )
         languages_seen: set[str] = set()
@@ -315,7 +315,7 @@ class LSPPopulationService:
                 file_path_str = str(rel_path)
 
                 # Look up file_id — skip symbols for files not in the DB
-                file_rows = self._provider.execute_query(
+                file_rows = await self._provider.execute_query_async(
                     "SELECT id FROM files WHERE path = ?", [file_path_str]
                 )
                 if not file_rows:
@@ -331,7 +331,7 @@ class LSPPopulationService:
                 seen.add(dedup_key)
 
                 # Skip if symbol already exists (from documentSymbol pass)
-                existing = self._provider.execute_query(
+                existing = await self._provider.execute_query_async(
                     "SELECT id FROM symbols WHERE fqn = ? AND file_path = ? LIMIT 1",
                     [fqn, file_path_str],
                 )
@@ -339,7 +339,7 @@ class LSPPopulationService:
                     continue
 
                 # Insert with lower confidence (workspace symbols are less precise)
-                self._batch_insert([(
+                await self._batch_insert([(
                     fqn,
                     sym.name,
                     symbol_kind_name(sym.kind),
@@ -385,7 +385,7 @@ class LSPPopulationService:
         lsp_server = "unknown"
         if fqn_to_id:
             any_id = next(iter(fqn_to_id.values()))
-            lang_rows = self._provider.execute_query(
+            lang_rows = await self._provider.execute_query_async(
                 "SELECT language FROM symbols WHERE id = ? LIMIT 1", [any_id]
             )
             if lang_rows and lang_rows[0]["language"]:
@@ -448,7 +448,7 @@ class LSPPopulationService:
                         continue
 
                     for loc in results:
-                        target = self._resolve_symbol(loc.uri, loc.range_start_line)
+                        target = await self._resolve_symbol(loc.uri, loc.range_start_line)
                         if target is None:
                             continue
                         to_id, to_fqn, to_file = target
@@ -475,7 +475,7 @@ class LSPPopulationService:
                     parent_fqn=fqn, lsp_server=lsp_server, edges=edges,
                 )
 
-    def _resolve_symbol(self, uri: str, line: int) -> tuple[int, str, str] | None:
+    async def _resolve_symbol(self, uri: str, line: int) -> tuple[int, str, str] | None:
         """Resolve an LSP result location to the innermost symbol in the DB.
 
         Args:
@@ -498,7 +498,7 @@ class LSPPopulationService:
             return None
 
         file_path_str = str(rel_path)
-        rows = self._provider.execute_query(
+        rows = await self._provider.execute_query_async(
             "SELECT id, fqn, file_path FROM symbols "
             "WHERE file_path = ? AND range_start <= ? AND range_end >= ? "
             "ORDER BY (range_end - range_start) ASC LIMIT 1",
@@ -509,7 +509,7 @@ class LSPPopulationService:
         row = rows[0]
         return (row["id"], row["fqn"], row["file_path"])
 
-    def _batch_insert_edges(self, edges: list[tuple]) -> None:
+    async def _batch_insert_edges(self, edges: list[tuple]) -> None:
         """Single batch INSERT for all edges from one file."""
         if not edges:
             return
@@ -517,7 +517,7 @@ class LSPPopulationService:
             ["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(edges)
         )
         flat_params = [val for edge in edges for val in edge]
-        self._provider.execute_query(
+        await self._provider.execute_query_async(
             "INSERT INTO symbol_edges "
             "(from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, "
             f"to_file, edge_kind, confidence, lsp_server) VALUES {placeholders}",

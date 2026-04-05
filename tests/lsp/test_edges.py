@@ -605,7 +605,7 @@ class TestAdversarialEdges:
         # Path.as_uri() encodes spaces as %20
         assert "%20" in encoded_uri or "my module" in encoded_uri
 
-        result = service._resolve_symbol(encoded_uri, 3)
+        result = await service._resolve_symbol(encoded_uri, 3)
         assert result is not None
         assert result[1] == "helper"
 

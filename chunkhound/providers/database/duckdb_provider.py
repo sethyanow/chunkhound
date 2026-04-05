@@ -1342,8 +1342,19 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         file_id = result[0]
 
-        # Delete in correct order due to foreign key constraints
-        # 1. Delete embeddings first from all embedding tables
+        # Delete in correct FK order: edges → symbols → embeddings → chunks → files
+        # 1. Delete symbol_edges that reference symbols belonging to this file
+        conn.execute(
+            "DELETE FROM symbol_edges WHERE "
+            "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
+            "to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)",
+            [file_id, file_id],
+        )
+
+        # 2. Delete symbols for this file
+        conn.execute("DELETE FROM symbols WHERE file_id = ?", [file_id])
+
+        # 3. Delete embeddings from all embedding tables
         embedding_tables = self._executor_get_all_embedding_tables(conn, state)
         for table_name in embedding_tables:
             conn.execute(
@@ -1354,10 +1365,10 @@ class DuckDBProvider(SerialDatabaseProvider):
                 [file_id],
             )
 
-        # 2. Delete chunks
+        # 4. Delete chunks
         conn.execute("DELETE FROM chunks WHERE file_id = ?", [file_id])
 
-        # 3. Delete file
+        # 5. Delete file
         conn.execute("DELETE FROM files WHERE id = ?", [file_id])
 
         logger.debug(f"File {file_path} and all associated data deleted")

@@ -48,7 +48,7 @@ class TestResolveSymbol:
         )
 
         uri = (tmp_path / "src" / "greeter.py").as_uri()
-        result = service._resolve_symbol(uri, 6)
+        result = await service._resolve_symbol(uri, 6)
 
         assert result is not None
         symbol_id, fqn, file_path = result
@@ -71,7 +71,7 @@ class TestResolveSymbol:
         )
 
         uri = (tmp_path / "src" / "unknown.py").as_uri()
-        result = service._resolve_symbol(uri, 5)
+        result = await service._resolve_symbol(uri, 5)
 
         assert result is None
 
@@ -89,7 +89,7 @@ class TestResolveSymbol:
             pool=AsyncMock(), provider=provider, workspace_root=tmp_path,
         )
 
-        result = service._resolve_symbol("untitled:Untitled-1", 1)
+        result = await service._resolve_symbol("untitled:Untitled-1", 1)
         assert result is None
 
     @pytest.mark.asyncio
@@ -111,7 +111,7 @@ class TestResolveSymbol:
         )
 
         # URI pointing to stdlib — outside workspace_root
-        result = service._resolve_symbol("file:///usr/lib/python3.13/typing.py", 50)
+        result = await service._resolve_symbol("file:///usr/lib/python3.13/typing.py", 50)
         assert result is None
 
 

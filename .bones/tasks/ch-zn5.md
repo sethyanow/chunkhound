@@ -1,6 +1,6 @@
 ---
 id: ch-zn5
-title: Fix DuckDB connection concurrency + cascade bugs
+title: DuckDB connection architecture overhaul
 status: open
 type: bug
 priority: 0
@@ -8,7 +8,7 @@ priority: 0
 
 ## Context
 
-Daemon restart on 2026-04-05 triggered a FATAL DuckDB corruption that wiped the index. Root cause: three interacting bugs in the realtime indexing service's database access patterns.
+Daemon restart on 2026-04-05 triggered a FATAL DuckDB corruption that wiped the index. Investigation revealed the root cause is architectural: DuckDB's single-connection model doesn't match a daemon serving concurrent async operations.
 
 **Observed failure sequence (daemon.log):**
 1. Daemon starts, polling monitor detects 894 files
@@ -17,88 +17,114 @@ Daemon restart on 2026-04-05 triggered a FATAL DuckDB corruption that wiped the 
 4. Transaction state poisons: alternating `"transaction is aborted"` / `"cannot start a transaction within a transaction"`
 5. FK constraint violations: `DELETE FROM symbols WHERE file_id = ?` fails because `symbol_edges` still references those symbols
 6. DuckDB HNSW index corruption: `"Failed to delete all rows from index. Only deleted 0 out of 13 rows"`
-7. FATAL: `"database has been invalidated because of a previous fatal error"` — every subsequent operation fails
+7. FATAL: `"database has been invalidated because of a previous fatal error"` — every subsequent operation fails, DB wiped on restart
+
+**The deeper problem:** Everything — reads AND writes — funnels through one `ThreadPoolExecutor(max_workers=1)`. A `code_research` query blocks behind an indexing write. Searches block behind embed passes. The daemon+proxy+IPC+lock architecture (400+ lines) exists solely to work around DuckDB's single-writer file lock.
+
+**Process model (verified):** Each project runs two PIDs — a `chunkhound mcp` stdio proxy and a `_daemon` subprocess. The proxy is a pure stdio↔IPC bridge (no DB). The daemon owns the sole DB connection. Multiple Claude sessions connect as IPC clients to the same daemon.
 
 **Key files:**
-- `chunkhound/services/realtime_indexing_service.py` — `_consume_events` (line 706), `remove_file` (line 777), `_cleanup_deleted_directory` (line 818)
-- `chunkhound/services/lsp_population.py` — `populate_file` (line 56), `delete_file_edges` (line 526), `delete_file_symbols` (line 535)
-- `chunkhound/providers/database/duckdb_provider.py` — `_executor_delete_file_completely` (line 1324)
-- `chunkhound/providers/database/serial_executor.py` — `SerialDatabaseExecutor` (line 81)
+- `chunkhound/providers/database/serial_executor.py` — `SerialDatabaseExecutor`, single-thread pool
+- `chunkhound/providers/database/serial_database_provider.py` — base class, all ops through executor
+- `chunkhound/providers/database/duckdb_provider.py` — `_executor_delete_file_completely` (missing cascade)
+- `chunkhound/services/realtime_indexing_service.py` — `_consume_events` races with `_process_loop`
+- `chunkhound/services/lsp_population.py` — 8 sync `execute_query()` calls blocking event loop
+- `chunkhound/daemon/server.py` — `ChunkHoundDaemon`
+- `chunkhound/daemon/client_proxy.py` — `ClientProxy` (stdio↔IPC bridge)
 
 ## Requirements
 
-### Bug 1: Concurrency violation — `_consume_events` races with `_process_loop` transactions
+### R1: Data correctness — `delete_file_completely` cascade
 
-`_consume_events` calls `provider.delete_file_completely_async()` (line 781, 833) and `provider.search_regex_async()` (line 823) **directly**, bypassing the file queue. These run as a separate async task concurrent with `_process_loop`.
+`_executor_delete_file_completely` deletes embeddings → chunks → files but leaves orphaned `symbols` and `symbol_edges`. Subsequent LSP population hits FK violations. Fix: delete in FK order: symbol_edges → symbols → embeddings → chunks → files.
 
-Meanwhile, `_process_loop` → `IndexingCoordinator._store_parsed_results` does multi-statement transactions via separate executor submissions:
-```
-await self._db.begin_transaction_async()    # submission 1
-# ... work ...                               # submissions 2-N
-await self._db.commit_transaction_async()   # submission N+1
-```
+**Status: FIXED** — regression tests written and passing (`tests/integration/test_delete_file_cascade.py`).
 
-Each `await` yields control. Between submissions, `_consume_events` can submit its own operations to the same executor. The executor serializes individual statements but cannot protect logical transaction boundaries.
+### R2: Read/write connection separation
 
-**Fix:** All DB-mutating operations in `_consume_events` must go through the file queue (priority="delete"), not call the provider directly. The `_process_loop` is the single serialization point for all DB writes.
+Separate the single DuckDB connection into distinct read and write paths:
 
-### Bug 2: Incomplete cascade in `delete_file_completely`
+- **Write connection** (single, serialized): indexing, embedding, symbol population, deletes — all mutations. Serialized through `_process_loop` file queue.
+- **Read connection(s)** (`read_only=True`): search, code_research, graph queries, stats, get_stats — all MCP tool reads. Pool of 2-4 connections for concurrent tool calls from multiple daemon clients.
 
-`DuckDBProvider._executor_delete_file_completely` (line 1324) deletes: embeddings → chunks → files.
+Reads don't compete with writes. Writes don't block reads. Eliminates the core contention that caused the FATAL.
 
-It does **NOT** delete `symbol_edges` or `symbols`. When the realtime service removes a file, symbol data becomes orphaned. Later, `LSPPopulationService.populate_file` tries to delete edges/symbols for the same file_id and hits FK violations because the edges reference symbol IDs that no longer have a corresponding file row.
+### R3: Write serialization through file queue
 
-**Bare call inventory in `_executor_delete_file_completely`:**
-```python
-# Current (line 1346-1361):
-DELETE FROM {embedding_table} WHERE chunk_id IN (SELECT id FROM chunks WHERE file_id = ?)
-DELETE FROM chunks WHERE file_id = ?
-DELETE FROM files WHERE id = ?
-# Missing:
-DELETE FROM symbol_edges WHERE from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)
-DELETE FROM symbols WHERE file_id = ?
-```
+All DB-mutating operations route through `_process_loop`'s file queue — the single serialization point for writes. `_consume_events` must not call the provider directly for mutations (currently `remove_file` and `_cleanup_deleted_directory` bypass the queue).
 
-**Fix:** Add symbol_edges and symbols deletion to `_executor_delete_file_completely`, in correct FK order: symbol_edges → symbols → embeddings → chunks → files.
+**Status: PARTIALLY DONE** — queue routing implemented, needs rebase after R2.
 
-### Bug 3: Sync DB calls blocking the event loop
+### R4: Atomic write transactions
 
-`LSPPopulationService` makes 8 sync `execute_query()` calls (lines 114, 221, 242, 318, 334, 388, 501, 520) from async context. Each blocks the asyncio event loop while waiting on the executor thread via `future.result(timeout=30)`. `realtime_indexing_service.py` line 911 also uses sync `execute_query()` from async context.
+`_store_parsed_results` does `BEGIN → work → COMMIT` as three separate executor submissions. Each `await` yields control, allowing interleaving. Fix: make each write operation a single executor submission (`_executor_store_file` does BEGIN+inserts+COMMIT atomically in the DB thread). No interleaving possible by construction.
 
-Not directly causing corruption, but degrades concurrency and can cause cascading timeouts under load.
+### R5: Sync→async conversion in LSP population
 
-**Fix:** Convert all `execute_query()` calls in async codepaths to `execute_query_async()`.
+8 sync `execute_query()` calls in `lsp_population.py` and 1 in `realtime_indexing_service.py` block the asyncio event loop. Convert to `execute_query_async()`. With R2, read queries route to the read pool; write queries route to the write connection.
+
+**Status: DONE** — converted, test fixes applied (`test_resolve.py`, `test_edges.py`).
+
+### R6: Connection FATAL detection + circuit breaker
+
+When the write connection enters FATAL state, the daemon spammed ~1500 identical error messages. Fix: detect FATAL on first failure, stop all writes, log once, attempt reconnection or graceful shutdown. No cascading error spam.
+
+### R7: DuckLake evaluation (pending research)
+
+DuckLake with a PostgreSQL metadata catalog may eliminate the need for the daemon+proxy+IPC architecture entirely. If DuckLake handles multi-writer coordination, each `chunkhound mcp` process could connect directly — no daemon, no IPC, no lock files, no startup races.
+
+**Research questions (user to investigate):**
+- Does DuckLake support HNSW vector indexes on Parquet-backed tables?
+- Does DuckLake-over-PostgreSQL handle concurrent writers from separate processes?
+- What's the write performance for chunk-level inserts (Parquet compaction overhead)?
+- Extension maturity — stable enough for a production dev tool?
+- Can the metadata catalog be local PostgreSQL or does it need a running server?
+
+**Pending user research results before scoping implementation.**
 
 ## Implementation
 
-### Step 1: Write regression test — orphaned symbols + concurrent delete = FK violation
-Reproduce the observed crash: insert a file with chunks, symbols, and symbol_edges. Call `delete_file_completely` (which currently skips symbols/edges). Then call `populate_file` for the same file — the `DELETE FROM symbol_edges WHERE from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)` should hit FK violations or find orphaned rows. This is the end-to-end regression for the FATAL.
+### Phase 1: Data correctness (DONE)
+- [x] Cascade fix in `_executor_delete_file_completely`
+- [x] Regression tests (`test_delete_file_cascade.py`)
+- [x] Sync→async in `lsp_population.py`
+- [x] `_resolve_symbol` async + test fixes
 
-### Step 2: Write regression test — cascade completeness
-Insert a file with chunks, embeddings, symbols, and symbol_edges. Call `delete_file_completely`. Assert all five tables are clean for that file_id.
+### Phase 2: Read/write separation
+1. Create `ReadConnectionPool` — manages 2-4 `read_only=True` DuckDB connections
+2. Split `SerialDatabaseProvider` methods into read vs write categories
+3. Route read operations through `ReadConnectionPool`, write operations through existing executor
+4. Route `_consume_events` mutations through file queue (delete priority handler)
+5. Update MCP tool dispatch to use read connections for search/graph/stats
 
-### Step 3: Fix `_executor_delete_file_completely` cascade
-Add `DELETE FROM symbol_edges` and `DELETE FROM symbols` steps in correct FK order before the existing deletes. Check LanceDB provider too.
+### Phase 3: Atomic writes
+1. Refactor `_store_parsed_results` into `_executor_store_parsed_results` — single executor submission, BEGIN+work+COMMIT atomic
+2. Remove `begin_transaction_async` / `commit_transaction_async` calls from `IndexingCoordinator`
+3. Same pattern for any other multi-statement write paths
 
-### Step 4: Write regression test — no direct provider calls from event consumer
-Structural or behavioral test: `remove_file` and `_cleanup_deleted_directory` must not call provider DB methods directly. Verify deletions route through the file queue.
+### Phase 4: Circuit breaker
+1. Detect DuckDB FATAL state in executor error handler
+2. Stop accepting writes, log once
+3. Attempt connection reset (close + reopen)
+4. If reset fails, signal daemon shutdown
 
-### Step 5: Route `_consume_events` DB writes through the file queue
-- `remove_file()`: instead of `provider.delete_file_completely_async()`, queue with `priority="delete"`
-- `_cleanup_deleted_directory()`: same — queue each file for deletion
-- `_process_loop`: add handler for `priority="delete"` that calls `delete_file_completely_async`
-
-### Step 6: Convert sync DB calls to async in LSP population
-Convert 8 `execute_query()` calls in `lsp_population.py` to `execute_query_async()`. Convert 1 in `realtime_indexing_service.py` line 911.
+### Phase 5: DuckLake migration (pending R7 research)
+Scope TBD based on research results. If viable, replaces Phase 2-4 with a fundamentally different architecture.
 
 ## Success Criteria
-- [ ] `delete_file_completely` removes symbol_edges and symbols (regression test)
-- [ ] No direct provider DB calls in `_consume_events`, `remove_file`, or `_cleanup_deleted_directory`
-- [ ] All `execute_query()` calls in async codepaths converted to `execute_query_async()`
+- [x] `delete_file_completely` removes symbol_edges and symbols (regression test)
+- [x] All `execute_query()` calls in async codepaths converted to `execute_query_async()`
+- [ ] Read operations use `read_only=True` connections, don't block behind writes
+- [ ] Write operations serialized through file queue — no direct provider calls from `_consume_events`
+- [ ] Write transactions are single executor submissions (no multi-await interleaving)
+- [ ] FATAL DuckDB state triggers circuit breaker, not 1500 error messages
+- [ ] Concurrent MCP tool calls from multiple clients don't block each other
 - [ ] Full test suite passes
-- [ ] Daemon restart with 894+ files does not produce transaction errors (manual verification)
+- [ ] Daemon restart with 894+ files does not produce transaction errors
 
 ## Anti-Patterns
-- NO adding a second lock/mutex — the file queue IS the serialization mechanism, use it
-- NO wrapping bare provider calls in try/except to suppress errors — fix the concurrency, don't hide it
-- NO adding transaction retry logic — the problem is interleaving, not transient failure
+- NO adding more locks/mutexes — separate connections for reads vs writes
+- NO wrapping bare provider calls in try/except to suppress errors — fix the architecture
+- NO transaction retry logic — the problem is interleaving, not transient failure
+- NO taking comments/docstrings as architectural truth — verify the process model
+- NO treating symptoms when the architecture is the root cause
