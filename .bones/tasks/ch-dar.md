@@ -1,12 +1,13 @@
 ---
 id: ch-dar
 title: 'Phase 4: Fusion MCP Tools'
-status: open
+status: closed
 type: epic
 priority: 1
 depends_on: [ch-zyz, ch-ef9, ch-zj0, ch-wo0, ch-4h0, ch-7ib]
 parent: ch-8e7
 ---
+
 
 
 
