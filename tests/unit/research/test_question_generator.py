@@ -554,6 +554,191 @@ class TestFilterRelevantFollowups:
         ), "Should return max questions on failure"
 
 
+class TestStructuralAugmentation:
+    """Test that structural root queries augment the follow-up generation prompt."""
+
+    @pytest.mark.asyncio
+    async def test_structural_query_augments_followup_prompt(
+        self, question_generator, fake_llm_provider
+    ):
+        """Structural root query should add graph-aware augmentation to prompt."""
+        captured_prompts: list[str] = []
+        original_complete = fake_llm_provider.complete_structured
+
+        async def capturing_complete(prompt, **kwargs):
+            captured_prompts.append(prompt)
+            return await original_complete(prompt, **kwargs)
+
+        fake_llm_provider.complete_structured = capturing_complete
+
+        structural_query = "What calls parse_config?"
+        context = ResearchContext(root_query=structural_query, ancestors=[])
+
+        await question_generator.generate_follow_up_questions(
+            query=structural_query,
+            context=context,
+            file_contents={"test.py": "def parse_config(): pass"},
+            chunks=[],
+            global_explored_data={},
+            exploration_gist=None,
+            max_input_tokens=10000,
+            depth=0,
+            max_depth=3,
+        )
+
+        assert captured_prompts, "LLM should have been called"
+        prompt = captured_prompts[0]
+        # Should contain augmentation about call relationships
+        assert "call" in prompt.lower() and "symbol dependency graph" in prompt.lower(), (
+            f"Structural query prompt should contain graph-aware augmentation, got: {prompt[-200:]}"
+        )
+
+    @pytest.mark.asyncio
+    async def test_nonstructural_query_no_augmentation(
+        self, question_generator, fake_llm_provider
+    ):
+        """Non-structural root query should NOT add augmentation to prompt."""
+        captured_prompts: list[str] = []
+        original_complete = fake_llm_provider.complete_structured
+
+        async def capturing_complete(prompt, **kwargs):
+            captured_prompts.append(prompt)
+            return await original_complete(prompt, **kwargs)
+
+        fake_llm_provider.complete_structured = capturing_complete
+
+        generic_query = "How does authentication work?"
+        context = ResearchContext(root_query=generic_query, ancestors=[])
+
+        await question_generator.generate_follow_up_questions(
+            query=generic_query,
+            context=context,
+            file_contents={"auth.py": "def authenticate(): pass"},
+            chunks=[],
+            global_explored_data={},
+            exploration_gist=None,
+            max_input_tokens=10000,
+            depth=0,
+            max_depth=3,
+        )
+
+        assert captured_prompts, "LLM should have been called"
+        prompt = captured_prompts[0]
+        assert "symbol dependency graph" not in prompt.lower(), (
+            f"Non-structural query should NOT contain graph augmentation, got: {prompt[-200:]}"
+        )
+
+
+class TestAdversarialAugmentation:
+    """Adversarial stress tests for structural augmentation in QuestionGenerator."""
+
+    @pytest.mark.asyncio
+    async def test_empty_root_query_no_crash(
+        self, question_generator, fake_llm_provider
+    ):
+        """Empty root_query should not crash and should not augment."""
+        captured_prompts: list[str] = []
+        original_complete = fake_llm_provider.complete_structured
+
+        async def capturing_complete(prompt, **kwargs):
+            captured_prompts.append(prompt)
+            return await original_complete(prompt, **kwargs)
+
+        fake_llm_provider.complete_structured = capturing_complete
+
+        context = ResearchContext(root_query="", ancestors=[])
+
+        await question_generator.generate_follow_up_questions(
+            query="",
+            context=context,
+            file_contents={"test.py": "def foo(): pass"},
+            chunks=[],
+            global_explored_data={},
+            exploration_gist=None,
+            max_input_tokens=10000,
+            depth=0,
+            max_depth=3,
+        )
+
+        assert captured_prompts
+        assert "symbol dependency graph" not in captured_prompts[0].lower()
+
+    @pytest.mark.asyncio
+    async def test_same_query_twice_same_result(
+        self, question_generator, fake_llm_provider
+    ):
+        """Running the same structural query twice should produce identical augmentation."""
+        captured_prompts: list[str] = []
+        original_complete = fake_llm_provider.complete_structured
+
+        async def capturing_complete(prompt, **kwargs):
+            captured_prompts.append(prompt)
+            return await original_complete(prompt, **kwargs)
+
+        fake_llm_provider.complete_structured = capturing_complete
+
+        structural_query = "What calls parse_config?"
+        context = ResearchContext(root_query=structural_query, ancestors=[])
+        kwargs = dict(
+            query=structural_query,
+            context=context,
+            file_contents={"test.py": "def foo(): pass"},
+            chunks=[],
+            global_explored_data={},
+            exploration_gist=None,
+            max_input_tokens=10000,
+            depth=0,
+            max_depth=3,
+        )
+
+        await question_generator.generate_follow_up_questions(**kwargs)
+        await question_generator.generate_follow_up_questions(**kwargs)
+
+        assert len(captured_prompts) == 2
+        assert captured_prompts[0] == captured_prompts[1]
+
+    @pytest.mark.asyncio
+    async def test_all_patterns_match_augmentation_bounded(
+        self, question_generator, fake_llm_provider
+    ):
+        """When all 5 patterns match, augmentation text should still be reasonable size."""
+        captured_prompts: list[str] = []
+        original_complete = fake_llm_provider.complete_structured
+
+        async def capturing_complete(prompt, **kwargs):
+            captured_prompts.append(prompt)
+            return await original_complete(prompt, **kwargs)
+
+        fake_llm_provider.complete_structured = capturing_complete
+
+        dense_query = (
+            "What calls parse_config, what type does it return, "
+            "which tests exercise it, what does it import, "
+            "and what implements the Parser interface?"
+        )
+        context = ResearchContext(root_query=dense_query, ancestors=[])
+
+        await question_generator.generate_follow_up_questions(
+            query=dense_query,
+            context=context,
+            file_contents={"test.py": "def foo(): pass"},
+            chunks=[],
+            global_explored_data={},
+            exploration_gist=None,
+            max_input_tokens=10000,
+            depth=0,
+            max_depth=3,
+        )
+
+        assert captured_prompts
+        prompt = captured_prompts[0]
+        # All 5 augmentations should be present
+        assert "symbol dependency graph" in prompt.lower()
+        # Total augmentation should be under 2000 chars (reasonable for 5 templates)
+        # Base prompt without augmentation is ~200 chars for this input
+        assert len(prompt) < 4000, f"Prompt too large with all augmentations: {len(prompt)} chars"
+
+
 class TestNodeCounter:
     """Test node ID generation."""
 

@@ -19,6 +19,7 @@ from loguru import logger
 
 from chunkhound.llm_manager import LLMManager
 from chunkhound.services import prompts
+from chunkhound.services.prompts.graph_patterns import ALL_PATTERNS
 from chunkhound.services.research.shared.chunk_context_builder import (
     ChunkContextBuilder,
 )
@@ -218,6 +219,17 @@ class QuestionGenerator:
             max_questions=MAX_FOLLOWUP_QUESTIONS,
             target_instruction=target_instruction,
         )
+
+        # Augment prompt with structural guidance when root query matches graph patterns
+        augmentations = [
+            aug for pat, aug in ALL_PATTERNS if pat.search(context.root_query)
+        ]
+        if augmentations:
+            structural_guidance = "\n\n".join(augmentations)
+            prompt = f"{prompt}\n\n{structural_guidance}"
+            logger.debug(
+                f"Structural augmentation: {len(augmentations)} pattern(s) matched root query"
+            )
 
         # Calculate adaptive output budget (scales 3k → 8k with depth)
         depth_ratio = depth / max(max_depth, 1)
