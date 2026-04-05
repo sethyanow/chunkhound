@@ -245,3 +245,154 @@ class TestDepthConfiguration:
         walk_call = provider.execute_query.call_args_list[1]
         walk_params = walk_call[0][1]
         assert 1 in walk_params
+
+
+# =============================================================================
+# Adversarial Stress Tests
+# =============================================================================
+
+
+class TestAdversarialSelfReferential:
+    """Walk CTE always includes seed FQNs in base case — realistic scenario."""
+
+    @pytest.mark.asyncio
+    async def test_walk_returning_seed_fqns_dedupes_correctly(self) -> None:
+        """Walk returns seed FQN + neighbor. Seed's chunk is deduped; neighbor's stays."""
+        provider = _make_mock_provider([
+            # overlap: seed maps to func_a
+            [{"fqn": "mod::func_a", "file_id": 1}],
+            # walk: returns seed FQN (base case) AND neighbor (realistic CTE output)
+            [{"fqn": "mod::func_a"}, {"fqn": "mod::func_b"}],
+            # resolution: chunks for BOTH func_a (= seed) and func_b (= new)
+            [
+                {"file_path": "main.py", "content": "def func_a(): ...", "start_line": 1, "end_line": 10},
+                {"file_path": "other.py", "content": "def func_b(): ...", "start_line": 5, "end_line": 15},
+            ],
+        ])
+
+        expander = GraphWalkExpander(provider)
+        result = await expander.expand([
+            {"file_path": "main.py", "start_line": 1, "end_line": 10},
+        ])
+
+        # func_a's chunk matches seed → deduped. func_b's chunk survives.
+        assert len(result) == 1
+        assert result[0]["file_path"] == "other.py"
+
+
+class TestAdversarialRedundant:
+    """Duplicate and overlapping seed chunks."""
+
+    @pytest.mark.asyncio
+    async def test_duplicate_seed_chunks_produce_single_result(self) -> None:
+        """Same seed chunk twice doesn't duplicate output."""
+        provider = _make_mock_provider([
+            # overlap: both seeds map to same FQN (DISTINCT handles it in real DB)
+            [{"fqn": "mod::func_a", "file_id": 1}],
+            [{"fqn": "mod::func_b"}],
+            [{"file_path": "other.py", "content": "...", "start_line": 1, "end_line": 5}],
+        ])
+
+        expander = GraphWalkExpander(provider)
+        result = await expander.expand([
+            {"file_path": "main.py", "start_line": 1, "end_line": 10},
+            {"file_path": "main.py", "start_line": 1, "end_line": 10},
+        ])
+
+        assert len(result) == 1
+
+    @pytest.mark.asyncio
+    async def test_multiple_seeds_overlapping_same_symbol(self) -> None:
+        """Two different seed chunks overlapping the same symbol."""
+        provider = _make_mock_provider([
+            # overlap: both seeds map to same FQN
+            [{"fqn": "mod::big_func", "file_id": 1}],
+            [{"fqn": "mod::helper"}],
+            [{"file_path": "util.py", "content": "...", "start_line": 1, "end_line": 5}],
+        ])
+
+        expander = GraphWalkExpander(provider)
+        result = await expander.expand([
+            {"file_path": "main.py", "start_line": 1, "end_line": 20},
+            {"file_path": "main.py", "start_line": 15, "end_line": 30},
+        ])
+
+        assert len(result) == 1
+        assert result[0]["file_path"] == "util.py"
+
+
+class TestAdversarialSparseWithGaps:
+    """Some seeds have symbol coverage, some don't."""
+
+    @pytest.mark.asyncio
+    async def test_seeds_with_no_symbol_coverage_skipped(self) -> None:
+        """Seeds in files without symbols don't prevent other seeds from expanding."""
+        provider = _make_mock_provider([
+            # overlap: only one of two seeds maps to a symbol
+            [{"fqn": "mod::func_a", "file_id": 1}],
+            [{"fqn": "mod::func_b"}],
+            [{"file_path": "found.py", "content": "...", "start_line": 1, "end_line": 5}],
+        ])
+
+        expander = GraphWalkExpander(provider)
+        result = await expander.expand([
+            {"file_path": "has_symbols.py", "start_line": 1, "end_line": 10},
+            {"file_path": "no_symbols.py", "start_line": 1, "end_line": 10},
+        ])
+
+        # The overlap query runs on both seeds but only finds symbols for one.
+        # The walk still proceeds with the found FQN.
+        assert len(result) == 1
+        assert result[0]["file_path"] == "found.py"
+
+
+class TestAdversarialTypeBoundaries:
+    """Boundary values for numeric parameters."""
+
+    @pytest.mark.asyncio
+    async def test_depth_zero_returns_seed_symbol_chunks_only(self) -> None:
+        """depth=0 means no walk — resolve seed FQNs but don't traverse edges.
+
+        If seed FQN's chunk differs from the seed chunk, it appears in results.
+        If it matches, it's deduped away.
+        """
+        provider = _make_mock_provider([
+            # overlap: seed maps to func_a
+            [{"fqn": "mod::func_a", "file_id": 1}],
+            # walk at depth=0: CTE base case returns seed FQN only (no recursion)
+            [{"fqn": "mod::func_a"}],
+            # resolution: func_a maps to a chunk that IS the seed → deduped
+            [{"file_path": "main.py", "content": "...", "start_line": 1, "end_line": 10}],
+        ])
+
+        expander = GraphWalkExpander(provider)
+        result = await expander.expand(
+            [{"file_path": "main.py", "start_line": 1, "end_line": 10}],
+            depth=0,
+        )
+
+        assert result == []
+
+
+class TestAdversarialStateTransitions:
+    """Verify no side effects between calls."""
+
+    @pytest.mark.asyncio
+    async def test_second_run_produces_identical_results(self) -> None:
+        """Calling expand() twice on same instance produces same results."""
+        results_batch = [
+            [{"fqn": "mod::func_a", "file_id": 1}],
+            [{"fqn": "mod::func_b"}],
+            [{"file_path": "other.py", "content": "...", "start_line": 1, "end_line": 5}],
+        ]
+
+        provider = _make_mock_provider(results_batch + results_batch)
+
+        expander = GraphWalkExpander(provider)
+        seeds = [{"file_path": "main.py", "start_line": 1, "end_line": 10}]
+
+        result1 = await expander.expand(seeds)
+        result2 = await expander.expand(seeds)
+
+        assert result1 == result2
+        assert provider.execute_query.call_count == 6  # 3 calls × 2 runs
