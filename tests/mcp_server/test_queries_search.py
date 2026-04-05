@@ -248,6 +248,23 @@ class TestBuildStructuralWalkQuery:
         assert _count_placeholders(sql) == 3
         assert params == ["mod::A", 2, 20]
 
+    def test_edge_kind_adds_filter_clause(self) -> None:
+        """edge_kind parameter adds edge_kind filter and increases placeholder count."""
+        sql_without, params_without = build_structural_walk_query(
+            seed_fqns=["mod::A"], depth=2, limit=20
+        )
+        sql_with, params_with = build_structural_walk_query(
+            seed_fqns=["mod::A"], depth=2, limit=20, edge_kind="calls"
+        )
+        # Filter clause present in SQL
+        assert "edge_kind" in sql_with
+        # "calls" value in params
+        assert "calls" in params_with
+        # One additional placeholder vs without edge_kind
+        assert _count_placeholders(sql_with) == _count_placeholders(sql_without) + 1
+        # Params: seed_fqn, depth, edge_kind, limit
+        assert params_with == ["mod::A", 2, "calls", 20]
+
     def test_empty_seeds_raises(self) -> None:
         """Empty seed list must not generate invalid SQL."""
         with pytest.raises(ValueError):

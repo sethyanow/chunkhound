@@ -1,17 +1,16 @@
 """Search MCP tool — unified search dispatching to regex, semantic, symbols, structural.
 
 Each search type: validate params → delegate to service or build SQL → execute → format.
-Structural search composes a multi-stage pipeline: semantic → symbol overlap → graph walk → chunk resolution → dedup → paginate.
+Structural search: semantic seed → GraphWalkExpander (overlap → walk → resolution → dedup) → type_filter → paginate.
 """
 
 from pathlib import Path
 from typing import Any, Literal, cast
 
+from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
+
 from .queries.search import (
-    build_chunk_resolution_query,
-    build_structural_walk_query,
     build_symbol_count_query,
-    build_symbol_overlap_query,
     build_symbol_search_query,
     build_type_filter_query,
 )
@@ -267,12 +266,9 @@ async def _search_structural(
 ) -> SearchResponse:
     """Structural search: semantic search + graph walk expansion.
 
-    8-stage pipeline:
+    Pipeline:
     1. Semantic search (broader seed pool)
-    2. Symbol lookup (FQNs overlapping semantic results)
-    3. Multi-seed graph walk (bidirectional, depth 2)
-    4. Chunk resolution (walked symbols → chunks)
-    5. Deduplicate (semantic results take priority)
+    2-5. GraphWalkExpander (overlap → walk → resolution → dedup)
     6. Combine (semantic first, then graph-discovered)
     7. Apply type_filter if present
     8. Paginate combined pool
@@ -307,74 +303,13 @@ async def _search_structural(
         response = cast(SearchResponse, {"results": [], "pagination": pagination})
         return limit_response_size(response)
 
-    # Stage 2: Symbol lookup — find symbols overlapping semantic results
-    overlap_sql, overlap_params = build_symbol_overlap_query(results)
-    seed_symbols = services.provider.execute_query(overlap_sql, overlap_params)
-    seed_fqns = [s["fqn"] for s in seed_symbols]
-
-    if not seed_fqns:
-        # No symbols found — return semantic results unchanged
-        native_results = _convert_paths_to_native(results[:page_size])
-        total = len(results)
-        response = cast(
-            SearchResponse,
-            {
-                "results": native_results,
-                "pagination": {
-                    "offset": offset,
-                    "page_size": page_size,
-                    "has_more": total > page_size,
-                    "total": total,
-                    "next_offset": offset + page_size if total > page_size else None,
-                },
-            },
-        )
-        return limit_response_size(response)
-
-    # Stage 3: Multi-seed graph walk — depth 2, bidirectional
-    walk_limit = page_size * 3
-    walk_sql, walk_params = build_structural_walk_query(
-        seed_fqns=seed_fqns,
-        depth=2,
-        limit=walk_limit,
-    )
-    walked = services.provider.execute_query(walk_sql, walk_params)
-    walked_fqns = [w["fqn"] for w in walked]
-
-    if not walked_fqns:
-        # Graph walk found nothing — return semantic results only
-        native_results = _convert_paths_to_native(results[:page_size])
-        total = len(results)
-        response = cast(
-            SearchResponse,
-            {
-                "results": native_results,
-                "pagination": {
-                    "offset": offset,
-                    "page_size": page_size,
-                    "has_more": total > page_size,
-                    "total": total,
-                    "next_offset": offset + page_size if total > page_size else None,
-                },
-            },
-        )
-        return limit_response_size(response)
-
-    # Stage 4: Chunk resolution — walked symbols → chunks
-    chunk_sql, chunk_params = build_chunk_resolution_query(fqns=walked_fqns)
-    graph_chunks = services.provider.execute_query(chunk_sql, chunk_params)
-
-    # Stage 5: Deduplicate — semantic results take priority
-    seen = {(r["file_path"], r["start_line"], r["end_line"]) for r in results}
-    unique_graph_chunks = []
-    for gc in graph_chunks:
-        key = (gc["file_path"], gc["start_line"], gc["end_line"])
-        if key not in seen:
-            seen.add(key)
-            unique_graph_chunks.append(gc)
+    # Stages 2-5: Graph expansion via GraphWalkExpander
+    # Overlap → walk → chunk resolution → dedup handled internally
+    expander = GraphWalkExpander(services.provider)
+    graph_chunks = await expander.expand(results, depth=2)
 
     # Stage 6: Combine — semantic first, then graph-discovered
-    combined = results + unique_graph_chunks
+    combined = results + graph_chunks
 
     # Stage 7: Apply type_filter if present
     if type_filter and combined:

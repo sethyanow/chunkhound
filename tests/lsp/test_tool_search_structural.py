@@ -547,3 +547,104 @@ class TestStructuralAdversarial:
         assert result["pagination"]["has_more"] is True
         assert result["pagination"]["total"] == 3
         assert result["pagination"]["next_offset"] == 1
+
+    @pytest.mark.asyncio
+    async def test_dense_graph_chunks_paginated_correctly(self) -> None:
+        """Many graph-discovered chunks correctly paginated with page_size=2."""
+        semantic_chunks = [
+            {"file_path": "src/seed.py", "content": "seed", "start_line": 1, "end_line": 3},
+        ]
+        symbol_rows = [{"fqn": "mod::seed", "file_id": 1}]
+        walk_rows = [{"fqn": f"mod::n{i}"} for i in range(5)]
+        chunk_rows = [
+            {"file_path": f"src/n{i}.py", "content": f"n{i}", "start_line": 1, "end_line": 3}
+            for i in range(5)
+        ]
+
+        services = make_mock_services([symbol_rows, walk_rows, chunk_rows])
+        services.search_service = MagicMock()
+        services.search_service.search_semantic = AsyncMock(
+            return_value=_make_semantic_results(semantic_chunks),
+        )
+
+        em = _make_embedding_manager()
+        result = await call_search_tool(
+            services=services,
+            embedding_manager=em,
+            type="structural",
+            query="dense",
+            page_size=2,
+        )
+
+        # 1 semantic + 5 graph = 6 total, page_size=2 → first 2 returned
+        assert len(result["results"]) == 2
+        assert result["pagination"]["total"] == 6
+        assert result["pagination"]["has_more"] is True
+        assert result["pagination"]["next_offset"] == 2
+
+    @pytest.mark.asyncio
+    async def test_unicode_file_paths_dedup_correctly(self) -> None:
+        """Unicode file paths dedup correctly between semantic and graph results."""
+        semantic_chunks = [
+            {"file_path": "src/données.py", "content": "data", "start_line": 1, "end_line": 5},
+        ]
+        symbol_rows = [{"fqn": "mod::données", "file_id": 1}]
+        walk_rows = [{"fqn": "mod::données"}, {"fqn": "mod::処理"}]
+        chunk_rows = [
+            # Same unicode path as semantic — should be deduped
+            {"file_path": "src/données.py", "content": "data", "start_line": 1, "end_line": 5},
+            # Different unicode path — should survive
+            {"file_path": "src/処理.py", "content": "process", "start_line": 1, "end_line": 3},
+        ]
+
+        services = make_mock_services([symbol_rows, walk_rows, chunk_rows])
+        services.search_service = MagicMock()
+        services.search_service.search_semantic = AsyncMock(
+            return_value=_make_semantic_results(semantic_chunks),
+        )
+
+        em = _make_embedding_manager()
+        result = await call_search_tool(
+            services=services,
+            embedding_manager=em,
+            type="structural",
+            query="unicode",
+        )
+
+        assert len(result["results"]) == 2
+        paths = [r["file_path"] for r in result["results"]]
+        assert "src/données.py" in paths
+        assert "src/処理.py" in paths
+
+    @pytest.mark.asyncio
+    async def test_offset_beyond_combined_pool(self) -> None:
+        """Offset exceeding total combined results returns empty with correct pagination."""
+        semantic_chunks = [
+            {"file_path": "src/a.py", "content": "a", "start_line": 1, "end_line": 2},
+        ]
+        symbol_rows = [{"fqn": "mod::a", "file_id": 1}]
+        walk_rows = [{"fqn": "mod::a"}]
+        chunk_rows = [
+            {"file_path": "src/a.py", "content": "a", "start_line": 1, "end_line": 2},
+        ]
+
+        services = make_mock_services([symbol_rows, walk_rows, chunk_rows])
+        services.search_service = MagicMock()
+        services.search_service.search_semantic = AsyncMock(
+            return_value=_make_semantic_results(semantic_chunks),
+        )
+
+        em = _make_embedding_manager()
+        result = await call_search_tool(
+            services=services,
+            embedding_manager=em,
+            type="structural",
+            query="offset",
+            offset=100,
+        )
+
+        # 1 total, offset=100 → empty page
+        assert len(result["results"]) == 0
+        assert result["pagination"]["total"] == 1
+        assert result["pagination"]["has_more"] is False
+        assert result["pagination"]["next_offset"] is None

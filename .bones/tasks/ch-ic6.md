@@ -1,11 +1,13 @@
 ---
 id: ch-ic6
 title: Wire GraphWalkExpander into _search_structural
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-z2o
 ---
+
 
 **Blocked by:** ch-ron (GraphWalkExpander must exist)
 **Unlocks:** code_research prompt template tasks; Phase 5 acceptance task once all R7 criteria met
