@@ -6,6 +6,7 @@ type: bug
 priority: 0
 ---
 
+
 ## Context
 
 Daemon restart on 2026-04-05 triggered a FATAL DuckDB corruption that wiped the index. Investigation revealed the root cause is architectural: DuckDB's single-connection model doesn't match a daemon serving concurrent async operations.
@@ -128,3 +129,21 @@ Scope TBD based on research results. If viable, replaces Phase 2-4 with a fundam
 - NO transaction retry logic — the problem is interleaving, not transient failure
 - NO taking comments/docstrings as architectural truth — verify the process model
 - NO treating symptoms when the architecture is the root cause
+
+## Log
+
+- [2026-04-05T16:10:23Z] [Seth] Acceptance investigation findings (2026-04-05):
+
+1. CASCADE FIX (done): delete_file_completely now cleans up symbol_edges + symbols in FK order. Regression tests passing.
+
+2. ASYNC CONVERSION (done): 8 sync execute_query() calls in lsp_population.py converted to async. _resolve_symbol made async with test fixes.
+
+3. ARCHITECTURAL FINDING: The entire graph intelligence layer (Phases 1-5 of ch-8e7) bypasses the DatabaseProvider protocol. Symbols, symbol_edges, graph walks, fusion tools — all hardcoded to raw DuckDB SQL via execute_query(), sqlglot query builders generating DuckDB-dialect CTEs. LanceDB provider has no symbols/symbol_edges tables.
+
+4. CONSEQUENCE: 'provider: lancedb' config gives chunk search but zero graph features. The daemon+proxy+IPC architecture (400+ lines) exists because DuckDB was the default and graph layer cemented the dependency.
+
+5. PROVIDER STATE: LanceDB provider (2400+ lines) supports files, chunks, embeddings, vector search with native concurrent writes and persistent HNSW. DuckDB provider has the graph layer but single-writer limitation requiring the daemon.
+
+6. OPEN DECISION: Abstract the graph layer behind DatabaseProvider protocol (both backends work, LanceDB becomes viable for graph features, possibly eliminates daemon) vs commit to DuckDB-only and fix its connection model (read/write separation, atomic writes, circuit breaker).
+
+Queue routing changes (remove_file through file queue) implemented but held — correct regardless of direction, but scope depends on the abstraction decision.

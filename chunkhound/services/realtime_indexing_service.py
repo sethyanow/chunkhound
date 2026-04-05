@@ -297,8 +297,8 @@ class RealtimeIndexingService:
         # Optional LSP population service for background symbol extraction
         self._lsp_population = lsp_population
 
-        # Existing asyncio queue for priority processing
-        self.file_queue: asyncio.Queue[tuple[str, Path]] = asyncio.Queue()
+        # Priority queue ensures deletes run before embed/lsp follow-ups (ch-zn5)
+        self.file_queue: asyncio.PriorityQueue[tuple[str, Path]] = asyncio.PriorityQueue()
 
         # NEW: Async queue for events from watchdog (thread-safe via asyncio)
         self.event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -775,21 +775,16 @@ class RealtimeIndexingService:
                 await asyncio.sleep(0.1)  # Brief pause on error
 
     async def remove_file(self, file_path: Path) -> None:
-        """Remove file from database."""
-        try:
-            logger.debug(f"Removing file from database: {file_path}")
-            await self.services.provider.delete_file_completely_async(str(file_path))
-            self._debug(f"removed file from database: {file_path}")
-            normalized = normalize_file_path(file_path)
-            async with self._file_condition:
-                self._removed_files.add(normalized)
-                self._file_condition.notify_all()
-        except Exception as e:
-            logger.error(f"Error removing file {file_path}: {e}")
-            normalized = normalize_file_path(file_path)
-            async with self._file_condition:
-                self.failed_files.add(normalized)
-                self._file_condition.notify_all()
+        """Queue file for deletion via _process_loop.
+
+        CRITICAL: Do NOT call provider.delete_file_completely_async() here.
+        This method runs in _consume_events which is concurrent with
+        _process_loop. Direct DB writes race with open transactions,
+        causing FATAL DuckDB corruption (ch-zn5).
+        """
+        logger.debug(f"Queueing file for deletion: {file_path}")
+        self._debug(f"queueing delete: {file_path}")
+        await self.add_file(file_path, priority="delete")
 
     async def _add_directory_watch(self, dir_path: str) -> None:
         """Add a new directory to monitoring with recursive watching for real-time events."""
@@ -816,24 +811,30 @@ class RealtimeIndexingService:
                 logger.debug(f"Removed watch for deleted directory: {dir_path}")
 
     async def _cleanup_deleted_directory(self, dir_path: str) -> None:
-        """Clean up database entries for files in a deleted directory."""
+        """Queue deletion of all files in a deleted directory.
+
+        CRITICAL: Do NOT call provider.delete_file_completely_async() here.
+        This method runs in _consume_events which is concurrent with
+        _process_loop. Direct DB writes race with open transactions,
+        causing FATAL DuckDB corruption (ch-zn5).
+        """
         try:
             # Get all files that were in this directory from database
-            # Use the provider's search capability to find files with this path prefix
+            # search_regex_async is read-only — safe to call from event consumer
             search_results, _ = await self.services.provider.search_regex_async(
                 pattern=f"^{dir_path}/.*",
                 page_size=1000,  # Large page to get all matches
             )
 
-            # Delete each file found in the directory
+            # Queue each file for deletion via _process_loop
             for result in search_results:
                 file_path = result.get("file_path", result.get("path", ""))
                 if file_path:
-                    logger.debug(f"Cleaning up deleted file: {file_path}")
-                    await self.services.provider.delete_file_completely_async(file_path)
+                    logger.debug(f"Queueing cleanup for deleted file: {file_path}")
+                    await self.add_file(Path(file_path), priority="delete")
 
             logger.info(
-                f"Cleaned up {len(search_results)} files from deleted directory: {dir_path}"
+                f"Queued {len(search_results)} files for cleanup from deleted directory: {dir_path}"
             )
 
         except Exception as e:
@@ -878,6 +879,26 @@ class RealtimeIndexingService:
                 # Remove from pending set
                 self.pending_files.discard(file_path)
 
+                # Delete pass: remove file from database (routed here from
+                # remove_file/_cleanup_deleted_directory to avoid concurrent
+                # DB writes from _consume_events — ch-zn5).
+                if priority == "delete":
+                    try:
+                        await self.services.provider.delete_file_completely_async(
+                            str(file_path)
+                        )
+                        self._debug(f"deleted file from database: {file_path}")
+                        normalized = normalize_file_path(file_path)
+                        async with self._file_condition:
+                            self._removed_files.add(normalized)
+                            self._file_condition.notify_all()
+                    except Exception as e:
+                        logger.error(f"Error deleting file {file_path}: {e}")
+                        async with self._file_condition:
+                            self.failed_files.add(normalize_file_path(file_path))
+                            self._file_condition.notify_all()
+                    continue
+
                 # Check if file still exists (prevent race condition with deletion)
                 if not file_path.exists():
                     logger.debug(f"Skipping {file_path} - file no longer exists")
@@ -908,7 +929,7 @@ class RealtimeIndexingService:
                             # Look up file_id and language from the DB
                             from chunkhound.core.types.common import Language
 
-                            rows = self.services.provider.execute_query(
+                            rows = await self.services.provider.execute_query_async(
                                 "SELECT id FROM files WHERE path = ?",
                                 [str(file_path.relative_to(self.watch_path))]
                                 if self.watch_path
