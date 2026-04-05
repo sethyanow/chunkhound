@@ -1,12 +1,13 @@
 ---
 id: ch-ic6
 title: Wire GraphWalkExpander into _search_structural
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-z2o
 ---
+
 
 
 **Blocked by:** ch-ron (GraphWalkExpander must exist)
@@ -78,12 +79,12 @@ File: `chunkhound/mcp_server/tools/search.py`
 `uv run pytest -m "unit or integration or e2e" tests/ -v > /tmp/test_suite_ch_ic6.out 2>&1`
 
 ## Success Criteria
-- [ ] `_search_structural` uses `GraphWalkExpander` instead of inline SQL stages
-- [ ] `build_structural_walk_query` edge_kind extension has unit test in `test_queries_search.py`
-- [ ] Graph expansion empty → semantic results pass through unchanged
-- [ ] Semantic search empty → result is empty, no error
-- [ ] `search(type="structural")` returns graph-expanded chunks alongside semantic
-- [ ] Full test suite passes
+- [x] `_search_structural` uses `GraphWalkExpander` instead of inline SQL stages
+- [x] `build_structural_walk_query` edge_kind extension has unit test in `test_queries_search.py`
+- [x] Graph expansion empty → semantic results pass through unchanged
+- [x] Semantic search empty → result is empty, no error
+- [x] `search(type="structural")` returns graph-expanded chunks alongside semantic
+- [x] Full test suite passes (2892 passed, 0 failed)
 
 ## Anti-Patterns
 - NO removing query builders from `queries/search.py` — keep them and their tests as documented SQL patterns
