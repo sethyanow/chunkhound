@@ -329,3 +329,4 @@
 {"timestamp":"2026-04-05T01:32:30.046972+00:00","actor":"Seth","event_type":"created","task_id":"ch-ron","details":{}}
 {"timestamp":"2026-04-05T01:32:38.842451+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-z2o","details":{"kind":"parent-child","to":"ch-ron"}}
 {"timestamp":"2026-04-05T01:32:38.842883+00:00","actor":"Seth","event_type":"dep_added","task_id":"ch-z2o","details":{"kind":"blocks","to":"ch-ron"}}
+{"timestamp":"2026-04-05T01:59:43.503365+00:00","actor":"Seth","event_type":"claimed","task_id":"ch-ron","details":{"actor":"Seth"}}

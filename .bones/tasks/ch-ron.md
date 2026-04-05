@@ -1,11 +1,13 @@
 ---
 id: ch-ron
 title: 'GraphWalkExpander: chunk-to-symbol-to-chunk graph expansion'
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth
 parent: ch-z2o
 ---
+
 
 **Blocked by:** None (first task in Phase 5; Phase 4 ch-dar is closed)
 **Unlocks:** UnifiedSearch integration task (wiring expander into the pipeline), code_research prompt templates
@@ -17,22 +19,25 @@ Phase 5 (ch-z2o) adds graph-based expansion to the search pipeline. This first t
 The component is independent of the existing `MultiHopStrategy` (which walks embedding-space neighbors via `find_similar_chunks`). Both produce chunks; a later task merges and dedupes them.
 
 Key existing infrastructure:
-- `build_walk_query()` at `chunkhound/mcp_server/tools/queries/graph.py:18` — recursive CTE walking `symbol_edges` from a seed FQN
-- `_map_lines_to_symbols()` at `chunkhound/mcp_server/tools/fusion.py:82` — resolves file+lines to symbols via range overlap (symbols table)
-- `get_chunks_in_range()` on `DatabaseProvider` — returns chunks overlapping a line range in a file
-- `execute_query()` on `DatabaseProvider` — raw SQL for custom queries
-- Chunks have `file_id`, `start_line`, `end_line`; symbols have `file_path`, `range_start`, `range_end`, `fqn`
+- `build_structural_walk_query()` at `chunkhound/mcp_server/tools/queries/search.py:119` — multi-seed recursive CTE walking `symbol_edges` bidirectionally. Extend with optional `edge_kind` parameter.
+- `build_symbol_overlap_query()` at `chunkhound/mcp_server/tools/queries/search.py:94` — resolves chunks to symbol FQNs via `file_path` + range overlap
+- `build_chunk_resolution_query()` at `chunkhound/mcp_server/tools/queries/search.py:168` — resolves FQNs back to chunks via `file_id` + range overlap JOIN
+- `_search_structural()` at `chunkhound/mcp_server/tools/search.py:258` — inline implementation of this exact pipeline in the MCP tool layer. This task extracts the logic into a reusable service component.
+- `execute_query()` on `DatabaseProvider` (`chunkhound/interfaces/database_provider.py:371`) — returns `list[dict[str, Any]]`
+- `get_chunks_in_range()` on `DatabaseProvider` — takes `(file_id: int, start_line: int, end_line: int)`, NOT `file_path`
+- Chunks schema: `id` (NOT `chunk_id`), `file_id`, `start_line`, `end_line`, `code`, etc.
+- Symbols schema: `fqn`, `file_path`, `file_id`, `range_start`, `range_end`, etc.
 
 ## Design
 
 **Algorithm:**
-1. Receive seed chunks (list of dicts with file_path, start_line, end_line, chunk_id)
-2. Resolve chunks → symbols: for each chunk, query `symbols` table where `file_path` matches and ranges overlap
+1. Receive seed chunks (list of dicts with `file_path`, `start_line`, `end_line`)
+2. Resolve chunks → symbols: use `build_symbol_overlap_query()` pattern — query `symbols` where `file_path` matches and ranges overlap
 3. Collect unique FQNs from resolved symbols
-4. For each seed FQN, walk `symbol_edges` via recursive CTE (reuse `build_walk_query` pattern) up to `depth` hops, optionally filtered by `edge_kind`
-5. Resolve discovered symbols → chunks: for each discovered symbol, use `get_chunks_in_range` (or equivalent SQL) to find overlapping chunks
-6. Deduplicate discovered chunks against seed chunk_ids
-7. Return discovered chunks
+4. Walk `symbol_edges` via `build_structural_walk_query()` (extended with `edge_kind`) — single multi-seed CTE, up to `depth` hops
+5. Resolve discovered symbols → chunks: use `build_chunk_resolution_query()` pattern — SQL JOIN through `symbols.file_id` → `files.id` → `chunks.file_id` with range overlap
+6. Deduplicate discovered chunks against seed set using `(file_path, start_line, end_line)` tuple keys (matches existing `_search_structural` dedup pattern)
+7. Return discovered chunks (format: `file_path`, `content`, `start_line`, `end_line`)
 
 **Location:** `chunkhound/services/search/graph_walk_expander.py` — new file alongside `multi_hop_strategy.py`
 
@@ -87,7 +92,14 @@ Test that passing `edge_kind="calls"` restricts the walk to only `calls` edges. 
 Test that `depth=1` returns only direct neighbors, not 2-hop neighbors. Assert: 2-hop symbols absent from results.
 
 ### Step 8: Implement GraphWalkExpander
-Create `chunkhound/services/search/graph_walk_expander.py`. Implement the class following the design above. Use `execute_query` for chunk→symbol and symbol→chunk resolution queries. Reuse `build_walk_query` from `chunkhound/mcp_server/tools/queries/graph.py` for the graph walk CTE. Run tests after each method implementation.
+Create `chunkhound/services/search/graph_walk_expander.py`. Implement the class following the design above:
+- Import `DatabaseProvider` from `chunkhound/interfaces/database_provider.py`
+- For chunk→symbol: use `build_symbol_overlap_query` from `queries/search.py` (or inline equivalent SQL)
+- For graph walk: extend `build_structural_walk_query` in `queries/search.py` to accept optional `edge_kind: str | None = None` parameter, then call it
+- For symbol→chunk: use `build_chunk_resolution_query` from `queries/search.py` (or inline equivalent SQL)
+- For dedup: use `(file_path, start_line, end_line)` tuple keys matching `_search_structural` pattern
+- All queries via `self._db.execute_query(sql, params)`
+Run tests after each method implementation.
 
 ### Step 9: Export from search module
 Add `GraphWalkExpander` to `chunkhound/services/search/__init__.py` exports.
@@ -100,15 +112,26 @@ Add `GraphWalkExpander` to `chunkhound/services/search/__init__.py` exports.
 - [ ] Chunk → symbol resolution via range overlap works (file_path + line range intersection)
 - [ ] Symbol graph walk uses recursive CTE on `symbol_edges`, configurable depth (default 2)
 - [ ] Discovered symbols resolved back to chunks via range overlap
-- [ ] Results deduped against seed chunk_ids
+- [ ] Results deduped against seed set using `(file_path, start_line, end_line)` tuple keys
 - [ ] `edge_kind` parameter filters the walk to specific edge types
 - [ ] Empty `symbols`/`symbol_edges` tables → returns `[]` gracefully
 - [ ] Exported from `chunkhound/services/search/__init__.py`
 - [ ] `uv run pytest tests/test_graph_expander.py -v` → all pass
 - [ ] Full test suite passes
 
+## Key Considerations
+- `build_structural_walk_query` currently lacks `edge_kind` — extend it (adding optional parameter, conditionally adding `AND e.edge_kind = ?` clause)
+- Seed chunks from semantic search have `file_path`, `start_line`, `end_line`, `content` — no `chunk_id` or `id` field
+- `get_chunks_in_range` takes `file_id: int`, not `file_path` — prefer SQL JOINs via `build_chunk_resolution_query` pattern
+- depth=0 should return empty (seeds are deduped away since walk only discovers seed symbols)
+- A chunk may span multiple symbols — range overlap query returns all of them (correct behavior)
+- Walk result set should be bounded by `limit` parameter in the CTE (existing pattern caps at `page_size * 3`)
+- Empty seed_chunks input → return `[]` immediately (no query needed)
+
 ## Anti-Patterns
 - NO embedding calls or LLM calls — this is pure DuckDB graph traversal
 - NO reranking in the expander — that's the caller's job (UnifiedSearch integration task)
 - NO modifying MultiHopStrategy or SingleHopStrategy
-- NO importing from `mcp_server.tools.fusion` — if reusing query patterns from `queries/graph.py`, import from there or inline the SQL
+- NO importing from `mcp_server.tools.fusion` — reuse query builders from `queries/search.py` or inline SQL
+- NO using `chunk_id` for dedup — use `(file_path, start_line, end_line)` tuple keys
+- NO per-seed walk queries — use single multi-seed CTE via `build_structural_walk_query`

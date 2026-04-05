@@ -120,13 +120,21 @@ def build_structural_walk_query(
     seed_fqns: list[str],
     depth: int,
     limit: int,
+    edge_kind: str | None = None,
 ) -> tuple[str, list[Any]]:
     """Recursive CTE: find all reachable nodes from seed FQNs, bidirectional.
 
     Uses bidirectional_edges() for both forward and reverse edge traversal.
     Uses visited_tracking_columns() for cycle detection.
 
-    Returns (sql, params) where params are [*seed_fqns, depth, limit].
+    Args:
+        seed_fqns: Starting symbol FQNs for the walk.
+        depth: Maximum walk depth (hops).
+        limit: Maximum result count.
+        edge_kind: Optional edge kind filter (e.g. "calls"). When set,
+            only edges with matching edge_kind are traversed.
+
+    Returns (sql, params) where params are [*seed_fqns, depth, edge_kind?, limit].
     """
     if not seed_fqns:
         raise ValueError("seed_fqns must not be empty")
@@ -135,7 +143,15 @@ def build_structural_walk_query(
     append_expr, contains_expr = visited_tracking_columns("s2", "fqn")
 
     fqn_placeholders = ", ".join(["?"] * len(seed_fqns))
-    params: list[Any] = list(seed_fqns) + [depth, limit]
+    params: list[Any] = list(seed_fqns) + [depth]
+
+    # Optional edge kind filter
+    edge_filter_sql = ""
+    if edge_kind:
+        edge_filter_sql = "AND e.edge_kind = ?"
+        params.append(edge_kind)
+
+    params.append(limit)
 
     bidir_sql = bidir.sql(dialect="duckdb")
     append_sql = append_expr.sql(dialect="duckdb")
@@ -156,6 +172,7 @@ def build_structural_walk_query(
             JOIN symbols s2 ON s2.fqn = e.dst
             WHERE r.depth < ?
               AND NOT {contains_sql}
+              {edge_filter_sql}
         )
         SELECT DISTINCT fqn FROM reachable
         ORDER BY fqn
