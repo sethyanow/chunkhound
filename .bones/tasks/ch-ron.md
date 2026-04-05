@@ -10,6 +10,7 @@ parent: ch-z2o
 
 
 
+
 **Blocked by:** None (first task in Phase 5; Phase 4 ch-dar is closed)
 **Unlocks:** UnifiedSearch integration task (wiring expander into the pipeline), code_research prompt templates
 
@@ -136,3 +137,7 @@ Add `GraphWalkExpander` to `chunkhound/services/search/__init__.py` exports.
 - NO importing from `mcp_server.tools.fusion` — reuse query builders from `queries/search.py` or inline SQL
 - NO using `chunk_id` for dedup — use `(file_path, start_line, end_line)` tuple keys
 - NO per-seed walk queries — use single multi-seed CTE via `build_structural_walk_query`
+
+## Log
+
+- [2026-04-05T02:22:06Z] [Seth] Debrief: Circular import (services → mcp_server) forced SQL inlining in expander — documented in memory. Dedup uses (file_path, start_line, end_line) tuples matching _search_structural. Walk limit = len(seeds) * 30. Reflections: SRE caught wrong query builder reference (build_walk_query vs build_structural_walk_query) and chunk_id/id naming. Skeleton didn't anticipate circular import. User confirmed extend-multi-seed approach. Memory: saved circular import reference. Scoped next task ch-ic6 via writing-plans.
