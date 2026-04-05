@@ -1,10 +1,11 @@
 ---
 id: ch-zn5
 title: DuckDB connection architecture overhaul
-status: open
+status: closed
 type: bug
 priority: 0
 ---
+
 
 
 ## Context
