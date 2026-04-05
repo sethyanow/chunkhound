@@ -1,12 +1,13 @@
 ---
 id: ch-ron
 title: 'GraphWalkExpander: chunk-to-symbol-to-chunk graph expansion'
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth
 parent: ch-z2o
 ---
+
 
 
 **Blocked by:** None (first task in Phase 5; Phase 4 ch-dar is closed)
