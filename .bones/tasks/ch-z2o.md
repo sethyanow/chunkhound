@@ -4,9 +4,12 @@ title: 'Phase 5: Search Pipeline + code_research'
 status: open
 type: epic
 priority: 1
-depends_on: [ch-dar, ch-ron, ch-ic6]
+depends_on: [ch-dar, ch-ron, ch-ic6, ch-8mu]
 parent: ch-8e7
 ---
+
+
+
 
 
 
@@ -60,3 +63,7 @@ Inherited from parent epic, plus:
 - Run code_research on a structural question → verify graph-expanded chunks appear in results
 - Compare search results with and without graph expansion → demonstrate additional relevant chunks found
 - Verify prompt template is selected for a type-chain question (visible in research logs)
+
+## Log
+
+- [2026-04-05T02:58:06Z] [Seth] ch-ic6 closed. MCP search(type=structural) now uses GraphWalkExpander. Next: ch-8mu wires expander into UnifiedSearch (code_research pipeline). Critical gap found: graph chunks lack chunk_id needed for step 6 dedup — ch-8mu adds c.id AS chunk_id to resolution query.

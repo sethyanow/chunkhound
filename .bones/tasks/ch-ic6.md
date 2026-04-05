@@ -10,6 +10,7 @@ parent: ch-z2o
 
 
 
+
 **Blocked by:** ch-ron (GraphWalkExpander must exist)
 **Unlocks:** code_research prompt template tasks; Phase 5 acceptance task once all R7 criteria met
 
@@ -91,3 +92,7 @@ File: `chunkhound/mcp_server/tools/search.py`
 - NO modifying GraphWalkExpander — it was delivered in ch-ron and is tested
 - NO adding reranking to the combined results — that's out of scope for this task
 - NO breaking the existing `search(type="regex")` or `search(type="semantic")` paths
+
+## Log
+
+- [2026-04-05T02:58:06Z] [Seth] Debrief: clean wiring refactoring. Replaced ~60 lines of inline SQL with 3-line GraphWalkExpander call. All 11 existing structural search tests passed without modification — mock path identical. Added 1 edge_kind coverage test + 3 adversarial tests (dense pagination, unicode dedup, offset boundary). 2892/2892 full suite. Reflections: skeleton Steps 2-4 were redundant (tests/lsp/test_tool_search_structural.py already covered). UnifiedSearch integration (criterion 1) needs separate task — scoped as ch-8mu.
