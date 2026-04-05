@@ -119,6 +119,17 @@ class TestSymbolToChunkResolution:
         assert chunk["end_line"] == 12
 
 
+    def test_resolution_query_selects_chunk_id(self) -> None:
+        """_build_resolution_query SELECT includes c.id AS chunk_id."""
+        from chunkhound.services.search.graph_walk_expander import (
+            _build_resolution_query,
+        )
+
+        sql, params = _build_resolution_query(["mod::func_a"])
+        assert "c.id AS chunk_id" in sql
+        assert params == ["mod::func_a"]
+
+
 class TestDeduplication:
     """expand() deduplicates discovered chunks against seed set."""
 

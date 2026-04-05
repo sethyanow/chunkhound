@@ -29,7 +29,7 @@ Scoped to parent epic R7, R8:
 - R8: code_research graph-aware prompt templates
 
 ## Success Criteria
-- [ ] GraphWalkExpander integrated into UnifiedSearch alongside existing semantic MultiHopStrategy
+- [x] GraphWalkExpander integrated into UnifiedSearch alongside existing semantic MultiHopStrategy
 - [x] Expander takes seed chunks from initial semantic search → resolves to symbols via range overlap → walks symbol_edges 1-2 hops → returns additional chunks
 - [x] Semantic expander and graph expander are independent — either can return empty without breaking the other
 - [x] Both expanders' results merged and deduped on chunk_id before feeding into existing reranker

@@ -86,8 +86,8 @@ def _build_resolution_query(
     """Resolve symbol FQNs to chunks via file_id + range overlap."""
     placeholders = ", ".join(["?"] * len(fqns))
     sql = f"""
-        SELECT DISTINCT f.path AS file_path, c.code AS content,
-               c.start_line, c.end_line
+        SELECT DISTINCT c.id AS chunk_id, f.path AS file_path,
+               c.code AS content, c.start_line, c.end_line
         FROM chunks c
         JOIN files f ON c.file_id = f.id
         JOIN symbols s ON s.file_id = f.id

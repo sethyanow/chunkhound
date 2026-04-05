@@ -29,6 +29,7 @@ from chunkhound.services.research.shared.models import (
     REGEX_MIN_RESULTS,
     ResearchContext,
 )
+from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
 from chunkhound.utils.metadata import extract_parameter_names, extract_parameter_types
 
 
@@ -238,6 +239,29 @@ class UnifiedSearch:
                 depth=depth,
                 chunks=len(semantic_results),
             )
+
+        # Step 2.5: Graph walk expansion (graceful degradation)
+        if semantic_results:
+            try:
+                expander = GraphWalkExpander(self._db_services.provider)
+                graph_chunks = await expander.expand(semantic_results, depth=2)
+                if graph_chunks:
+                    logger.debug(
+                        f"Step 2.5: Graph expansion added {len(graph_chunks)} chunks"
+                    )
+                    semantic_results = graph_chunks + semantic_results
+                    await emit_event(
+                        "graph_expansion",
+                        f"Graph expansion added {len(graph_chunks)} chunks",
+                        node_id=node_id,
+                        depth=depth,
+                        chunks=len(graph_chunks),
+                    )
+            except Exception as e:
+                logger.warning(
+                    f"Step 2.5: Graph expansion failed, continuing with "
+                    f"semantic-only results: {e}"
+                )
 
         # Steps 3-5: Symbol extraction, reranking, and regex search
         regex_results = []
