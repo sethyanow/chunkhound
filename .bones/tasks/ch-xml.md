@@ -10,6 +10,7 @@ parent: ch-z2o
 
 
 
+
 **Blocked by:** ch-8mu (GraphWalkExpander wired into UnifiedSearch — graph data now flows through code_research pipeline)
 **Unlocks:** Phase 5 acceptance (sub-epic criteria 7, 8); parent epic criterion "Prompt templates used by code_research BFS for structural sub-questions"
 
@@ -114,3 +115,7 @@ File: `chunkhound/services/research/v1/question_generator.py`
 - Template text should reference ChunkHound's graph capabilities by name (e.g., "the symbol dependency graph can trace callers/callees") so the LLM knows what structural data is available.
 - The existing `question_filtering` step in QuestionGenerator (line 248) filters questions by relevance to root query — structural augmentation shouldn't conflict with this filter.
 - Augmentation text competes with code context for the `max_input_tokens` budget. If all 5 patterns match, total augmentation must stay small enough not to crowd out code context. Keep each augmentation concise (a few lines, not paragraphs).
+
+## Log
+
+- [2026-04-05T12:46:12Z] [Seth] Debrief: All 7 success criteria met. 44 new tests (32 pattern matching, 5 augmentation integration, 8 adversarial). Full suite 2936 passed. SRE caught 6 wrong paths in skeleton (services/research/prompts → services/prompts). Reflections: speculated about path mismatch cause without git history — corrected by user. Import_dependency regex needed .+? instead of \S+ for multi-word subjects (caught by test). Phase 5 ready for acceptance.
