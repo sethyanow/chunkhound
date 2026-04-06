@@ -13,6 +13,7 @@ import pyarrow as pa
 from loguru import logger
 
 from chunkhound.core.models import Chunk, Embedding, File
+from chunkhound.core.models.symbol import EdgeRow, SymbolRow
 from chunkhound.core.types.common import ChunkType, Language
 
 # Import existing components that will be used by the provider
@@ -77,6 +78,47 @@ def get_chunks_schema(embedding_dims: int | None = None) -> pa.Schema:
                 "metadata",
                 pa.string(),
             ),  # JSON-serialized chunk metadata (constants, etc.)
+        ]
+    )
+
+
+def get_symbols_schema() -> pa.Schema:
+    """Get PyArrow schema for symbols table."""
+    return pa.schema(
+        [
+            ("id", pa.int64()),
+            ("fqn", pa.string()),
+            ("name", pa.string()),
+            ("kind", pa.string()),
+            ("language", pa.string()),
+            ("file_id", pa.int64()),
+            ("file_path", pa.string()),
+            ("range_start", pa.int64()),
+            ("range_end", pa.int64()),
+            ("type_signature", pa.string()),
+            ("parent_fqn", pa.string()),
+            ("confidence", pa.float64()),
+            ("lsp_server", pa.string()),
+            ("created_at", pa.float64()),
+        ]
+    )
+
+
+def get_symbol_edges_schema() -> pa.Schema:
+    """Get PyArrow schema for symbol_edges table."""
+    return pa.schema(
+        [
+            ("id", pa.int64()),
+            ("from_symbol_id", pa.int64()),
+            ("from_fqn", pa.string()),
+            ("from_file", pa.string()),
+            ("to_symbol_id", pa.int64()),
+            ("to_fqn", pa.string()),
+            ("to_file", pa.string()),
+            ("edge_kind", pa.string()),
+            ("confidence", pa.float64()),
+            ("lsp_server", pa.string()),
+            ("created_at", pa.float64()),
         ]
     )
 
@@ -184,6 +226,8 @@ class LanceDBProvider(SerialDatabaseProvider):
         # Table references
         self._files_table = None
         self._chunks_table = None
+        self._symbols_table = None
+        self._symbol_edges_table = None
 
     def _build_path_like_clause(self, prefix: str) -> str:
         escaped = _escape_like_pattern(prefix)
@@ -385,6 +429,22 @@ class LanceDBProvider(SerialDatabaseProvider):
                 "chunks", schema=get_chunks_schema(embedding_dims)
             )
             logger.info("Created chunks table")
+
+        # Create symbols table if it doesn't exist
+        try:
+            self._symbols_table = conn.open_table("symbols")
+        except Exception:
+            self._symbols_table = conn.create_table("symbols", schema=get_symbols_schema())
+            logger.info("Created symbols table")
+
+        # Create symbol_edges table if it doesn't exist
+        try:
+            self._symbol_edges_table = conn.open_table("symbol_edges")
+        except Exception:
+            self._symbol_edges_table = conn.create_table(
+                "symbol_edges", schema=get_symbol_edges_schema()
+            )
+            logger.info("Created symbol_edges table")
 
     def create_indexes(self) -> None:
         """Create database indexes for performance optimization."""
@@ -2382,3 +2442,751 @@ class LanceDBProvider(SerialDatabaseProvider):
             "connected": self.is_connected,
             "index_type": self.index_type,
         }
+
+    # ── Symbol/Edge CRUD Protocol Methods ────────��────────────────
+
+    _SYMBOL_BATCH_SIZE = 500
+    _EDGE_BATCH_SIZE = 500
+
+    def _ensure_symbols_table(self, conn: Any, state: dict[str, Any]) -> None:
+        """Ensure symbols and symbol_edges tables exist."""
+        if self._symbols_table is None or self._symbol_edges_table is None:
+            self._executor_create_schema(conn, state)
+
+    def insert_symbols_batch(self, symbols: list[SymbolRow]) -> None:
+        """Batch insert symbol rows with internal chunking."""
+        if not symbols:
+            return
+        self._execute_in_db_thread_sync("insert_symbols_batch", symbols)
+
+    def _executor_insert_symbols_batch(
+        self, conn: Any, state: dict[str, Any], symbols: list[SymbolRow]
+    ) -> None:
+        if not symbols:
+            return
+        self._ensure_symbols_table(conn, state)
+
+        base_id = int(time.time() * 1_000_000)
+        for i in range(0, len(symbols), self._SYMBOL_BATCH_SIZE):
+            batch = symbols[i : i + self._SYMBOL_BATCH_SIZE]
+            rows = []
+            for j, s in enumerate(batch):
+                rows.append({
+                    "id": base_id + i + j,
+                    "fqn": s["fqn"],
+                    "name": s["name"],
+                    "kind": s["kind"],
+                    "language": s.get("language", ""),
+                    "file_id": s["file_id"],
+                    "file_path": s.get("file_path", ""),
+                    "range_start": s["range_start"],
+                    "range_end": s["range_end"],
+                    "type_signature": s.get("type_signature") or "",
+                    "parent_fqn": s.get("parent_fqn") or "",
+                    "confidence": s.get("confidence", 1.0),
+                    "lsp_server": s.get("lsp_server", ""),
+                    "created_at": time.time(),
+                })
+            arrow_table = pa.Table.from_pylist(rows, schema=get_symbols_schema())
+            self._symbols_table.add(arrow_table)
+        logger.debug(f"Inserted {len(symbols)} symbols into LanceDB")
+
+    def delete_symbols_by_file(self, file_id: int) -> None:
+        """Delete all symbols for a given file_id."""
+        self._execute_in_db_thread_sync("delete_symbols_by_file", file_id)
+
+    def _executor_delete_symbols_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> None:
+        self._ensure_symbols_table(conn, state)
+        try:
+            self._symbols_table.delete(f"file_id = {file_id}")
+        except Exception as e:
+            logger.error(f"Error deleting symbols for file {file_id}: {e}")
+
+    def delete_edges_by_file(self, file_id: int) -> None:
+        """Delete all edges referencing symbols belonging to this file."""
+        self._execute_in_db_thread_sync("delete_edges_by_file", file_id)
+
+    def _executor_delete_edges_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> None:
+        self._ensure_symbols_table(conn, state)
+        # Find all symbol IDs belonging to this file
+        results = (
+            self._symbols_table.search()
+            .where(f"file_id = {file_id}")
+            .select(["id"])
+            .to_list()
+        )
+        if not results:
+            return
+        sym_ids = {r["id"] for r in results}
+        # Delete edges where from or to symbol is in this file
+        for sid in sym_ids:
+            try:
+                self._symbol_edges_table.delete(f"from_symbol_id = {sid}")
+            except Exception:
+                pass
+            try:
+                self._symbol_edges_table.delete(f"to_symbol_id = {sid}")
+            except Exception:
+                pass
+
+    def query_symbols_by_file(self, file_id: int) -> list[dict[str, Any]]:
+        """Return all symbols for a given file_id."""
+        return self._execute_in_db_thread_sync("query_symbols_by_file", file_id)
+
+    def _executor_query_symbols_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(f"file_id = {file_id}")
+                .to_list()
+            )
+            return [dict(r) for r in results]
+        except Exception as e:
+            logger.error(f"Error querying symbols by file: {e}")
+            return []
+
+    def query_symbols_by_range(
+        self, file_path: str, line: int
+    ) -> dict[str, Any] | None:
+        """Return the innermost symbol containing the given line."""
+        return self._execute_in_db_thread_sync("query_symbols_by_range", file_path, line)
+
+    def _executor_query_symbols_by_range(
+        self, conn: Any, state: dict[str, Any], file_path: str, line: int
+    ) -> dict[str, Any] | None:
+        self._ensure_symbols_table(conn, state)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(
+                    f"file_path = '{file_path}' "
+                    f"AND range_start <= {line} "
+                    f"AND range_end >= {line}"
+                )
+                .to_list()
+            )
+            if not results:
+                return None
+            # Sort by range span ascending (innermost = smallest span)
+            results.sort(key=lambda r: r["range_end"] - r["range_start"])
+            return dict(results[0])
+        except Exception as e:
+            logger.error(f"Error querying symbols by range: {e}")
+            return None
+
+    def query_symbols_by_range_overlap(
+        self, file_path: str, min_line: int, max_line: int
+    ) -> list[dict[str, Any]]:
+        """Return all symbols whose range overlaps [min_line, max_line]."""
+        return self._execute_in_db_thread_sync(
+            "query_symbols_by_range_overlap", file_path, min_line, max_line
+        )
+
+    def _executor_query_symbols_by_range_overlap(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        file_path: str,
+        min_line: int,
+        max_line: int,
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(
+                    f"file_path = '{file_path}' "
+                    f"AND range_start <= {max_line} "
+                    f"AND range_end >= {min_line}"
+                )
+                .to_list()
+            )
+            return [dict(r) for r in results]
+        except Exception as e:
+            logger.error(f"Error querying symbols by range overlap: {e}")
+            return []
+
+    def query_symbol_fqns_by_file(self, file_id: int) -> dict[str, int]:
+        """Return {fqn: symbol_id} mapping for all symbols in a file."""
+        return self._execute_in_db_thread_sync("query_symbol_fqns_by_file", file_id)
+
+    def _executor_query_symbol_fqns_by_file(
+        self, conn: Any, state: dict[str, Any], file_id: int
+    ) -> dict[str, int]:
+        self._ensure_symbols_table(conn, state)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(f"file_id = {file_id}")
+                .select(["id", "fqn"])
+                .to_list()
+            )
+            return {r["fqn"]: int(r["id"]) for r in results}
+        except Exception as e:
+            logger.error(f"Error querying symbol FQNs by file: {e}")
+            return {}
+
+    def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
+        """Check whether a symbol with the given FQN and file_path exists."""
+        return self._execute_in_db_thread_sync(
+            "query_symbols_by_fqn_exists", fqn, file_path
+        )
+
+    def _executor_query_symbols_by_fqn_exists(
+        self, conn: Any, state: dict[str, Any], fqn: str, file_path: str
+    ) -> bool:
+        self._ensure_symbols_table(conn, state)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(f"fqn = '{fqn}' AND file_path = '{file_path}'")
+                .select(["id"])
+                .limit(1)
+                .to_list()
+            )
+            return len(results) > 0
+        except Exception as e:
+            logger.error(f"Error checking symbol existence: {e}")
+            return False
+
+    def insert_edges_batch(self, edges: list[EdgeRow]) -> None:
+        """Batch insert edge rows."""
+        if not edges:
+            return
+        self._execute_in_db_thread_sync("insert_edges_batch", edges)
+
+    def _executor_insert_edges_batch(
+        self, conn: Any, state: dict[str, Any], edges: list[EdgeRow]
+    ) -> None:
+        if not edges:
+            return
+        self._ensure_symbols_table(conn, state)
+
+        base_id = int(time.time() * 1_000_000)
+        for i in range(0, len(edges), self._EDGE_BATCH_SIZE):
+            batch = edges[i : i + self._EDGE_BATCH_SIZE]
+            rows = []
+            for j, e in enumerate(batch):
+                rows.append({
+                    "id": base_id + i + j,
+                    "from_symbol_id": e["from_symbol_id"],
+                    "from_fqn": e.get("from_fqn", ""),
+                    "from_file": e.get("from_file", ""),
+                    "to_symbol_id": e["to_symbol_id"],
+                    "to_fqn": e.get("to_fqn", ""),
+                    "to_file": e.get("to_file", ""),
+                    "edge_kind": e["edge_kind"],
+                    "confidence": e.get("confidence", 1.0),
+                    "lsp_server": e.get("lsp_server", ""),
+                    "created_at": time.time(),
+                })
+            arrow_table = pa.Table.from_pylist(rows, schema=get_symbol_edges_schema())
+            self._symbol_edges_table.add(arrow_table)
+        logger.debug(f"Inserted {len(edges)} edges into LanceDB")
+
+    def symbol_stats(self) -> dict[str, Any]:
+        """Return counts for symbols and edges."""
+        return self._execute_in_db_thread_sync("symbol_stats")
+
+    def _executor_symbol_stats(
+        self, conn: Any, state: dict[str, Any]
+    ) -> dict[str, Any]:
+        self._ensure_symbols_table(conn, state)
+        try:
+            sym_count = self._symbols_table.count_rows()
+        except Exception:
+            sym_count = 0
+        try:
+            edge_count = self._symbol_edges_table.count_rows()
+        except Exception:
+            edge_count = 0
+        return {"symbol_count": sym_count, "edge_count": edge_count}
+
+    # ── Graph Query Protocol Methods (Python BFS) ────────────────
+
+    _BFS_FRONTIER_CAP = 10_000  # Cap BFS frontier to prevent OOM on dense graphs
+
+    def graph_walk(
+        self,
+        seed_fqns: list[str],
+        depth: int,
+        directed: bool,
+        edge_kind: str | None,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        """Walk connected symbols from seed FQNs using Python BFS."""
+        if not seed_fqns:
+            return [], []
+        return self._execute_in_db_thread_sync(
+            "graph_walk", seed_fqns, depth, directed, edge_kind, limit
+        )
+
+    def _executor_graph_walk(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        seed_fqns: list[str],
+        depth: int,
+        directed: bool,
+        edge_kind: str | None,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        if not seed_fqns:
+            return [], []
+        self._ensure_symbols_table(conn, state)
+
+        # BFS: frontier is a set of FQNs to expand, visited tracks seen FQNs
+        visited: set[str] = set()
+        frontier: set[str] = set(seed_fqns)
+        all_node_fqns: list[str] = []
+
+        for d in range(depth + 1):
+            new_frontier: set[str] = set()
+            for fqn in frontier:
+                if fqn in visited:
+                    continue
+                visited.add(fqn)
+                all_node_fqns.append(fqn)
+                if len(all_node_fqns) >= limit:
+                    break
+
+            if len(all_node_fqns) >= limit:
+                break
+
+            if d < depth:
+                # Find neighbors via edges
+                for fqn in list(frontier - (frontier - visited)):
+                    neighbors = self._bfs_get_neighbors(
+                        fqn, directed, edge_kind
+                    )
+                    for n in neighbors:
+                        if n not in visited:
+                            new_frontier.add(n)
+                    if len(new_frontier) > self._BFS_FRONTIER_CAP:
+                        break
+
+                frontier = new_frontier
+
+        # Fetch full node data for discovered FQNs
+        nodes: list[dict[str, Any]] = []
+        for fqn in all_node_fqns[:limit]:
+            try:
+                results = (
+                    self._symbols_table.search()
+                    .where(f"fqn = '{fqn}'")
+                    .limit(1)
+                    .to_list()
+                )
+                if results:
+                    r = results[0]
+                    nodes.append({
+                        "fqn": r["fqn"],
+                        "name": r["name"],
+                        "kind": r["kind"],
+                        "file_path": r["file_path"],
+                    })
+            except Exception:
+                pass
+
+        if not nodes:
+            return [], []
+
+        # Fetch edges between discovered nodes
+        node_fqn_set = {n["fqn"] for n in nodes}
+        edges: list[dict[str, Any]] = []
+        try:
+            all_edges = self._symbol_edges_table.search().to_list()
+            for e in all_edges:
+                if e["from_fqn"] in node_fqn_set and e["to_fqn"] in node_fqn_set:
+                    if edge_kind and e["edge_kind"] != edge_kind:
+                        continue
+                    edges.append({
+                        "from_fqn": e["from_fqn"],
+                        "to_fqn": e["to_fqn"],
+                        "edge_kind": e["edge_kind"],
+                        "from_file": e.get("from_file", ""),
+                        "to_file": e.get("to_file", ""),
+                    })
+        except Exception:
+            pass
+
+        return nodes, edges
+
+    def _bfs_get_neighbors(
+        self, fqn: str, directed: bool, edge_kind: str | None
+    ) -> list[str]:
+        """Get neighboring FQNs from edges (called within executor thread)."""
+        neighbors: list[str] = []
+        try:
+            # Forward edges: from this FQN
+            fwd = (
+                self._symbol_edges_table.search()
+                .where(f"from_fqn = '{fqn}'")
+                .select(["to_fqn", "edge_kind"])
+                .to_list()
+            )
+            for e in fwd:
+                if edge_kind and e["edge_kind"] != edge_kind:
+                    continue
+                neighbors.append(e["to_fqn"])
+
+            if not directed:
+                # Backward edges: to this FQN
+                bwd = (
+                    self._symbol_edges_table.search()
+                    .where(f"to_fqn = '{fqn}'")
+                    .select(["from_fqn", "edge_kind"])
+                    .to_list()
+                )
+                for e in bwd:
+                    if edge_kind and e["edge_kind"] != edge_kind:
+                        continue
+                    neighbors.append(e["from_fqn"])
+        except Exception:
+            pass
+        return neighbors
+
+    def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
+        """Find unreachable symbols within a scope prefix."""
+        return self._execute_in_db_thread_sync("graph_reachability", scope)
+
+    def _executor_graph_reachability(
+        self, conn: Any, state: dict[str, Any], scope: str
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+
+        # Get all symbols in scope
+        escaped = _escape_like_pattern(scope)
+        try:
+            all_results = (
+                self._symbols_table.search()
+                .where(f"file_path LIKE '{escaped}%'")
+                .to_list()
+            )
+        except Exception:
+            return []
+
+        all_fqns = {r["fqn"] for r in all_results}
+        if not all_fqns:
+            return []
+
+        # BFS from all scope symbols (matches DuckDB CTE semantics)
+        reachable: set[str] = set()
+        frontier = set(all_fqns)
+        while frontier:
+            new_frontier: set[str] = set()
+            for fqn in frontier:
+                if fqn in reachable:
+                    continue
+                reachable.add(fqn)
+                # Follow forward edges
+                try:
+                    fwd = (
+                        self._symbol_edges_table.search()
+                        .where(f"from_fqn = '{fqn}'")
+                        .select(["to_fqn"])
+                        .to_list()
+                    )
+                    for e in fwd:
+                        if e["to_fqn"] in all_fqns and e["to_fqn"] not in reachable:
+                            new_frontier.add(e["to_fqn"])
+                except Exception:
+                    pass
+            frontier = new_frontier
+
+        # Return symbols not reachable
+        unreachable = []
+        for r in all_results:
+            if r["fqn"] not in reachable:
+                unreachable.append({
+                    "fqn": r["fqn"],
+                    "name": r["name"],
+                    "kind": r["kind"],
+                    "file_path": r["file_path"],
+                })
+        return unreachable
+
+    def graph_boundary(self, scope: str, limit: int) -> list[dict[str, Any]]:
+        """Find cross-boundary edges for a scope prefix."""
+        return self._execute_in_db_thread_sync("graph_boundary", scope, limit)
+
+    def _executor_graph_boundary(
+        self, conn: Any, state: dict[str, Any], scope: str, limit: int
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+        escaped = _escape_like_pattern(scope)
+
+        try:
+            all_edges = self._symbol_edges_table.search().to_list()
+        except Exception:
+            return []
+
+        results: list[dict[str, Any]] = []
+        for e in all_edges:
+            from_in = e.get("from_file", "").startswith(scope)
+            to_in = e.get("to_file", "").startswith(scope)
+            if from_in != to_in:  # One inside, one outside
+                results.append({
+                    "from_fqn": e["from_fqn"],
+                    "to_fqn": e["to_fqn"],
+                    "edge_kind": e["edge_kind"],
+                    "from_file": e.get("from_file", ""),
+                    "to_file": e.get("to_file", ""),
+                })
+                if len(results) >= limit:
+                    break
+        return results
+
+    def graph_overview(
+        self, scope: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        """Get top symbols by edge connectivity."""
+        return self._execute_in_db_thread_sync("graph_overview", scope, limit)
+
+    def _executor_graph_overview(
+        self, conn: Any, state: dict[str, Any], scope: str | None, limit: int
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+
+        # Count edges per symbol
+        try:
+            all_edges = self._symbol_edges_table.search().to_list()
+        except Exception:
+            return []
+
+        from collections import Counter
+        edge_counts: Counter[str] = Counter()
+        for e in all_edges:
+            edge_counts[e["from_fqn"]] += 1
+            edge_counts[e["to_fqn"]] += 1
+
+        # Get symbol details for top FQNs
+        results: list[dict[str, Any]] = []
+        for fqn, count in edge_counts.most_common():
+            if len(results) >= limit:
+                break
+            try:
+                sym_results = (
+                    self._symbols_table.search()
+                    .where(f"fqn = '{fqn}'")
+                    .limit(1)
+                    .to_list()
+                )
+                if sym_results:
+                    s = sym_results[0]
+                    if scope and not s.get("file_path", "").startswith(scope):
+                        continue
+                    results.append({
+                        "fqn": s["fqn"],
+                        "name": s["name"],
+                        "kind": s["kind"],
+                        "file_path": s["file_path"],
+                        "total_edges": count,
+                    })
+            except Exception:
+                pass
+        return results
+
+    def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
+        """Resolve seed chunks to symbol FQNs via range overlap."""
+        if not chunks:
+            return []
+        return self._execute_in_db_thread_sync("symbol_overlap", chunks)
+
+    def _executor_symbol_overlap(
+        self, conn: Any, state: dict[str, Any], chunks: list[dict[str, Any]]
+    ) -> list[str]:
+        if not chunks:
+            return []
+        self._ensure_symbols_table(conn, state)
+
+        fqns: set[str] = set()
+        for chunk in chunks:
+            fp = chunk["file_path"]
+            start = chunk["start_line"]
+            end = chunk["end_line"]
+            try:
+                results = (
+                    self._symbols_table.search()
+                    .where(
+                        f"file_path = '{fp}' "
+                        f"AND range_start <= {end} "
+                        f"AND range_end >= {start}"
+                    )
+                    .select(["fqn"])
+                    .to_list()
+                )
+                for r in results:
+                    fqns.add(r["fqn"])
+            except Exception:
+                pass
+        return list(fqns)
+
+    def chunk_resolution(self, fqns: list[str]) -> list[dict[str, Any]]:
+        """Resolve symbol FQNs to chunks via file_id + range overlap."""
+        if not fqns:
+            return []
+        return self._execute_in_db_thread_sync("chunk_resolution", fqns)
+
+    def _executor_chunk_resolution(
+        self, conn: Any, state: dict[str, Any], fqns: list[str]
+    ) -> list[dict[str, Any]]:
+        if not fqns:
+            return []
+        self._ensure_symbols_table(conn, state)
+
+        results: list[dict[str, Any]] = []
+        seen_chunk_ids: set[int] = set()
+        for fqn in fqns:
+            # Find the symbol
+            try:
+                sym_results = (
+                    self._symbols_table.search()
+                    .where(f"fqn = '{fqn}'")
+                    .limit(1)
+                    .to_list()
+                )
+                if not sym_results:
+                    continue
+                sym = sym_results[0]
+                file_id = sym["file_id"]
+                range_start = sym["range_start"]
+                range_end = sym["range_end"]
+
+                # Find file path from files table
+                file_results = (
+                    self._files_table.search()
+                    .where(f"id = {file_id}")
+                    .limit(1)
+                    .to_list()
+                )
+                if not file_results:
+                    continue
+                file_path = file_results[0]["path"]
+
+                # Find chunks that overlap this symbol's range
+                chunk_results = (
+                    self._chunks_table.search()
+                    .where(
+                        f"file_id = {file_id} "
+                        f"AND start_line <= {range_end} "
+                        f"AND end_line >= {range_start}"
+                    )
+                    .to_list()
+                )
+                for c in chunk_results:
+                    cid = c["id"]
+                    if cid not in seen_chunk_ids:
+                        seen_chunk_ids.add(cid)
+                        results.append({
+                            "chunk_id": cid,
+                            "file_path": file_path,
+                            "content": c.get("content", ""),
+                            "start_line": c["start_line"],
+                            "end_line": c["end_line"],
+                        })
+            except Exception:
+                pass
+        return results
+
+    # ── Symbol Read Query Methods ────────────────────────────────
+
+    def query_symbols_by_scope(self, scope: str) -> list[dict[str, Any]]:
+        """Return symbols matching scope prefix, grouped by name."""
+        return self._execute_in_db_thread_sync("query_symbols_by_scope", scope)
+
+    def _executor_query_symbols_by_scope(
+        self, conn: Any, state: dict[str, Any], scope: str
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+        escaped = _escape_like_pattern(scope)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(f"file_path LIKE '{escaped}%'")
+                .to_list()
+            )
+            return [dict(r) for r in results]
+        except Exception:
+            return []
+
+    def query_test_symbols(self, scope: str | None) -> list[dict[str, Any]]:
+        """Return test function symbols (kind='Function', name LIKE 'test_%')."""
+        return self._execute_in_db_thread_sync("query_test_symbols", scope)
+
+    def _executor_query_test_symbols(
+        self, conn: Any, state: dict[str, Any], scope: str | None
+    ) -> list[dict[str, Any]]:
+        self._ensure_symbols_table(conn, state)
+        where = "kind = 'Function' AND name LIKE 'test_%'"
+        if scope:
+            escaped = _escape_like_pattern(scope)
+            where += f" AND file_path LIKE '{escaped}%'"
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(where)
+                .to_list()
+            )
+            return [dict(r) for r in results]
+        except Exception:
+            return []
+
+    def query_symbol_type_signatures(
+        self, fqns: list[str]
+    ) -> dict[str, str | None]:
+        """Return FQN → type_signature mapping for a batch of FQNs."""
+        if not fqns:
+            return {}
+        return self._execute_in_db_thread_sync("query_symbol_type_signatures", fqns)
+
+    def _executor_query_symbol_type_signatures(
+        self, conn: Any, state: dict[str, Any], fqns: list[str]
+    ) -> dict[str, str | None]:
+        if not fqns:
+            return {}
+        self._ensure_symbols_table(conn, state)
+        result: dict[str, str | None] = {}
+        for fqn in fqns:
+            try:
+                rows = (
+                    self._symbols_table.search()
+                    .where(f"fqn = '{fqn}'")
+                    .select(["fqn", "type_signature"])
+                    .limit(1)
+                    .to_list()
+                )
+                if rows:
+                    ts = rows[0].get("type_signature", "")
+                    result[fqn] = ts if ts else None
+            except Exception:
+                pass
+        return result
+
+    def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
+        """Return distinct FQNs for symbols in a given file."""
+        return self._execute_in_db_thread_sync(
+            "query_distinct_fqns_by_file_path", file_path
+        )
+
+    def _executor_query_distinct_fqns_by_file_path(
+        self, conn: Any, state: dict[str, Any], file_path: str
+    ) -> list[str]:
+        self._ensure_symbols_table(conn, state)
+        try:
+            results = (
+                self._symbols_table.search()
+                .where(f"file_path = '{file_path}'")
+                .select(["fqn"])
+                .to_list()
+            )
+            return list({r["fqn"] for r in results})
+        except Exception:
+            return []
