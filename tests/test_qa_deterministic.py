@@ -29,7 +29,7 @@ from tests.utils.windows_compat import (
 
 from .test_utils import get_api_key_for_tests, get_embedding_config_for_tests, build_embedding_config_from_dict
 
-pytestmark = pytest.mark.e2e
+pytestmark = [pytest.mark.e2e, pytest.mark.slow]
 
 
 # =============================================================================
