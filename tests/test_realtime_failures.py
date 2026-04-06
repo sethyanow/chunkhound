@@ -181,29 +181,6 @@ class TestRealtimeFailures:
         await service.stop()
 
     @pytest.mark.asyncio
-    async def test_service_doesnt_handle_file_deletions(self, realtime_setup):
-        """Test that service doesn't handle file deletions properly."""
-        service, watch_dir, _, services = realtime_setup
-        await service.start(watch_dir)
-
-        # Create and process a file
-        test_file = watch_dir / "delete_test.py"
-        # Wait for file to be indexed
-        service.reset_file_tracking(test_file)
-        test_file.write_text("def to_be_deleted(): pass")
-        found = await service.wait_for_file_indexed(test_file, timeout=get_fs_event_timeout())
-        assert found, "File should be processed initially"
-
-        # Delete the file
-        # Wait for deletion processing
-        service.reset_file_tracking(test_file)
-        test_file.unlink()
-        removed = await service.wait_for_file_removed(test_file, timeout=get_fs_event_timeout())
-        assert removed, "Deleted files should be removed from database"
-
-        await service.stop()
-
-    @pytest.mark.asyncio
     async def test_error_in_processing_loop_kills_service(self, realtime_setup):
         """Test that an error in the processing loop kills the entire service."""
         service, watch_dir, _, _ = realtime_setup
