@@ -1,13 +1,16 @@
-"""Regression tests for realtime indexing DB access patterns (ch-zn5).
+"""Regression tests for realtime indexing DB access patterns.
 
-Bug: _consume_events called provider.delete_file_completely_async() directly,
-racing with _process_loop's open transactions. All DB-mutating operations must
-route through the file queue so _process_loop is the single serialization point.
+Covers:
+- ch-zn5: DB writes routed through file queue (not called from _consume_events)
+- Delete event pipeline: synthetic event → consume → queue → process → _removed_files
+- Pending-files dedup bypass for delete events
 """
 
 import asyncio
 from pathlib import Path
 from unittest.mock import AsyncMock, MagicMock, patch
+
+from chunkhound.services.realtime_indexing_service import normalize_file_path
 
 import pytest
 
@@ -96,3 +99,57 @@ async def test_delete_bypasses_pending_files_dedup(realtime_service):
     priority, queued_path = realtime_service.file_queue.get_nowait()
     assert priority == "delete"
     assert queued_path == file_path
+
+
+@pytest.mark.asyncio
+async def test_delete_event_flows_through_full_internal_pipeline(
+    realtime_service, mock_services,
+):
+    """Synthetic delete event → _consume_events → queue → _process_loop → _removed_files.
+
+    Tests the entire internal deletion pipeline without any OS filesystem
+    events. Feeds a delete event directly into the event_queue (mocking
+    what watchdog would produce) and verifies the file ends up in
+    _removed_files after _process_loop processes it.
+    """
+    file_path = Path("/fake/path/deleteme.py")
+    normalized = normalize_file_path(file_path)
+
+    # Feed synthetic "deleted" event into the event queue
+    await realtime_service.event_queue.put(("deleted", file_path))
+
+    # Run _consume_events for one iteration — it reads the event and
+    # routes it to remove_file → file_queue with priority="delete"
+    consume_task = asyncio.create_task(realtime_service._consume_events())
+    # Give consume_events time to read and route the event
+    await asyncio.sleep(0.05)
+    consume_task.cancel()
+    try:
+        await consume_task
+    except asyncio.CancelledError:
+        pass
+
+    # The delete should now be in the file_queue
+    assert not realtime_service.file_queue.empty(), (
+        "_consume_events did not route delete event to file_queue"
+    )
+
+    # Run _process_loop for one iteration — it picks up the delete,
+    # calls provider.delete_file_completely_async, and marks _removed_files
+    process_task = asyncio.create_task(realtime_service._process_loop())
+    await asyncio.sleep(0.05)
+    process_task.cancel()
+    try:
+        await process_task
+    except asyncio.CancelledError:
+        pass
+
+    # The provider should have been called to delete the file
+    mock_services.provider.delete_file_completely_async.assert_called_once_with(
+        str(file_path)
+    )
+
+    # The file should be in _removed_files (waiters would be notified)
+    assert normalized in realtime_service._removed_files, (
+        "File not in _removed_files after _process_loop handled delete"
+    )
