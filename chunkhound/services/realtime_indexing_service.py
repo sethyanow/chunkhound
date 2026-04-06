@@ -662,6 +662,11 @@ class RealtimeIndexingService:
 
     async def add_file(self, file_path: Path, priority: str = "change") -> None:
         """Add file to processing queue with deduplication and debouncing."""
+        # Delete events always bypass dedup — a pending embed/lsp pass
+        # must not suppress a deletion (the file no longer exists).
+        if priority == "delete":
+            self.pending_files.discard(file_path)
+
         if file_path not in self.pending_files:
             self.pending_files.add(file_path)
 

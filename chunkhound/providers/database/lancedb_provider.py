@@ -2448,10 +2448,16 @@ class LanceDBProvider(SerialDatabaseProvider):
     _SYMBOL_BATCH_SIZE = 500
     _EDGE_BATCH_SIZE = 500
 
-    def _ensure_symbols_table(self, conn: Any, state: dict[str, Any]) -> None:
-        """Ensure symbols and symbol_edges tables exist."""
+    def _ensure_symbol_tables(self, conn: Any, state: dict[str, Any]) -> tuple[Any, Any]:
+        """Ensure symbols and symbol_edges tables exist and return them.
+
+        Returns (symbols_table, symbol_edges_table) — guaranteed non-None.
+        """
         if self._symbols_table is None or self._symbol_edges_table is None:
             self._executor_create_schema(conn, state)
+        assert self._symbols_table is not None
+        assert self._symbol_edges_table is not None
+        return self._symbols_table, self._symbol_edges_table
 
     def insert_symbols_batch(self, symbols: list[SymbolRow]) -> None:
         """Batch insert symbol rows with internal chunking."""
@@ -2464,7 +2470,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> None:
         if not symbols:
             return
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, _ = self._ensure_symbol_tables(conn, state)
 
         base_id = int(time.time() * 1_000_000)
         for i in range(0, len(symbols), self._SYMBOL_BATCH_SIZE):
@@ -2488,7 +2494,7 @@ class LanceDBProvider(SerialDatabaseProvider):
                     "created_at": time.time(),
                 })
             arrow_table = pa.Table.from_pylist(rows, schema=get_symbols_schema())
-            self._symbols_table.add(arrow_table)
+            sym_tbl.add(arrow_table)
         logger.debug(f"Inserted {len(symbols)} symbols into LanceDB")
 
     def delete_symbols_by_file(self, file_id: int) -> None:
@@ -2498,9 +2504,9 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_delete_symbols_by_file(
         self, conn: Any, state: dict[str, Any], file_id: int
     ) -> None:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, _ = self._ensure_symbol_tables(conn, state)
         try:
-            self._symbols_table.delete(f"file_id = {file_id}")
+            sym_tbl.delete(f"file_id = {file_id}")
         except Exception as e:
             logger.error(f"Error deleting symbols for file {file_id}: {e}")
 
@@ -2511,10 +2517,10 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_delete_edges_by_file(
         self, conn: Any, state: dict[str, Any], file_id: int
     ) -> None:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         # Find all symbol IDs belonging to this file
         results = (
-            self._symbols_table.search()
+            sym_tbl.search()
             .where(f"file_id = {file_id}")
             .select(["id"])
             .to_list()
@@ -2525,11 +2531,11 @@ class LanceDBProvider(SerialDatabaseProvider):
         # Delete edges where from or to symbol is in this file
         for sid in sym_ids:
             try:
-                self._symbol_edges_table.delete(f"from_symbol_id = {sid}")
+                edge_tbl.delete(f"from_symbol_id = {sid}")
             except Exception:
                 pass
             try:
-                self._symbol_edges_table.delete(f"to_symbol_id = {sid}")
+                edge_tbl.delete(f"to_symbol_id = {sid}")
             except Exception:
                 pass
 
@@ -2540,10 +2546,10 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbols_by_file(
         self, conn: Any, state: dict[str, Any], file_id: int
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(f"file_id = {file_id}")
                 .to_list()
             )
@@ -2561,10 +2567,10 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbols_by_range(
         self, conn: Any, state: dict[str, Any], file_path: str, line: int
     ) -> dict[str, Any] | None:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(
                     f"file_path = '{file_path}' "
                     f"AND range_start <= {line} "
@@ -2597,10 +2603,10 @@ class LanceDBProvider(SerialDatabaseProvider):
         min_line: int,
         max_line: int,
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(
                     f"file_path = '{file_path}' "
                     f"AND range_start <= {max_line} "
@@ -2620,10 +2626,10 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbol_fqns_by_file(
         self, conn: Any, state: dict[str, Any], file_id: int
     ) -> dict[str, int]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(f"file_id = {file_id}")
                 .select(["id", "fqn"])
                 .to_list()
@@ -2642,10 +2648,10 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbols_by_fqn_exists(
         self, conn: Any, state: dict[str, Any], fqn: str, file_path: str
     ) -> bool:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(f"fqn = '{fqn}' AND file_path = '{file_path}'")
                 .select(["id"])
                 .limit(1)
@@ -2667,7 +2673,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> None:
         if not edges:
             return
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         base_id = int(time.time() * 1_000_000)
         for i in range(0, len(edges), self._EDGE_BATCH_SIZE):
@@ -2688,7 +2694,7 @@ class LanceDBProvider(SerialDatabaseProvider):
                     "created_at": time.time(),
                 })
             arrow_table = pa.Table.from_pylist(rows, schema=get_symbol_edges_schema())
-            self._symbol_edges_table.add(arrow_table)
+            edge_tbl.add(arrow_table)
         logger.debug(f"Inserted {len(edges)} edges into LanceDB")
 
     def symbol_stats(self) -> dict[str, Any]:
@@ -2698,13 +2704,13 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_symbol_stats(
         self, conn: Any, state: dict[str, Any]
     ) -> dict[str, Any]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
-            sym_count = self._symbols_table.count_rows()
+            sym_count = sym_tbl.count_rows()
         except Exception:
             sym_count = 0
         try:
-            edge_count = self._symbol_edges_table.count_rows()
+            edge_count = edge_tbl.count_rows()
         except Exception:
             edge_count = 0
         return {"symbol_count": sym_count, "edge_count": edge_count}
@@ -2740,7 +2746,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
         if not seed_fqns:
             return [], []
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         # BFS: frontier is a set of FQNs to expand, visited tracks seen FQNs
         visited: set[str] = set()
@@ -2764,7 +2770,7 @@ class LanceDBProvider(SerialDatabaseProvider):
                 # Find neighbors via edges
                 for fqn in list(frontier - (frontier - visited)):
                     neighbors = self._bfs_get_neighbors(
-                        fqn, directed, edge_kind
+                        edge_tbl, fqn, directed, edge_kind
                     )
                     for n in neighbors:
                         if n not in visited:
@@ -2779,7 +2785,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         for fqn in all_node_fqns[:limit]:
             try:
                 results = (
-                    self._symbols_table.search()
+                    sym_tbl.search()
                     .where(f"fqn = '{fqn}'")
                     .limit(1)
                     .to_list()
@@ -2802,7 +2808,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         node_fqn_set = {n["fqn"] for n in nodes}
         edges: list[dict[str, Any]] = []
         try:
-            all_edges = self._symbol_edges_table.search().to_list()
+            all_edges = edge_tbl.search().to_list()
             for e in all_edges:
                 if e["from_fqn"] in node_fqn_set and e["to_fqn"] in node_fqn_set:
                     if edge_kind and e["edge_kind"] != edge_kind:
@@ -2820,14 +2826,14 @@ class LanceDBProvider(SerialDatabaseProvider):
         return nodes, edges
 
     def _bfs_get_neighbors(
-        self, fqn: str, directed: bool, edge_kind: str | None
+        self, edge_tbl: Any, fqn: str, directed: bool, edge_kind: str | None
     ) -> list[str]:
         """Get neighboring FQNs from edges (called within executor thread)."""
         neighbors: list[str] = []
         try:
             # Forward edges: from this FQN
             fwd = (
-                self._symbol_edges_table.search()
+                edge_tbl.search()
                 .where(f"from_fqn = '{fqn}'")
                 .select(["to_fqn", "edge_kind"])
                 .to_list()
@@ -2840,7 +2846,7 @@ class LanceDBProvider(SerialDatabaseProvider):
             if not directed:
                 # Backward edges: to this FQN
                 bwd = (
-                    self._symbol_edges_table.search()
+                    edge_tbl.search()
                     .where(f"to_fqn = '{fqn}'")
                     .select(["from_fqn", "edge_kind"])
                     .to_list()
@@ -2860,13 +2866,13 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_graph_reachability(
         self, conn: Any, state: dict[str, Any], scope: str
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         # Get all symbols in scope
         escaped = _escape_like_pattern(scope)
         try:
             all_results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(f"file_path LIKE '{escaped}%'")
                 .to_list()
             )
@@ -2889,7 +2895,7 @@ class LanceDBProvider(SerialDatabaseProvider):
                 # Follow forward edges
                 try:
                     fwd = (
-                        self._symbol_edges_table.search()
+                        edge_tbl.search()
                         .where(f"from_fqn = '{fqn}'")
                         .select(["to_fqn"])
                         .to_list()
@@ -2920,11 +2926,11 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_graph_boundary(
         self, conn: Any, state: dict[str, Any], scope: str, limit: int
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         escaped = _escape_like_pattern(scope)
 
         try:
-            all_edges = self._symbol_edges_table.search().to_list()
+            all_edges = edge_tbl.search().to_list()
         except Exception:
             return []
 
@@ -2953,11 +2959,11 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_graph_overview(
         self, conn: Any, state: dict[str, Any], scope: str | None, limit: int
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         # Count edges per symbol
         try:
-            all_edges = self._symbol_edges_table.search().to_list()
+            all_edges = edge_tbl.search().to_list()
         except Exception:
             return []
 
@@ -2974,7 +2980,7 @@ class LanceDBProvider(SerialDatabaseProvider):
                 break
             try:
                 sym_results = (
-                    self._symbols_table.search()
+                    sym_tbl.search()
                     .where(f"fqn = '{fqn}'")
                     .limit(1)
                     .to_list()
@@ -3005,7 +3011,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> list[str]:
         if not chunks:
             return []
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         fqns: set[str] = set()
         for chunk in chunks:
@@ -3014,7 +3020,7 @@ class LanceDBProvider(SerialDatabaseProvider):
             end = chunk["end_line"]
             try:
                 results = (
-                    self._symbols_table.search()
+                    sym_tbl.search()
                     .where(
                         f"file_path = '{fp}' "
                         f"AND range_start <= {end} "
@@ -3040,7 +3046,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> list[dict[str, Any]]:
         if not fqns:
             return []
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         results: list[dict[str, Any]] = []
         seen_chunk_ids: set[int] = set()
@@ -3048,7 +3054,7 @@ class LanceDBProvider(SerialDatabaseProvider):
             # Find the symbol
             try:
                 sym_results = (
-                    self._symbols_table.search()
+                    sym_tbl.search()
                     .where(f"fqn = '{fqn}'")
                     .limit(1)
                     .to_list()
@@ -3105,11 +3111,11 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbols_by_scope(
         self, conn: Any, state: dict[str, Any], scope: str
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         escaped = _escape_like_pattern(scope)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(f"file_path LIKE '{escaped}%'")
                 .to_list()
             )
@@ -3124,14 +3130,14 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_test_symbols(
         self, conn: Any, state: dict[str, Any], scope: str | None
     ) -> list[dict[str, Any]]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         where = "kind = 'Function' AND name LIKE 'test_%'"
         if scope:
             escaped = _escape_like_pattern(scope)
             where += f" AND file_path LIKE '{escaped}%'"
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(where)
                 .to_list()
             )
@@ -3152,12 +3158,12 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> dict[str, str | None]:
         if not fqns:
             return {}
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         result: dict[str, str | None] = {}
         for fqn in fqns:
             try:
                 rows = (
-                    self._symbols_table.search()
+                    sym_tbl.search()
                     .where(f"fqn = '{fqn}'")
                     .select(["fqn", "type_signature"])
                     .limit(1)
@@ -3179,10 +3185,10 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_distinct_fqns_by_file_path(
         self, conn: Any, state: dict[str, Any], file_path: str
     ) -> list[str]:
-        self._ensure_symbols_table(conn, state)
+        sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         try:
             results = (
-                self._symbols_table.search()
+                sym_tbl.search()
                 .where(f"file_path = '{file_path}'")
                 .select(["fqn"])
                 .to_list()

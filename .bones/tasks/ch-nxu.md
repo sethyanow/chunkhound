@@ -186,7 +186,7 @@ Grep for `execute_query` calls touching symbols/symbol_edges tables. Verify zero
 ## Success Criteria
 - [x] `DatabaseProvider` protocol declares all symbol/edge/graph methods (CRUD + read queries + graph queries)
 - [x] `DuckDBProvider` implements all new protocol methods (existing SQL in `_executor_*`)
-- [ ] `LanceDBProvider` implements all new protocol methods (Lance tables + Python graph walk with visited tracking)
+- [x] `LanceDBProvider` implements all new protocol methods (Lance tables + Python graph walk with visited tracking)
 - [ ] `lsp_population.py` has zero `execute_query` calls — protocol methods only
 - [ ] `mcp_server/tools/` has zero `execute_query` calls for symbol/edge/graph operations
 - [ ] `services/search/graph_walk_expander.py` has zero raw SQL — uses protocol methods only
