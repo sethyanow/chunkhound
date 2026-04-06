@@ -500,15 +500,11 @@ class DatabaseProvider(Protocol):
         """Async variant of delete_edges_by_file."""
         ...
 
-    async def query_symbols_by_file_async(
-        self, file_id: int
-    ) -> list[dict[str, Any]]:
+    async def query_symbols_by_file_async(self, file_id: int) -> list[dict[str, Any]]:
         """Async variant of query_symbols_by_file."""
         ...
 
-    async def query_symbol_fqns_by_file_async(
-        self, file_id: int
-    ) -> dict[str, int]:
+    async def query_symbol_fqns_by_file_async(self, file_id: int) -> dict[str, int]:
         """Async variant of query_symbol_fqns_by_file."""
         ...
 
@@ -533,36 +529,28 @@ class DatabaseProvider(Protocol):
         """
         ...
 
-    def graph_reachability(
-        self, scope: str
-    ) -> list[dict[str, Any]]:
+    def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
         """Find unreachable symbols within a scope prefix.
 
         Returns symbols that have no inbound edges from scope entry points.
         """
         ...
 
-    def graph_boundary(
-        self, scope: str, limit: int
-    ) -> list[dict[str, Any]]:
+    def graph_boundary(self, scope: str, limit: int) -> list[dict[str, Any]]:
         """Find cross-boundary edges for a scope prefix.
 
         Returns edges where one endpoint is inside the scope and the other outside.
         """
         ...
 
-    def graph_overview(
-        self, scope: str | None, limit: int
-    ) -> list[dict[str, Any]]:
+    def graph_overview(self, scope: str | None, limit: int) -> list[dict[str, Any]]:
         """Get top symbols by edge connectivity.
 
         Returns symbols sorted by total edge count (in + out).
         """
         ...
 
-    def symbol_overlap(
-        self, chunks: list[dict[str, Any]]
-    ) -> list[str]:
+    def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
         """Resolve seed chunks to symbol FQNs via range overlap.
 
         Each chunk dict must have file_path, start_line, end_line.
@@ -570,9 +558,7 @@ class DatabaseProvider(Protocol):
         """
         ...
 
-    def chunk_resolution(
-        self, fqns: list[str]
-    ) -> list[dict[str, Any]]:
+    def chunk_resolution(self, fqns: list[str]) -> list[dict[str, Any]]:
         """Resolve symbol FQNs to chunks via file_id + range overlap.
 
         Returns chunk dicts with file_path, content, start_line, end_line.
@@ -585,29 +571,21 @@ class DatabaseProvider(Protocol):
 
     # Symbol Read Query Operations (used by fusion/search tools)
 
-    def query_symbols_by_scope(
-        self, scope: str
-    ) -> list[dict[str, Any]]:
+    def query_symbols_by_scope(self, scope: str) -> list[dict[str, Any]]:
         """Return all symbols under a scope prefix (file_path LIKE scope%)."""
         ...
 
-    def query_test_symbols(
-        self, scope: str | None
-    ) -> list[dict[str, Any]]:
+    def query_test_symbols(self, scope: str | None) -> list[dict[str, Any]]:
         """Return test function symbols (kind='Function', name LIKE 'test_%').
 
         Optional scope restricts to files under a path prefix.
         """
         ...
 
-    def query_symbol_type_signatures(
-        self, fqns: list[str]
-    ) -> dict[str, str | None]:
+    def query_symbol_type_signatures(self, fqns: list[str]) -> dict[str, str | None]:
         """Batch lookup FQN → type_signature mapping."""
         ...
 
-    def query_distinct_fqns_by_file_path(
-        self, file_path: str
-    ) -> list[str]:
+    def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
         """Return distinct FQNs for all symbols in a file."""
         ...

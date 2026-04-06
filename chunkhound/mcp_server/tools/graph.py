@@ -85,7 +85,10 @@ def _graph_walk(
     assert symbol is not None  # narrowing after require_param
 
     sql, params = build_walk_query(
-        symbol=symbol, depth=depth, edge_kind=edge_kind, limit=limit,
+        symbol=symbol,
+        depth=depth,
+        edge_kind=edge_kind,
+        limit=limit,
         directed=directed,
     )
     nodes = services.provider.execute_query(sql, params)
@@ -127,7 +130,12 @@ def _graph_reachability(
 
     # Set difference in Python
     unreachable = [
-        {"fqn": s["fqn"], "name": s["name"], "kind": s["kind"], "file_path": s["file_path"]}
+        {
+            "fqn": s["fqn"],
+            "name": s["name"],
+            "kind": s["kind"],
+            "file_path": s["file_path"],
+        }
         for s in all_symbols
         if s["fqn"] not in reachable_fqns
     ][:limit]

@@ -36,7 +36,9 @@ class JsonRpcTransport:
         self._process = process
         self._request_id = 0
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
-        self._notification_handler = notification_handler or self._default_notification_handler
+        self._notification_handler = (
+            notification_handler or self._default_notification_handler
+        )
         self._read_task: asyncio.Task[None] | None = None
         self._closed = False
 
@@ -206,9 +208,7 @@ class JsonRpcTransport:
                     )
             self._pending.clear()
 
-    async def _read_headers(
-        self, stdout: asyncio.StreamReader
-    ) -> int | None:
+    async def _read_headers(self, stdout: asyncio.StreamReader) -> int | None:
         """Read Content-Length from headers. Returns None on EOF."""
         content_length: int | None = None
 
@@ -254,9 +254,7 @@ class JsonRpcTransport:
                     future.set_result(message.get("result", {}))
         elif "method" in message and "id" not in message:
             # Notification (no id)
-            self._notification_handler(
-                message["method"], message.get("params")
-            )
+            self._notification_handler(message["method"], message.get("params"))
         elif "method" in message and "id" in message:
             # Server-initiated request — must respond or server blocks
             asyncio.ensure_future(self._respond_to_server_request(message))

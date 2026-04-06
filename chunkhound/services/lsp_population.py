@@ -72,7 +72,9 @@ class LSPPopulationService:
         try:
             client = await self._pool.get(language, str(self._workspace_root))
         except LSPError:
-            logger.debug("No LSP server for language=%s, skipping %s", language, file_path)
+            logger.debug(
+                "No LSP server for language=%s, skipping %s", language, file_path
+            )
             return PopulateResult.SKIPPED
 
         abs_path = self._workspace_root / file_path
@@ -87,7 +89,11 @@ class LSPPopulationService:
         try:
             await client.notify_did_open(uri, content, language)
             symbols = await client.document_symbols(uri)
-            type_signatures = await self._collect_type_signatures(client, uri, symbols) if symbols else {}
+            type_signatures = (
+                await self._collect_type_signatures(client, uri, symbols)
+                if symbols
+                else {}
+            )
 
             if not symbols:
                 return PopulateResult.SKIPPED
@@ -118,7 +124,11 @@ class LSPPopulationService:
 
             # Collect edges (LSP operations need file open)
             edges = await self._collect_edges(
-                client, uri, symbols, str(file_path), fqn_to_id,
+                client,
+                uri,
+                symbols,
+                str(file_path),
+                fqn_to_id,
             )
         finally:
             await client.notify_did_close(uri)
@@ -158,13 +168,19 @@ class LSPPopulationService:
         """Recursively walk symbols and call hover for each."""
         for sym in symbols:
             try:
-                hover = await client.hover(uri, sym.range_start_line, sym.range_start_char)
+                hover = await client.hover(
+                    uri, sym.range_start_line, sym.range_start_char
+                )
                 if hover is not None:
-                    result[(sym.range_start_line, sym.range_start_char)] = hover.contents
+                    result[(sym.range_start_line, sym.range_start_char)] = (
+                        hover.contents
+                    )
             except Exception:
                 logger.debug(
                     "Hover failed for symbol %s at %d:%d, skipping",
-                    sym.name, sym.range_start_line, sym.range_start_char,
+                    sym.name,
+                    sym.range_start_line,
+                    sym.range_start_char,
                 )
             if sym.children:
                 await self._hover_recursive(client, uri, sym.children, result)
@@ -184,20 +200,22 @@ class LSPPopulationService:
         rows: list[tuple] = []
         for sym in symbols:
             fqn = f"{parent_fqn}::{sym.name}" if parent_fqn else sym.name
-            rows.append((
-                fqn,
-                sym.name,
-                symbol_kind_name(sym.kind),
-                language,
-                file_id,
-                file_path,
-                sym.range_start_line,
-                sym.range_end_line,
-                parent_fqn,
-                1.0,  # confidence: compiler_grade
-                lsp_server,
-                ts.get((sym.range_start_line, sym.range_start_char)),
-            ))
+            rows.append(
+                (
+                    fqn,
+                    sym.name,
+                    symbol_kind_name(sym.kind),
+                    language,
+                    file_id,
+                    file_path,
+                    sym.range_start_line,
+                    sym.range_end_line,
+                    parent_fqn,
+                    1.0,  # confidence: compiler_grade
+                    lsp_server,
+                    ts.get((sym.range_start_line, sym.range_start_char)),
+                )
+            )
             if sym.children:
                 rows.extend(
                     self._flatten_symbols(
@@ -237,9 +255,7 @@ class LSPPopulationService:
         """Populate symbols for all indexed files. Used by batch indexing path."""
         from chunkhound.core.types.common import Language
 
-        rows = await self._provider.execute_query_async(
-            "SELECT id, path FROM files"
-        )
+        rows = await self._provider.execute_query_async("SELECT id, path FROM files")
         languages_seen: set[str] = set()
         populated = 0
         failed = 0
@@ -273,7 +289,9 @@ class LSPPopulationService:
 
         logger.info(
             "Population complete: %d populated, %d failed, %d skipped",
-            populated, failed, skipped,
+            populated,
+            failed,
+            skipped,
         )
 
     async def _populate_workspace_symbols(self, languages: set[str]) -> None:
@@ -290,7 +308,9 @@ class LSPPopulationService:
             try:
                 symbols = await client.workspace_symbols("")
             except LSPError:
-                logger.debug("workspaceSymbol failed for language=%s, skipping", language)
+                logger.debug(
+                    "workspaceSymbol failed for language=%s, skipping", language
+                )
                 continue
 
             lsp_server = self._server_name(language)
@@ -320,7 +340,9 @@ class LSPPopulationService:
                     continue
 
                 file_id = file_rows[0]["id"]
-                fqn = sym.name  # workspaceSymbol returns flat results, no parent context
+                fqn = (
+                    sym.name
+                )  # workspaceSymbol returns flat results, no parent context
 
                 # In-batch dedup
                 dedup_key = (fqn, file_path_str)
@@ -337,20 +359,24 @@ class LSPPopulationService:
                     continue
 
                 # Insert with lower confidence (workspace symbols are less precise)
-                await self._batch_insert([(
-                    fqn,
-                    sym.name,
-                    symbol_kind_name(sym.kind),
-                    language,
-                    file_id,
-                    file_path_str,
-                    sym.range_start_line,
-                    sym.range_end_line,
-                    None,  # parent_fqn — flat results, no parent context
-                    0.9,   # confidence: workspace symbol (less precise than documentSymbol)
-                    lsp_server,
-                    None,  # type_signature — not collected for workspace symbols
-                )])
+                await self._batch_insert(
+                    [
+                        (
+                            fqn,
+                            sym.name,
+                            symbol_kind_name(sym.kind),
+                            language,
+                            file_id,
+                            file_path_str,
+                            sym.range_start_line,
+                            sym.range_end_line,
+                            None,  # parent_fqn — flat results, no parent context
+                            0.9,  # confidence: workspace symbol (less precise than documentSymbol)
+                            lsp_server,
+                            None,  # type_signature — not collected for workspace symbols
+                        )
+                    ]
+                )
 
     async def _collect_edges(
         self,
@@ -389,8 +415,14 @@ class LSPPopulationService:
             if lang_rows and lang_rows[0]["language"]:
                 lsp_server = self._server_name(lang_rows[0]["language"])
         await self._edges_recursive(
-            client, uri, symbols, file_path, fqn_to_id,
-            parent_fqn=None, lsp_server=lsp_server, edges=edges,
+            client,
+            uri,
+            symbols,
+            file_path,
+            fqn_to_id,
+            parent_fqn=None,
+            lsp_server=lsp_server,
+            edges=edges,
         )
         return list(edges.values())
 
@@ -425,14 +457,28 @@ class LSPPopulationService:
                 logger.debug("No symbol_id for FQN %s, skipping edge collection", fqn)
                 if sym.children:
                     await self._edges_recursive(
-                        client, uri, sym.children, file_path, fqn_to_id,
-                        parent_fqn=fqn, lsp_server=lsp_server, edges=edges,
+                        client,
+                        uri,
+                        sym.children,
+                        file_path,
+                        fqn_to_id,
+                        parent_fqn=fqn,
+                        lsp_server=lsp_server,
+                        edges=edges,
                     )
                 continue
 
             # Prefer selectionRange (name position) over range (keyword position)
-            op_line = sym.selection_range_start_line if sym.selection_range_start_line is not None else sym.range_start_line
-            op_char = sym.selection_range_start_char if sym.selection_range_start_char is not None else sym.range_start_char
+            op_line = (
+                sym.selection_range_start_line
+                if sym.selection_range_start_line is not None
+                else sym.range_start_line
+            )
+            op_char = (
+                sym.selection_range_start_char
+                if sym.selection_range_start_char is not None
+                else sym.range_start_char
+            )
 
             try:
                 for edge_kind, operation in ops:
@@ -441,12 +487,17 @@ class LSPPopulationService:
                     except Exception:
                         logger.debug(
                             "Edge op %s failed for %s at %d:%d, skipping",
-                            edge_kind, sym.name, sym.range_start_line, sym.range_start_char,
+                            edge_kind,
+                            sym.name,
+                            sym.range_start_line,
+                            sym.range_start_char,
                         )
                         continue
 
                     for loc in results:
-                        target = await self._resolve_symbol(loc.uri, loc.range_start_line)
+                        target = await self._resolve_symbol(
+                            loc.uri, loc.range_start_line
+                        )
                         if target is None:
                             continue
                         to_id, to_fqn, to_file = target
@@ -457,9 +508,15 @@ class LSPPopulationService:
 
                         dedup_key = (fqn, to_fqn, edge_kind)
                         edges[dedup_key] = (
-                            from_id, fqn, file_path,
-                            to_id, to_fqn, to_file,
-                            edge_kind, 1.0, lsp_server,
+                            from_id,
+                            fqn,
+                            file_path,
+                            to_id,
+                            to_fqn,
+                            to_file,
+                            edge_kind,
+                            1.0,
+                            lsp_server,
                         )
             except Exception:
                 logger.debug(
@@ -469,8 +526,14 @@ class LSPPopulationService:
 
             if sym.children:
                 await self._edges_recursive(
-                    client, uri, sym.children, file_path, fqn_to_id,
-                    parent_fqn=fqn, lsp_server=lsp_server, edges=edges,
+                    client,
+                    uri,
+                    sym.children,
+                    file_path,
+                    fqn_to_id,
+                    parent_fqn=fqn,
+                    lsp_server=lsp_server,
+                    edges=edges,
                 )
 
     async def _resolve_symbol(self, uri: str, line: int) -> tuple[int, str, str] | None:
@@ -511,9 +574,7 @@ class LSPPopulationService:
         """Single batch INSERT for all edges from one file."""
         if not edges:
             return
-        placeholders = ", ".join(
-            ["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(edges)
-        )
+        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(edges))
         flat_params = [val for edge in edges for val in edge]
         await self._provider.execute_query_async(
             "INSERT INTO symbol_edges "

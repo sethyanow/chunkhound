@@ -6,15 +6,6 @@ type: task
 priority: 0
 owner: Seth
 ---
-
-
-
-
-
-
-**Blocked by:** nothing — foundation fix
-**Unlocks:** ch-zn5 connection architecture becomes solvable by backend switch. Phase 5 acceptance and Phase 6 resume on clean foundation. LanceDB becomes viable for graph features.
-
 ## Context
 
 Phases 1-5 of ch-8e7 built the graph intelligence layer (symbols, symbol_edges, graph walks, fusion tools) directly against DuckDB SQL — raw `execute_query()` calls, sqlglot query builders generating DuckDB-dialect CTEs. None of it goes through the `DatabaseProvider` protocol. Result: LanceDB provider (2400+ lines, concurrent writes, persistent HNSW) has no graph support. The daemon/proxy/IPC architecture exists solely because DuckDB is the only viable backend for graph features.

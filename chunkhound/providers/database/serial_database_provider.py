@@ -370,15 +370,11 @@ class SerialDatabaseProvider(ABC):
         """Async variant of delete_edges_by_file."""
         await self._execute_in_db_thread("delete_edges_by_file", file_id)
 
-    async def query_symbols_by_file_async(
-        self, file_id: int
-    ) -> list[dict[str, Any]]:
+    async def query_symbols_by_file_async(self, file_id: int) -> list[dict[str, Any]]:
         """Async variant of query_symbols_by_file."""
         return await self._execute_in_db_thread("query_symbols_by_file", file_id)
 
-    async def query_symbol_fqns_by_file_async(
-        self, file_id: int
-    ) -> dict[str, int]:
+    async def query_symbol_fqns_by_file_async(self, file_id: int) -> dict[str, int]:
         """Async variant of query_symbol_fqns_by_file."""
         return await self._execute_in_db_thread("query_symbol_fqns_by_file", file_id)
 

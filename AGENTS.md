@@ -12,7 +12,7 @@ Purpose: Transform codebases into searchable knowledge bases for AI assistants
 - NEVER Use forward references (quotes) in type annotations unless needed
 
 **ALWAYS:**
-- ALWAYS Run full test suite before committing: `uv run pytest -m "unit or integration or e2e" tests/ -v`
+- ALWAYS Run test suite before committing: `uv run pytest -m "unit or integration" tests/ -v`
 - ALWAYS Batch embeddings (min: 100, max: provider_limit)
 - ALWAYS Use uv for all Python operations
 - ALWAYS Update version via: `uv run scripts/update_version.py`
@@ -24,8 +24,8 @@ lint:      uv run ruff check chunkhound
 typecheck: uv run mypy chunkhound
 test:      uv run pytest                                # unit tests only (default)
 test-intg: uv run pytest -m integration                 # integration tests
-test-e2e:  uv run pytest -m e2e                         # e2e tests
-test-all:  uv run pytest -m "unit or integration or e2e"  # full suite — run before committing
+test-all:  uv run pytest -m "unit or integration"           # pre-commit suite
+test-e2e:  uv run pytest -m e2e                             # e2e — gate on push/CI, not local dev
 test-acc:  uv run pytest -m acceptance                    # acceptance tests (need VCR cassettes)
 format:    uv run ruff format chunkhound
 

@@ -68,9 +68,7 @@ def _python_type_to_json_schema_type(type_hint: Any) -> dict[str, Any]:
         else:
             # Multiple non-None types - use anyOf
             return {
-                "anyOf": [
-                    _python_type_to_json_schema_type(t) for t in non_none_types
-                ]
+                "anyOf": [_python_type_to_json_schema_type(t) for t in non_none_types]
             }
 
     # Handle Literal types (e.g., Literal["a", "b"])

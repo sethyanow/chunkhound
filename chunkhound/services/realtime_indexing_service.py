@@ -298,7 +298,9 @@ class RealtimeIndexingService:
         self._lsp_population = lsp_population
 
         # Priority queue ensures deletes run before embed/lsp follow-ups (ch-zn5)
-        self.file_queue: asyncio.PriorityQueue[tuple[str, Path]] = asyncio.PriorityQueue()
+        self.file_queue: asyncio.PriorityQueue[tuple[str, Path]] = (
+            asyncio.PriorityQueue()
+        )
 
         # NEW: Async queue for events from watchdog (thread-safe via asyncio)
         self.event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)

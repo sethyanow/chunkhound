@@ -40,9 +40,7 @@ def bidirectional_edges() -> exp.Union:
     return exp.Union(this=forward, expression=reverse, distinct=False)
 
 
-def scope_filter(
-    scope: str, column: str = "file_path"
-) -> tuple[str, list[Any]]:
+def scope_filter(scope: str, column: str = "file_path") -> tuple[str, list[Any]]:
     """Generate a LIKE clause with ESCAPE for scope filtering.
 
     Returns (sql_fragment, params) where sql_fragment is a raw SQL condition
@@ -55,9 +53,7 @@ def scope_filter(
     return sql_fragment, [pattern]
 
 
-def visited_tracking_columns(
-    table: str, column: str
-) -> tuple[exp.Expr, exp.Expr]:
+def visited_tracking_columns(table: str, column: str) -> tuple[exp.Expr, exp.Expr]:
     """Generate list_concat (append) and list_contains (cycle check) expressions.
 
     Used in recursive CTEs to track visited nodes and prevent cycles.

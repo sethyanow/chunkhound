@@ -734,18 +734,14 @@ class DuckDBProvider(SerialDatabaseProvider):
             # Embedding indexes are created per-table in _executor_ensure_embedding_table_exists()
 
             # Symbol indexes
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbols_fqn ON symbols(fqn)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_fqn ON symbols(fqn)")
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_symbols_file_id ON symbols(file_id)"
             )
             conn.execute(
                 "CREATE INDEX IF NOT EXISTS idx_symbols_file_path ON symbols(file_path)"
             )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind)")
 
             # Symbol edge indexes
             conn.execute(
@@ -2637,7 +2633,12 @@ class DuckDBProvider(SerialDatabaseProvider):
         return self._execute_in_db_thread_sync("search_text", query, page_size, offset)
 
     def _executor_search_text(
-        self, conn: Any, state: dict[str, Any], query: str, page_size: int, offset: int = 0
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        query: str,
+        page_size: int,
+        offset: int = 0,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Executor method for search_text - runs in DB thread."""
         try:
@@ -2919,8 +2920,10 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     # ── Symbol/Edge CRUD Protocol Methods ─────────────────────────
 
-    _SYMBOL_BATCH_SIZE = 500  # 12 params/row × 500 = 6000 params (well under DuckDB limit)
-    _EDGE_BATCH_SIZE = 500    # 9 params/row × 500 = 4500 params
+    _SYMBOL_BATCH_SIZE = (
+        500  # 12 params/row × 500 = 6000 params (well under DuckDB limit)
+    )
+    _EDGE_BATCH_SIZE = 500  # 9 params/row × 500 = 4500 params
 
     @staticmethod
     def _rows_to_dicts(conn: Any, rows: list[Any]) -> list[dict[str, Any]]:
@@ -2947,16 +2950,27 @@ class DuckDBProvider(SerialDatabaseProvider):
         )
         for i in range(0, len(symbols), self._SYMBOL_BATCH_SIZE):
             batch = symbols[i : i + self._SYMBOL_BATCH_SIZE]
-            placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch))
+            placeholders = ", ".join(
+                ["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch)
+            )
             flat: list[Any] = []
             for s in batch:
-                flat.extend([
-                    s["fqn"], s["name"], s["kind"], s["language"],
-                    s["file_id"], s["file_path"],
-                    s["range_start"], s["range_end"],
-                    s.get("parent_fqn"), s["confidence"], s["lsp_server"],
-                    s.get("type_signature"),
-                ])
+                flat.extend(
+                    [
+                        s["fqn"],
+                        s["name"],
+                        s["kind"],
+                        s["language"],
+                        s["file_id"],
+                        s["file_path"],
+                        s["range_start"],
+                        s["range_end"],
+                        s.get("parent_fqn"),
+                        s["confidence"],
+                        s["lsp_server"],
+                        s.get("type_signature"),
+                    ]
+                )
             conn.execute(f"INSERT INTO symbols ({cols}) VALUES {placeholders}", flat)
 
     def delete_symbols_by_file(self, file_id: int) -> None:
@@ -2998,7 +3012,9 @@ class DuckDBProvider(SerialDatabaseProvider):
         self, file_path: str, line: int
     ) -> dict[str, Any] | None:
         """Return the innermost symbol containing the given line."""
-        return self._execute_in_db_thread_sync("query_symbols_by_range", file_path, line)
+        return self._execute_in_db_thread_sync(
+            "query_symbols_by_range", file_path, line
+        )
 
     def _executor_query_symbols_by_range(
         self, conn: Any, state: dict[str, Any], file_path: str, line: int
@@ -3082,12 +3098,22 @@ class DuckDBProvider(SerialDatabaseProvider):
             placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch))
             flat: list[Any] = []
             for e in batch:
-                flat.extend([
-                    e["from_symbol_id"], e["from_fqn"], e["from_file"],
-                    e["to_symbol_id"], e["to_fqn"], e["to_file"],
-                    e["edge_kind"], e["confidence"], e["lsp_server"],
-                ])
-            conn.execute(f"INSERT INTO symbol_edges ({cols}) VALUES {placeholders}", flat)
+                flat.extend(
+                    [
+                        e["from_symbol_id"],
+                        e["from_fqn"],
+                        e["from_file"],
+                        e["to_symbol_id"],
+                        e["to_fqn"],
+                        e["to_file"],
+                        e["edge_kind"],
+                        e["confidence"],
+                        e["lsp_server"],
+                    ]
+                )
+            conn.execute(
+                f"INSERT INTO symbol_edges ({cols}) VALUES {placeholders}", flat
+            )
 
     # ── Graph Query Protocol Methods ──────────────────────────────
 
@@ -3121,7 +3147,9 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         # Build edge subquery based on direction
         if directed:
-            edge_sql = "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges"
+            edge_sql = (
+                "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges"
+            )
         else:
             edge_sql = (
                 "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges "

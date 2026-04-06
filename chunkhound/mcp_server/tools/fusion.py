@@ -45,7 +45,10 @@ def _git_changed_lines(
     """
     # Validate non-empty refs
     if not base or not head:
-        return {"error": "invalid_ref", "message": "Base and head refs must be non-empty strings"}
+        return {
+            "error": "invalid_ref",
+            "message": "Base and head refs must be non-empty strings",
+        }
 
     try:
         repo = pygit2.Repository(repo_path)
@@ -120,8 +123,7 @@ def _map_lines_to_symbols(
         for row in rows:
             # Narrow: intersect symbol range with actual changed lines
             sym_lines = [
-                ln for ln in lines
-                if row["range_start"] <= ln <= row["range_end"]
+                ln for ln in lines if row["range_start"] <= ln <= row["range_end"]
             ]
 
             # Exclude symbols with no overlapping lines
@@ -130,20 +132,20 @@ def _map_lines_to_symbols(
 
             # Classify: range_start touched → signature_change
             change_type = (
-                "signature_change"
-                if row["range_start"] in line_set
-                else "body_only"
+                "signature_change" if row["range_start"] in line_set else "body_only"
             )
 
-            result.append({
-                "fqn": row["fqn"],
-                "name": row["name"],
-                "kind": row["kind"],
-                "file_path": row["file_path"],
-                "type_signature": row["type_signature"],
-                "change_type": change_type,
-                "changed_lines": sym_lines,
-            })
+            result.append(
+                {
+                    "fqn": row["fqn"],
+                    "name": row["name"],
+                    "kind": row["kind"],
+                    "file_path": row["file_path"],
+                    "type_signature": row["type_signature"],
+                    "change_type": change_type,
+                    "changed_lines": sym_lines,
+                }
+            )
 
     return result
 
@@ -288,12 +290,20 @@ def _compare_scope_symbols(
             for eb in entries_b:
                 # Kind mismatch takes priority
                 if ea["kind"] != eb["kind"]:
-                    mismatches.append({
-                        "name": name,
-                        "scope_a": {**ea, "arity": _extract_arity(ea.get("type_signature"))},
-                        "scope_b": {**eb, "arity": _extract_arity(eb.get("type_signature"))},
-                        "mismatch_type": "kind",
-                    })
+                    mismatches.append(
+                        {
+                            "name": name,
+                            "scope_a": {
+                                **ea,
+                                "arity": _extract_arity(ea.get("type_signature")),
+                            },
+                            "scope_b": {
+                                **eb,
+                                "arity": _extract_arity(eb.get("type_signature")),
+                            },
+                            "mismatch_type": "kind",
+                        }
+                    )
                     continue
 
                 # Arity comparison
@@ -305,20 +315,30 @@ def _compare_scope_symbols(
                     continue
 
                 if arity_a != arity_b:
-                    mismatches.append({
-                        "name": name,
-                        "scope_a": {**ea, "arity": arity_a},
-                        "scope_b": {**eb, "arity": arity_b},
-                        "mismatch_type": "arity",
-                    })
+                    mismatches.append(
+                        {
+                            "name": name,
+                            "scope_a": {**ea, "arity": arity_a},
+                            "scope_b": {**eb, "arity": arity_b},
+                            "mismatch_type": "arity",
+                        }
+                    )
 
     # Build missing lists
     missing_in_b = [
-        {"name": name, "fqn": symbols_a[name][0]["fqn"], "kind": symbols_a[name][0]["kind"]}
+        {
+            "name": name,
+            "fqn": symbols_a[name][0]["fqn"],
+            "kind": symbols_a[name][0]["kind"],
+        }
         for name in sorted(only_a)
     ]
     missing_in_a = [
-        {"name": name, "fqn": symbols_b[name][0]["fqn"], "kind": symbols_b[name][0]["kind"]}
+        {
+            "name": name,
+            "fqn": symbols_b[name][0]["fqn"],
+            "kind": symbols_b[name][0]["kind"],
+        }
         for name in sorted(only_b)
     ]
 
@@ -365,9 +385,7 @@ def _resolve_changed_to_fqns(
                 seen.add(item)
         else:
             # File path — resolve to relative and query symbols
-            relative_path = os.path.relpath(
-                str(Path(item).resolve()), workspace_root
-            )
+            relative_path = os.path.relpath(str(Path(item).resolve()), workspace_root)
             rows = services.provider.execute_query(
                 "SELECT DISTINCT fqn FROM symbols WHERE file_path = ?",
                 [relative_path],
@@ -412,8 +430,7 @@ def _collect_test_fqns(
     rows = services.provider.execute_query(sql, params)
 
     return {
-        row["fqn"]: {"name": row["name"], "file_path": row["file_path"]}
-        for row in rows
+        row["fqn"]: {"name": row["name"], "file_path": row["file_path"]} for row in rows
     }
 
 
@@ -439,7 +456,7 @@ def _resolve_start_fqn(
     # Handle file:// URI input
     resolved_file = file
     if file.startswith("file://"):
-        resolved_file = file[len("file://"):]
+        resolved_file = file[len("file://") :]
 
     # Normalize to relative path matching symbols.file_path format
     relative_path = os.path.relpath(str(Path(resolved_file).resolve()), workspace_root)
@@ -918,7 +935,9 @@ async def semantic_diff_impl(
     _annotate_type_signatures(services, affected_list)
 
     # Step 5: Build summary
-    sig_count = sum(1 for s in changed_symbols if s["change_type"] == "signature_change")
+    sig_count = sum(
+        1 for s in changed_symbols if s["change_type"] == "signature_change"
+    )
     body_count = sum(1 for s in changed_symbols if s["change_type"] == "body_only")
 
     return {

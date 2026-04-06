@@ -1,0 +1,17 @@
+pre-commit:
+  parallel: true
+  commands:
+    lint:
+      run: uv run ruff check chunkhound
+    format:
+      run: uv run ruff format --check chunkhound
+    test:
+      run: uv run pytest -m "unit or integration" --timeout=60 -q
+
+pre-push:
+  parallel: true
+  commands:
+    e2e:
+      run: uv run pytest -m "e2e and not slow" --timeout=120 -q
+    typecheck:
+      run: uv run mypy chunkhound

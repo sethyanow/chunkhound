@@ -182,9 +182,7 @@ def build_boundary_query(scope: str, limit: int) -> tuple[str, list[Any]]:
     return sql, params
 
 
-def build_overview_query(
-    scope: str | None, limit: int
-) -> tuple[str, list[Any]]:
+def build_overview_query(scope: str | None, limit: int) -> tuple[str, list[Any]]:
     """Most-connected symbols via bidirectional UNION ALL edge counting.
 
     Returns (sql, params) with optional scope pattern + limit.

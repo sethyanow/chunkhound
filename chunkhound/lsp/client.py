@@ -65,9 +65,7 @@ class LSPClient:
     async def start(self, workspace_root: str | Path) -> dict[str, Any]:
         """Spawn server, run initialize handshake, return initialize result."""
         if self._state != ServerState.NOT_STARTED:
-            raise LSPError(
-                f"Cannot start client in state {self._state.value}"
-            )
+            raise LSPError(f"Cannot start client in state {self._state.value}")
         if self._config.command is None:
             raise LSPError(
                 f"No server command configured for {self._config.language_id}"
@@ -122,9 +120,7 @@ class LSPClient:
                 },
                 "window": {"workDoneProgress": True},
             },
-            "workspaceFolders": [
-                {"uri": workspace_uri, "name": workspace_path.name}
-            ],
+            "workspaceFolders": [{"uri": workspace_uri, "name": workspace_path.name}],
         }
         if self._config.init_options is not None:
             init_params["initializationOptions"] = self._config.init_options
@@ -174,9 +170,7 @@ class LSPClient:
         if self._transport:
             # Try graceful shutdown
             try:
-                await self._transport.send_request(
-                    "shutdown", timeout=5.0
-                )
+                await self._transport.send_request("shutdown", timeout=5.0)
                 await self._transport.send_notification("exit")
             except Exception:
                 pass  # Best effort
@@ -219,17 +213,13 @@ class LSPClient:
     def _require_capability(self, capability: LSPCapability, method: str) -> None:
         """Raise LSPCapabilityError if the server doesn't advertise the capability."""
         if capability not in self._capabilities:
-            server_name = (
-                self._server_info.get("name") if self._server_info else None
-            )
+            server_name = self._server_info.get("name") if self._server_info else None
             raise LSPCapabilityError(method, server_name)
 
     def _require_transport(self) -> JsonRpcTransport:
         """Return the transport or raise if not connected."""
         if self._transport is None or self._state != ServerState.READY:
-            raise LSPTransportError(
-                f"Client not ready (state: {self._state.value})"
-            )
+            raise LSPTransportError(f"Client not ready (state: {self._state.value})")
         return self._transport
 
     async def _send_operation(
@@ -258,9 +248,7 @@ class LSPClient:
         return {"textDocument": {"uri": uri}}
 
     @staticmethod
-    def _make_text_document_position(
-        uri: str, line: int, char: int
-    ) -> dict[str, Any]:
+    def _make_text_document_position(uri: str, line: int, char: int) -> dict[str, Any]:
         return {
             "textDocument": {"uri": uri},
             "position": {"line": line, "character": char},
@@ -282,9 +270,7 @@ class LSPClient:
         )
         return self._parse_symbols(result or [])
 
-    async def go_to_definition(
-        self, uri: str, line: int, char: int
-    ) -> list[Location]:
+    async def go_to_definition(self, uri: str, line: int, char: int) -> list[Location]:
         result = await self._send_operation(
             "textDocument/definition",
             LSPCapability.DEFINITION,
@@ -292,9 +278,7 @@ class LSPClient:
         )
         return self._parse_locations(result)
 
-    async def find_references(
-        self, uri: str, line: int, char: int
-    ) -> list[Location]:
+    async def find_references(self, uri: str, line: int, char: int) -> list[Location]:
         params = self._make_text_document_position(uri, line, char)
         params["context"] = {"includeDeclaration": True}
         result = await self._send_operation(
@@ -327,8 +311,7 @@ class LSPClient:
             {"item": items[0]},
         )
         return [
-            self._parse_call_hierarchy_item(call["from"])
-            for call in (result or [])
+            self._parse_call_hierarchy_item(call["from"]) for call in (result or [])
         ]
 
     async def outgoing_calls(
@@ -343,10 +326,7 @@ class LSPClient:
             LSPCapability.CALL_HIERARCHY,
             {"item": items[0]},
         )
-        return [
-            self._parse_call_hierarchy_item(call["to"])
-            for call in (result or [])
-        ]
+        return [self._parse_call_hierarchy_item(call["to"]) for call in (result or [])]
 
     async def _prepare_call_hierarchy(
         self, uri: str, line: int, char: int
@@ -392,7 +372,9 @@ class LSPClient:
         cached = self._diagnostics.get(uri, [])
         return [self._parse_diagnostic(d) for d in cached]
 
-    async def notify_did_open(self, uri: str, text: str, language_id: str = "python") -> None:
+    async def notify_did_open(
+        self, uri: str, text: str, language_id: str = "python"
+    ) -> None:
         """Send textDocument/didOpen so the server starts analyzing the file."""
         transport = self._require_transport()
         await transport.send_notification(
@@ -648,13 +630,9 @@ class LSPClientPool:
             # Look up config
             config = LANGUAGE_SERVER_REGISTRY.get(language_id)
             if config is None:
-                raise LSPError(
-                    f"No server config for language: {language_id}"
-                )
+                raise LSPError(f"No server config for language: {language_id}")
             if config.command is None:
-                raise LSPError(
-                    f"No server binary configured for: {language_id}"
-                )
+                raise LSPError(f"No server binary configured for: {language_id}")
 
             # Spawn and initialize
             new_client = LSPClient(config)
