@@ -129,21 +129,97 @@ class TestLanceDBGraphWalk:
 
 
 class TestLanceDBGraphReachability:
-    """graph_reachability finds unreachable symbols in a scope."""
+    """graph_reachability finds unreachable symbols by seeding from entry points."""
 
-    def test_returns_list(self, lancedb_provider) -> None:
+    def test_dead_code_cycle_detected(self, lancedb_provider) -> None:
+        """X↔Y mutual cycle, no entry point reaches them → both unreachable."""
         file_id = _insert_test_file(lancedb_provider)
 
         symbols: list[SymbolRow] = [
-            SymbolRow(fqn="src.example::main", name="main", kind="Function", language="python",
+            SymbolRow(fqn="mod::A", name="A", kind="Function", language="python",
                       file_id=file_id, file_path="src/example.py",
                       range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
                       parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::B", name="B", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::X", name="X", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=20, range_end=25, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::Y", name="Y", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=30, range_end=35, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
         ]
         lancedb_provider.insert_symbols_batch(symbols)
+        fqn_map = lancedb_provider.query_symbol_fqns_by_file(file_id)
+
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mod::A"], from_fqn="mod::A", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::B"], to_fqn="mod::B", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::X"], from_fqn="mod::X", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::Y"], to_fqn="mod::Y", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::Y"], from_fqn="mod::Y", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::X"], to_fqn="mod::X", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+        ]
+        lancedb_provider.insert_edges_batch(edges)
 
         result = lancedb_provider.graph_reachability("src/example")
-        assert isinstance(result, list)
+        unreachable_fqns = {s["fqn"] for s in result}
+        assert unreachable_fqns == {"mod::X", "mod::Y"}
+
+    def test_no_entry_points_all_unreachable(self, lancedb_provider) -> None:
+        """P→Q→R→P full cycle, every symbol has inbound → all unreachable."""
+        file_id = _insert_test_file(lancedb_provider)
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mod::P", name="P", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::Q", name="Q", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::R", name="R", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=20, range_end=25, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+        ]
+        lancedb_provider.insert_symbols_batch(symbols)
+        fqn_map = lancedb_provider.query_symbol_fqns_by_file(file_id)
+
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mod::P"], from_fqn="mod::P", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::Q"], to_fqn="mod::Q", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::Q"], from_fqn="mod::Q", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::R"], to_fqn="mod::R", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::R"], from_fqn="mod::R", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::P"], to_fqn="mod::P", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+        ]
+        lancedb_provider.insert_edges_batch(edges)
+
+        result = lancedb_provider.graph_reachability("src/example")
+        unreachable_fqns = {s["fqn"] for s in result}
+        assert unreachable_fqns == {"mod::P", "mod::Q", "mod::R"}
+
+    def test_all_connected_none_unreachable(self, lancedb_provider) -> None:
+        """A→B→C, A is entry point, all reachable."""
+        _build_graph(lancedb_provider)
+        result = lancedb_provider.graph_reachability("src/example")
+        assert result == []
+
+    def test_empty_scope_returns_empty(self, lancedb_provider) -> None:
+        result = lancedb_provider.graph_reachability("nonexistent/scope")
+        assert result == []
 
 
 class TestLanceDBSymbolOverlap:

@@ -145,34 +145,203 @@ class TestDuckDBGraphWalk:
 
 
 class TestDuckDBGraphReachability:
-    """graph_reachability finds unreachable symbols in a scope.
+    """graph_reachability finds unreachable symbols by seeding from entry points.
 
-    NOTE: The existing CTE seeds with ALL scope symbols, so every symbol
-    is trivially "reachable from itself." This test verifies existing behavior.
-    True unreachability detection would require seeding only from entry points.
+    Entry points = scope symbols with no inbound edges from other scope symbols.
+    Unreachable = scope symbols not reachable from any entry point via forward edges.
     """
 
-    def test_returns_list(self, tmp_path: Path) -> None:
-        """Reachability returns a list (may be empty with current CTE semantics)."""
+    def test_dead_code_cycle_detected(self, tmp_path: Path) -> None:
+        """X↔Y mutual cycle, no entry point reaches them → both unreachable.
+
+        Graph: A→B (A is entry point), X↔Y (both have inbound → neither is entry point).
+        Reachable from entry points: {A, B}. Unreachable: {X, Y}.
+        """
         provider = _connect_fresh(tmp_path)
         file_id = _insert_file(provider)
 
         symbols: list[SymbolRow] = [
-            SymbolRow(fqn="src.example::main", name="main", kind="Function", language="python",
+            SymbolRow(fqn="mod::A", name="A", kind="Function", language="python",
                       file_id=file_id, file_path="src/example.py",
                       range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
                       parent_fqn=None, type_signature=None),
-            SymbolRow(fqn="src.example::orphan", name="orphan", kind="Function", language="python",
+            SymbolRow(fqn="mod::B", name="B", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::X", name="X", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=20, range_end=25, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::Y", name="Y", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=30, range_end=35, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+        ]
+        provider.insert_symbols_batch(symbols)
+        fqn_map = provider.query_symbol_fqns_by_file(file_id)
+
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mod::A"], from_fqn="mod::A", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::B"], to_fqn="mod::B", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::X"], from_fqn="mod::X", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::Y"], to_fqn="mod::Y", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::Y"], from_fqn="mod::Y", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::X"], to_fqn="mod::X", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+        ]
+        provider.insert_edges_batch(edges)
+
+        result = provider.graph_reachability("src/example")
+        unreachable_fqns = {s["fqn"] for s in result}
+        assert unreachable_fqns == {"mod::X", "mod::Y"}
+        provider.disconnect()
+
+    def test_transitive_reachability(self, tmp_path: Path) -> None:
+        """Entry point A reaches D transitively through A→B→C→D.
+
+        All symbols have inbound edges except A. A is the sole entry point.
+        D is reachable via A→B→C→D. No unreachable symbols.
+        """
+        provider = _connect_fresh(tmp_path)
+        file_id = _insert_file(provider)
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mod::A", name="A", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::B", name="B", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::C", name="C", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=20, range_end=25, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::D", name="D", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=30, range_end=35, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+        ]
+        provider.insert_symbols_batch(symbols)
+        fqn_map = provider.query_symbol_fqns_by_file(file_id)
+
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mod::A"], from_fqn="mod::A", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::B"], to_fqn="mod::B", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::B"], from_fqn="mod::B", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::C"], to_fqn="mod::C", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::C"], from_fqn="mod::C", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::D"], to_fqn="mod::D", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+        ]
+        provider.insert_edges_batch(edges)
+
+        result = provider.graph_reachability("src/example")
+        assert result == []
+        provider.disconnect()
+
+    def test_single_unreachable_with_inbound_only_from_outside_scope(self, tmp_path: Path) -> None:
+        """Symbol with inbound edge only from outside scope has no scope-internal inbound.
+
+        Graph in scope: A→B. Symbol Z has no edges at all in scope.
+        Z has no inbound from scope → Z is an entry point → Z is reachable.
+        If Z had inbound ONLY from outside scope, it still has no scope-internal
+        inbound, so it's an entry point. Unreachable requires inbound from scope
+        but no path from any entry point.
+        """
+        provider = _connect_fresh(tmp_path)
+        file_id = _insert_file(provider)
+        file_id2 = _insert_file(provider, path="other/module.py")
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mod::A", name="A", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::B", name="B", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::Z", name="Z", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=20, range_end=25, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="ext::Caller", name="Caller", kind="Function", language="python",
+                      file_id=file_id2, file_path="other/module.py",
+                      range_start=0, range_end=10, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+        ]
+        provider.insert_symbols_batch(symbols)
+        fqn_map = provider.query_symbol_fqns_by_file(file_id)
+        fqn_map2 = provider.query_symbol_fqns_by_file(file_id2)
+
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mod::A"], from_fqn="mod::A", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::B"], to_fqn="mod::B", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            # Outside-scope caller → Z (does NOT make Z have scope-internal inbound)
+            EdgeRow(from_symbol_id=fqn_map2["ext::Caller"], from_fqn="ext::Caller", from_file="other/module.py",
+                    to_symbol_id=fqn_map["mod::Z"], to_fqn="mod::Z", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+        ]
+        provider.insert_edges_batch(edges)
+
+        result = provider.graph_reachability("src/example")
+        # Z has no scope-internal inbound → entry point → reachable from itself
+        assert result == []
+        provider.disconnect()
+
+    def test_no_entry_points_all_unreachable(self, tmp_path: Path) -> None:
+        """Every symbol has inbound from scope → no entry points → all unreachable."""
+        provider = _connect_fresh(tmp_path)
+        file_id = _insert_file(provider)
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mod::P", name="P", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::Q", name="Q", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mod::R", name="R", kind="Function", language="python",
                       file_id=file_id, file_path="src/example.py",
                       range_start=20, range_end=25, confidence=1.0, lsp_server="pyright",
                       parent_fqn=None, type_signature=None),
         ]
         provider.insert_symbols_batch(symbols)
+        fqn_map = provider.query_symbol_fqns_by_file(file_id)
+
+        # P→Q→R→P: full cycle, every symbol has inbound
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mod::P"], from_fqn="mod::P", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::Q"], to_fqn="mod::Q", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::Q"], from_fqn="mod::Q", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::R"], to_fqn="mod::R", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mod::R"], from_fqn="mod::R", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mod::P"], to_fqn="mod::P", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+        ]
+        provider.insert_edges_batch(edges)
 
         result = provider.graph_reachability("src/example")
-        assert isinstance(result, list)
-        # Current CTE seeds all symbols → all reachable → unreachable is empty
-        # This matches existing graph.py behavior
+        unreachable_fqns = {s["fqn"] for s in result}
+        assert unreachable_fqns == {"mod::P", "mod::Q", "mod::R"}
+        provider.disconnect()
+
+    def test_empty_scope_returns_empty(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        result = provider.graph_reachability("nonexistent/scope")
+        assert result == []
         provider.disconnect()
 
 

@@ -2883,9 +2883,28 @@ class LanceDBProvider(SerialDatabaseProvider):
         if not all_fqns:
             return []
 
-        # BFS from all scope symbols (matches DuckDB CTE semantics)
+        # Find entry points: scope symbols with no inbound edges from scope
+        symbols_with_inbound: set[str] = set()
+        for fqn in all_fqns:
+            try:
+                inbound = (
+                    edge_tbl.search()
+                    .where(f"to_fqn = '{fqn}'")
+                    .select(["from_fqn"])
+                    .to_list()
+                )
+                for e in inbound:
+                    if e["from_fqn"] in all_fqns:
+                        symbols_with_inbound.add(fqn)
+                        break
+            except Exception:
+                pass
+
+        entry_points = all_fqns - symbols_with_inbound
+
+        # BFS from entry points only
         reachable: set[str] = set()
-        frontier = set(all_fqns)
+        frontier = set(entry_points)
         while frontier:
             new_frontier: set[str] = set()
             for fqn in frontier:

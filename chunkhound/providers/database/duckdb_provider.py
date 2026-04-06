@@ -3234,11 +3234,20 @@ class DuckDBProvider(SerialDatabaseProvider):
         ).fetchall()
         all_symbols = self._rows_to_dicts(conn, all_rows)
 
-        # Reachable via outbound edges (forward-only CTE)
-        reach_sql = f"""
+        if not all_symbols:
+            return []
+
+        # Entry points = scope symbols with no inbound edges from other scope symbols
+        # BFS forward from entry points to find all reachable symbols
+        reach_sql = """
             WITH RECURSIVE reachable AS (
-                SELECT DISTINCT s.fqn FROM symbols s
+                SELECT s.fqn FROM symbols s
                 WHERE s.file_path LIKE ? ESCAPE '!'
+                  AND s.fqn NOT IN (
+                      SELECT e.to_fqn FROM symbol_edges e
+                      JOIN symbols s2 ON s2.fqn = e.from_fqn
+                      WHERE s2.file_path LIKE ? ESCAPE '!'
+                  )
 
                 UNION
 
@@ -3250,7 +3259,9 @@ class DuckDBProvider(SerialDatabaseProvider):
             )
             SELECT fqn FROM reachable
         """
-        reachable_rows = conn.execute(reach_sql, [pattern, pattern]).fetchall()
+        reachable_rows = conn.execute(
+            reach_sql, [pattern, pattern, pattern]
+        ).fetchall()
         reachable_fqns = {r[0] for r in reachable_rows}
 
         return [s for s in all_symbols if s["fqn"] not in reachable_fqns]
