@@ -203,7 +203,6 @@ _CONCEPT_SPECIFICITY = {
     "TABLE": 2,
     "OBJECT": 2,
     "ARRAY": 1,
-    "BLOCK": 1,
 }
 
 

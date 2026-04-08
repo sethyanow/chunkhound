@@ -2009,7 +2009,7 @@ class IndexingCoordinator(BaseService):
                 logger.error(f"  ... and {len(all_errors) - 5} more errors")
 
         # Scan files in the root directory itself (not in subdirs) using helper
-        root_gitignore_patterns = parent_gitignores.get(directory, [])
+        parent_gitignores.get(directory, [])
         # Build or reuse local repo-aware engine for the root directory scan
         local_engine = self._get_or_build_ignore_engine(
             root=directory,

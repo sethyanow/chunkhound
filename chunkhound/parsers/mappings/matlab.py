@@ -4,9 +4,14 @@ This module provides MATLAB-specific tree-sitter queries and extraction logic
 for mapping MATLAB AST nodes to semantic chunks.
 """
 
+from __future__ import annotations
+
 import re
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from chunkhound.parsers.universal_engine import UniversalConcept
 
 from tree_sitter import Node as TSNode
 
@@ -408,7 +413,7 @@ class MatlabMapping(BaseMapping):
         else:
             return f"{name}({param_str})"
 
-    def get_query_for_concept(self, concept: "UniversalConcept") -> str | None:
+    def get_query_for_concept(self, concept: UniversalConcept) -> str | None:
         """Get tree-sitter query for universal concept in MATLAB.
 
         Extends default DEFINITION query to include properties blocks and
@@ -453,7 +458,7 @@ class MatlabMapping(BaseMapping):
         return None
 
     def extract_name(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> str:
         """Extract name from captures for MATLAB nodes.
 
@@ -508,7 +513,7 @@ class MatlabMapping(BaseMapping):
         return self.get_fallback_name(def_node, "definition")
 
     def extract_content(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> str:
         """Extract content from captures for MATLAB nodes.
 
@@ -540,7 +545,7 @@ class MatlabMapping(BaseMapping):
         return self.get_node_text(def_node, source)
 
     def extract_metadata(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> dict[str, Any]:
         """Extract metadata from captures for MATLAB nodes.
 
@@ -593,7 +598,7 @@ class MatlabMapping(BaseMapping):
         return True
 
     def extract_constants(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> list[dict[str, str]] | None:
         """Extract constant definitions from MATLAB code.
 

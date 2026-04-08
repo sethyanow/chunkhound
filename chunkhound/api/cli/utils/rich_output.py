@@ -73,7 +73,7 @@ class RichOutputFormatter:
 
             # Test Rich console creation
             try:
-                test_console = Console()
+                Console()
                 # Simple test - try to create a text object
                 from rich.text import Text
 

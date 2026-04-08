@@ -66,7 +66,7 @@ class TSXMapping(TypeScriptMapping):
         ) @component.definition
 
         (variable_declarator
-            name: (identifier) @component.name  
+            name: (identifier) @component.name
             value: (arrow_function
                 body: (statement_block
                     (return_statement
@@ -96,7 +96,7 @@ class TSXMapping(TypeScriptMapping):
         """
         return """
         (jsx_element
-            open_tag: (jsx_opening_element 
+            open_tag: (jsx_opening_element
                 name: (_) @jsx.element_name
             )
         ) @jsx.element
@@ -148,7 +148,7 @@ class TSXMapping(TypeScriptMapping):
             )
         ) @hook.typed_declaration
 
-        ; Regular hook variable declarations  
+        ; Regular hook variable declarations
         (variable_declarator
             name: (_) @hook.variable
             value: (call_expression

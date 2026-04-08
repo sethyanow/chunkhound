@@ -50,14 +50,14 @@ class DatabaseConfig(BaseModel):
     )
 
     @field_validator("path")
-    def validate_path(cls, v: Path | None) -> Path | None:
+    def validate_path(self, v: Path | None) -> Path | None:
         """Convert string paths to Path objects."""
         if v is not None and not isinstance(v, Path):
             return Path(v)
         return v
 
     @field_validator("provider")
-    def validate_provider(cls, v: str) -> str:
+    def validate_provider(self, v: str) -> str:
         """Validate database provider selection."""
         valid_providers = ["duckdb", "lancedb"]
         if v not in valid_providers:

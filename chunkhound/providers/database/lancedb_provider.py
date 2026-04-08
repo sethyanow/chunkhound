@@ -2948,7 +2948,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         self, conn: Any, state: dict[str, Any], scope: str, limit: int
     ) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        escaped = _escape_like_pattern(scope)
+        _escape_like_pattern(scope)
 
         try:
             all_edges = edge_tbl.search().to_list()

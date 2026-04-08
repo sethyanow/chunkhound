@@ -6,8 +6,13 @@ including classes, interfaces, methods, properties, namespaces, attributes,
 and XML documentation comments.
 """
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from chunkhound.parsers.universal_engine import UniversalConcept
 
 from loguru import logger
 from tree_sitter import Node as TSNode
@@ -130,7 +135,7 @@ class CSharpMapping(BaseMapping):
         (comment) @xml_doc
         """
 
-    def get_query_for_concept(self, concept: "UniversalConcept") -> str | None:
+    def get_query_for_concept(self, concept: UniversalConcept) -> str | None:
         """Get tree-sitter query for universal concept in C#."""
         from chunkhound.parsers.universal_engine import UniversalConcept
 
@@ -199,7 +204,7 @@ class CSharpMapping(BaseMapping):
             return None
 
     def extract_name(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> str:
         """Extract name from captures for this concept."""
         from chunkhound.parsers.universal_engine import UniversalConcept
@@ -252,7 +257,7 @@ class CSharpMapping(BaseMapping):
         return "unnamed"
 
     def extract_content(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> str:
         """Extract content from captures for this concept."""
         source = content.decode("utf-8")
@@ -267,7 +272,7 @@ class CSharpMapping(BaseMapping):
         return ""
 
     def extract_metadata(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
+        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
     ) -> dict[str, Any]:
         """Extract C#-specific metadata."""
         from chunkhound.parsers.universal_engine import UniversalConcept
@@ -832,7 +837,7 @@ class CSharpMapping(BaseMapping):
             return self.get_fallback_name(node, "symbol")
 
     def extract_constants(
-        self, concept: "Any", captures: dict[str, TSNode], content: bytes
+        self, concept: Any, captures: dict[str, TSNode], content: bytes
     ) -> list[dict[str, str]] | None:
         """Extract constant definitions from C# code.
 

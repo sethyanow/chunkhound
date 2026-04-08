@@ -54,7 +54,7 @@ class DuckDBEmbeddingRepository:
                     [table_name],
                 ).fetchone()
                 if result is None:
-                    self.connection_manager.connection.execute(f"""  
+                    self.connection_manager.connection.execute(f"""
                         CREATE TABLE {table_name} (
                             id INTEGER PRIMARY KEY DEFAULT nextval('embeddings_id_seq'),
                             chunk_id INTEGER REFERENCES chunks(id),
@@ -505,7 +505,7 @@ class DuckDBEmbeddingRepository:
 
             # Get all embedding tables
             table_result = self.connection_manager.connection.execute("""
-                SELECT table_name FROM information_schema.tables 
+                SELECT table_name FROM information_schema.tables
                 WHERE table_name LIKE 'embeddings_%'
             """).fetchall()
 

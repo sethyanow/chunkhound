@@ -68,7 +68,7 @@ class TomlMapping(BaseMapping):
             # Match TOML tables and key-value pairs as definitions
             return """
                 (table) @definition
-                
+
                 (pair) @definition
             """
 

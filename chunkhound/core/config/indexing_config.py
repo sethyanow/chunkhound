@@ -251,7 +251,7 @@ class IndexingConfig(BaseModel):
     )
 
     @field_validator("include", "exclude")
-    def validate_patterns(cls, v: list[str]) -> list[str]:
+    def validate_patterns(self, v: list[str]) -> list[str]:
         """Validate glob patterns."""
         if not isinstance(v, list):
             raise ValueError("Patterns must be a list")

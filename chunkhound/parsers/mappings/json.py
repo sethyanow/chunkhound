@@ -54,15 +54,15 @@ class JsonMapping(BaseMapping):
             # Match individual key-value pairs and primitive values as definitions
             return """
                 (pair) @definition
-                
+
                 (string) @definition
-                
+
                 (number) @definition
-                
+
                 (true) @definition
-                
+
                 (false) @definition
-                
+
                 (null) @definition
             """
 
@@ -70,7 +70,7 @@ class JsonMapping(BaseMapping):
             # Match small container structures
             return """
                 (object) @definition
-                
+
                 (array) @definition
             """
 

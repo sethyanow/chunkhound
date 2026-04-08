@@ -57,7 +57,7 @@ def validate_provider_args(
             2) Set CHUNKHOUND_EMBEDDING__PROVIDER environment variable
             3) Add provider to .chunkhound.json config file
             4) Use --no-embeddings to skip embeddings entirely.
-            
+
             For more information, see: https://ofriw.github.io/chunkhound/configuration/
             """
         )

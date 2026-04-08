@@ -235,10 +235,13 @@ def generic_token_limit_check(error: Exception) -> bool:
 
 
 # Convenience decorators for specific providers
-with_openai_token_handling = lambda: with_token_limit_handling(openai_token_limit_check)
-with_anthropic_token_handling = lambda: with_token_limit_handling(
+def with_openai_token_handling():
+    return with_token_limit_handling(openai_token_limit_check)
+def with_anthropic_token_handling():
+    return with_token_limit_handling(
     anthropic_token_limit_check
 )
-with_generic_token_handling = lambda: with_token_limit_handling(
+def with_generic_token_handling():
+    return with_token_limit_handling(
     generic_token_limit_check
 )

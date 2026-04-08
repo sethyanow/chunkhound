@@ -573,9 +573,9 @@ class DuckDBProvider(SerialDatabaseProvider):
         try:
             # Check if 'size' and 'signature' columns exist and drop them
             columns_info = conn.execute("""
-                SELECT column_name 
-                FROM information_schema.columns 
-                WHERE table_name = 'chunks' 
+                SELECT column_name
+                FROM information_schema.columns
+                WHERE table_name = 'chunks'
                 AND column_name IN ('size', 'signature')
             """).fetchall()
 
@@ -810,7 +810,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     vector_str = str(emb[4])  # embedding column
                     conn.execute(
                         f"""
-                        INSERT INTO {table_name} 
+                        INSERT INTO {table_name}
                         (chunk_id, provider, model, embedding, dims, created_at)
                         VALUES (?, ?, ?, {vector_str}, ?, ?)
                     """,
@@ -1566,8 +1566,8 @@ class DuckDBProvider(SerialDatabaseProvider):
         # Delete embeddings first to avoid foreign key constraint
         # Get all embedding tables
         result = conn.execute("""
-            SELECT table_name 
-            FROM information_schema.tables 
+            SELECT table_name
+            FROM information_schema.tables
             WHERE table_name LIKE 'embeddings_%'
         """).fetchall()
 
@@ -1867,7 +1867,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             # Use parameterized placeholders for chunk IDs
             placeholders = ", ".join(["?" for _ in chunk_ids])
             query = f"""
-                SELECT DISTINCT chunk_id 
+                SELECT DISTINCT chunk_id
                 FROM {table_name}
                 WHERE chunk_id IN ({placeholders})
                 AND provider = ? AND model = ?
@@ -2407,7 +2407,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                         break
                 else:
                     # Debug what's actually in this table for this chunk
-                    all_for_chunk = conn.execute(
+                    conn.execute(
                         f"""
                         SELECT provider, model, chunk_id
                         FROM {table}
@@ -2443,7 +2443,6 @@ class DuckDBProvider(SerialDatabaseProvider):
             embedding_type = f"FLOAT[{dims}]"
 
             # Use the embedding to find similar chunks
-            similarity_metric = "cosine"  # Default for semantic search
             threshold_condition = (
                 f"AND distance <= {threshold}" if threshold is not None else ""
             )
@@ -2581,7 +2580,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Query for similar chunks using the provided embedding
             query = f"""
-                SELECT 
+                SELECT
                     c.id as chunk_id,
                     c.symbol as name,
                     c.code as content,
@@ -3259,9 +3258,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             )
             SELECT fqn FROM reachable
         """
-        reachable_rows = conn.execute(
-            reach_sql, [pattern, pattern, pattern]
-        ).fetchall()
+        reachable_rows = conn.execute(reach_sql, [pattern, pattern, pattern]).fetchall()
         reachable_fqns = {r[0] for r in reachable_rows}
 
         return [s for s in all_symbols if s["fqn"] not in reachable_fqns]

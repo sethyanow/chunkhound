@@ -67,11 +67,11 @@ class MakefileMapping(BaseMapping):
             (rule
                 (targets) @targets
             ) @definition
-            
+
             (variable_assignment
                 name: (_) @name
             ) @definition
-            
+
             (define_directive
                 name: (_) @name
             ) @definition
@@ -82,12 +82,12 @@ class MakefileMapping(BaseMapping):
             (rule
                 (recipe) @recipe
             ) @definition
-            
+
             (conditional
                 condition: (_) @condition
                 (_) @block
             ) @definition
-            
+
             (define_directive
                 name: (_) @name
                 (_) @block
@@ -104,11 +104,11 @@ class MakefileMapping(BaseMapping):
             (include_directive
                 filenames: (_) @include_path
             ) @definition
-            
+
             (include_directive
                 filenames: (_) @include_path
             ) @definition
-            
+
             (include_directive
                 filenames: (_) @include_path
             ) @definition

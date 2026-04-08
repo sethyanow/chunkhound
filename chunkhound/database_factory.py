@@ -95,9 +95,9 @@ def create_services(
     # Avoid double-configuring the registry (which can open the DB twice and lock it).
     registry = get_registry()
     try:
-        existing_cfg = registry.get_config()
+        registry.get_config()
     except Exception:
-        existing_cfg = None
+        pass
 
     # Always (re)configure the registry with an effective per-call config so that
     # tests using distinct temporary directories get an IndexingCoordinator whose

@@ -15,7 +15,6 @@ from .graph import _graph_walk
 from .queries.common import escape_like, scope_filter
 from .registry import register_tool
 
-
 # ---------------------------------------------------------------------------
 # semantic_diff helpers — git integration
 # ---------------------------------------------------------------------------

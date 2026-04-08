@@ -55,12 +55,12 @@ class YamlMapping(BaseMapping):
                 key: (flow_node) @key
                 value: (_) @value
             ) @definition
-            
+
             (flow_pair
                 key: (flow_node) @key
                 value: (_) @value
             ) @definition
-            
+
             (block_sequence_item
                 (flow_node) @item
             ) @definition
@@ -69,13 +69,13 @@ class YamlMapping(BaseMapping):
         elif concept == UniversalConcept.BLOCK:
             return """
             (block_mapping) @definition
-            
+
             (flow_mapping) @definition
-            
+
             (block_sequence) @definition
-            
+
             (flow_sequence) @definition
-            
+
             (document) @definition
             """
 
@@ -97,7 +97,7 @@ class YamlMapping(BaseMapping):
         elif concept == UniversalConcept.STRUCTURE:
             return """
             (document) @definition
-            
+
             (stream) @definition
             """
 

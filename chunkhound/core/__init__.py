@@ -32,6 +32,8 @@ __all__ = [
     "Language",
     "ProviderName",
     "ModelName",
+    # Version
+    "__version__",
     # Exceptions
     "ChunkHoundError",
     "ValidationError",

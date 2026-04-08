@@ -1,17 +1,27 @@
-"""Fake provider implementations for testing code research without API calls.
+"""Fake provider implementations for testing without external dependencies.
 
 These providers return deterministic, predictable responses for testing
 the complete code research pipeline in CI/CD without external dependencies.
+
+Includes:
+- FakeLLMProvider: Scripted LLM responses
+- FakeEmbeddingProvider: Deterministic hash-based embeddings
+- ConstantEmbeddingProvider: Identical vectors for all inputs
+- ValidatingEmbeddingProvider: Validates chunk size constraints
+- FakeDatabaseProvider: Dict-backed DatabaseProvider protocol implementation
 """
 
 import asyncio
 import math
 import re
 from collections.abc import AsyncIterator
+from pathlib import Path
 from typing import Any
 
 import xxhash
 
+from chunkhound.core.models import Chunk, Embedding, File
+from chunkhound.core.models.symbol import EdgeRow, SymbolRow
 from chunkhound.interfaces.embedding_provider import EmbeddingConfig, RerankResult
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 
@@ -671,3 +681,865 @@ class ValidatingEmbeddingProvider(FakeEmbeddingProvider):
             "min_tokens": float("inf"),
             "max_tokens": 0,
         }
+
+
+class FakeDatabaseProvider:
+    """Dict-backed DatabaseProvider protocol implementation for unit tests.
+
+    Replaces real DuckDB/LanceDB providers in tests that need to verify
+    application logic without touching a real database. Stores all data
+    in Python dicts with auto-incrementing integer IDs.
+
+    Same pattern as FakeEmbeddingProvider / FakeLLMProvider above.
+    """
+
+    def __init__(self, base_directory: str = "/fake/project") -> None:
+        self._base_directory = Path(base_directory)
+        self._connected = False
+
+        # Auto-increment counters
+        self._next_file_id = 1
+        self._next_chunk_id = 1
+        self._next_embedding_id = 1
+        self._next_symbol_id = 1
+
+        # Storage: id → dict
+        self._files: dict[int, dict[str, Any]] = {}
+        self._chunks: dict[int, dict[str, Any]] = {}
+        self._embeddings: dict[int, dict[str, Any]] = {}
+        self._symbols: dict[int, dict[str, Any]] = {}
+        self._edges: list[dict[str, Any]] = []
+
+        # Path index for fast file lookup
+        self._file_path_index: dict[str, int] = {}
+
+        # Transaction state
+        self._in_transaction = False
+
+    # --- Properties ---
+
+    @property
+    def db_path(self) -> Path | str:
+        return ":memory:"
+
+    def get_base_directory(self) -> Path:
+        return self._base_directory
+
+    @property
+    def is_connected(self) -> bool:
+        return self._connected
+
+    # --- Connection Management ---
+
+    def connect(self) -> None:
+        self._connected = True
+
+    def disconnect(self) -> None:
+        self._connected = False
+
+    # --- Schema Management ---
+
+    def create_schema(self) -> None:
+        pass
+
+    def create_indexes(self) -> None:
+        pass
+
+    def create_vector_index(
+        self, provider: str, model: str, dims: int, metric: str = "cosine"
+    ) -> None:
+        pass
+
+    def drop_vector_index(
+        self, provider: str, model: str, dims: int, metric: str = "cosine"
+    ) -> str:
+        return f"dropped:{provider}/{model}/{dims}"
+
+    # --- File Operations ---
+
+    def insert_file(self, file: File) -> int:
+        file_id = self._next_file_id
+        self._next_file_id += 1
+        record = file.to_dict()
+        record["id"] = file_id
+        self._files[file_id] = record
+        self._file_path_index[file.path] = file_id
+        return file_id
+
+    def get_file_by_path(
+        self, path: str, as_model: bool = False
+    ) -> dict[str, Any] | File | None:
+        file_id = self._file_path_index.get(path)
+        if file_id is None:
+            return None
+        return self._return_file(file_id, as_model)
+
+    def get_file_by_id(
+        self, file_id: int, as_model: bool = False
+    ) -> dict[str, Any] | File | None:
+        if file_id not in self._files:
+            return None
+        return self._return_file(file_id, as_model)
+
+    def _return_file(self, file_id: int, as_model: bool) -> dict[str, Any] | File:
+        record = dict(self._files[file_id])
+        if as_model:
+            return File.from_dict(record)
+        return record
+
+    def update_file(self, file_id: int, **kwargs: Any) -> None:
+        if file_id in self._files:
+            self._files[file_id].update(kwargs)
+
+    def delete_file_completely(self, file_path: str) -> bool:
+        file_id = self._file_path_index.get(file_path)
+        if file_id is None:
+            return False
+        # Remove chunks for this file
+        chunk_ids_to_remove = [
+            cid for cid, c in self._chunks.items() if c.get("file_id") == file_id
+        ]
+        for cid in chunk_ids_to_remove:
+            # Also remove embeddings for these chunks
+            self._remove_embeddings_for_chunk(cid)
+            del self._chunks[cid]
+        # Remove symbols and edges for this file
+        sym_ids_to_remove = [
+            sid for sid, s in self._symbols.items() if s.get("file_id") == file_id
+        ]
+        for sid in sym_ids_to_remove:
+            del self._symbols[sid]
+        self._edges = [
+            e
+            for e in self._edges
+            if e.get("from_symbol_id") not in sym_ids_to_remove
+            and e.get("to_symbol_id") not in sym_ids_to_remove
+        ]
+        # Remove file
+        del self._files[file_id]
+        del self._file_path_index[file_path]
+        return True
+
+    async def delete_file_completely_async(self, file_path: str) -> bool:
+        return self.delete_file_completely(file_path)
+
+    async def insert_file_async(self, file: File) -> int:
+        return self.insert_file(file)
+
+    async def get_file_by_path_async(
+        self, path: str, as_model: bool = False
+    ) -> dict[str, Any] | File | None:
+        return self.get_file_by_path(path, as_model)
+
+    async def update_file_async(self, file_id: int, **kwargs: Any) -> None:
+        self.update_file(file_id, **kwargs)
+
+    # --- Chunk Operations ---
+
+    def insert_chunk(self, chunk: Chunk) -> int:
+        chunk_id = self._next_chunk_id
+        self._next_chunk_id += 1
+        record = chunk.to_dict()
+        record["id"] = chunk_id
+        # Ensure file_path is set from the file record if not on chunk
+        if "file_path" not in record or record["file_path"] is None:
+            file_rec = self._files.get(chunk.file_id)
+            if file_rec:
+                record["file_path"] = file_rec["path"]
+        self._chunks[chunk_id] = record
+        return chunk_id
+
+    def insert_chunks_batch(self, chunks: list[Chunk]) -> list[int]:
+        return [self.insert_chunk(c) for c in chunks]
+
+    def get_chunk_by_id(
+        self, chunk_id: int, as_model: bool = False
+    ) -> dict[str, Any] | Chunk | None:
+        if chunk_id not in self._chunks:
+            return None
+        record = dict(self._chunks[chunk_id])
+        if as_model:
+            return Chunk.from_dict(record)
+        return record
+
+    def get_chunks_by_file_id(
+        self, file_id: int, as_model: bool = False
+    ) -> list[dict[str, Any] | Chunk]:
+        matched = [
+            dict(c) for c in self._chunks.values() if c.get("file_id") == file_id
+        ]
+        if as_model:
+            return [Chunk.from_dict(r) for r in matched]
+        # Protocol requires list[dict | Chunk]; build with correct union type
+        out: list[dict[str, Any] | Chunk] = list(matched)
+        return out
+
+    async def get_chunks_by_file_id_async(
+        self, file_id: int, as_model: bool = False
+    ) -> list[dict[str, Any] | Chunk]:
+        return self.get_chunks_by_file_id(file_id, as_model)
+
+    async def insert_chunks_batch_async(self, chunks: list[Chunk]) -> list[int]:
+        return self.insert_chunks_batch(chunks)
+
+    async def delete_chunks_batch_async(self, chunk_ids: list[int]) -> None:
+        self.delete_chunks_batch(chunk_ids)
+
+    def delete_file_chunks(self, file_id: int) -> None:
+        to_remove = [
+            cid for cid, c in self._chunks.items() if c.get("file_id") == file_id
+        ]
+        for cid in to_remove:
+            self._remove_embeddings_for_chunk(cid)
+            del self._chunks[cid]
+
+    def delete_chunks_batch(self, chunk_ids: list[int]) -> None:
+        for cid in chunk_ids:
+            if cid in self._chunks:
+                self._remove_embeddings_for_chunk(cid)
+                del self._chunks[cid]
+
+    def delete_chunk(self, chunk_id: int) -> None:
+        if chunk_id in self._chunks:
+            self._remove_embeddings_for_chunk(chunk_id)
+            del self._chunks[chunk_id]
+
+    def update_chunk(self, chunk_id: int, **kwargs: Any) -> None:
+        if chunk_id in self._chunks:
+            self._chunks[chunk_id].update(kwargs)
+
+    # --- Embedding Operations ---
+
+    def insert_embedding(self, embedding: Embedding) -> int:
+        emb_id = self._next_embedding_id
+        self._next_embedding_id += 1
+        record = embedding.to_dict()
+        record["id"] = emb_id
+        self._embeddings[emb_id] = record
+        return emb_id
+
+    def insert_embeddings_batch(
+        self,
+        embeddings_data: list[dict],
+        batch_size: int | None = None,
+        connection: Any = None,
+    ) -> int:
+        count = 0
+        for emb_data in embeddings_data:
+            emb_id = self._next_embedding_id
+            self._next_embedding_id += 1
+            emb_data_copy = dict(emb_data)
+            emb_data_copy["id"] = emb_id
+            self._embeddings[emb_id] = emb_data_copy
+            count += 1
+        return count
+
+    def get_embedding_by_chunk_id(
+        self, chunk_id: int, provider: str, model: str
+    ) -> Embedding | None:
+        for emb in self._embeddings.values():
+            if (
+                emb.get("chunk_id") == chunk_id
+                and emb.get("provider") == provider
+                and emb.get("model") == model
+            ):
+                return Embedding.from_dict(emb)
+        return None
+
+    def get_existing_embeddings(
+        self, chunk_ids: list[int], provider: str, model: str
+    ) -> set[int]:
+        return {
+            emb["chunk_id"]
+            for emb in self._embeddings.values()
+            if emb.get("chunk_id") in chunk_ids
+            and emb.get("provider") == provider
+            and emb.get("model") == model
+        }
+
+    def delete_embeddings_by_chunk_id(self, chunk_id: int) -> None:
+        self._remove_embeddings_for_chunk(chunk_id)
+
+    def _remove_embeddings_for_chunk(self, chunk_id: int) -> None:
+        to_remove = [
+            eid
+            for eid, e in self._embeddings.items()
+            if e.get("chunk_id") == chunk_id
+        ]
+        for eid in to_remove:
+            del self._embeddings[eid]
+
+    def get_all_chunks_with_metadata(self) -> list[dict[str, Any]]:
+        results = []
+        for chunk in self._chunks.values():
+            record = dict(chunk)
+            file_id = chunk.get("file_id")
+            if file_id and file_id in self._files:
+                record["file_path"] = self._files[file_id].get("path")
+            results.append(record)
+        return results
+
+    # --- Search Operations ---
+
+    def search_semantic(
+        self,
+        query_embedding: list[float],
+        provider: str,
+        model: str,
+        page_size: int = 10,
+        offset: int = 0,
+        threshold: float | None = None,
+        path_filter: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        # Simple: return all chunks that have embeddings, scored by dot product
+        scored: list[tuple[float, dict[str, Any]]] = []
+        for emb in self._embeddings.values():
+            if emb.get("provider") != provider or emb.get("model") != model:
+                continue
+            chunk_id = emb.get("chunk_id")
+            if chunk_id not in self._chunks:
+                continue
+            chunk = dict(self._chunks[chunk_id])
+            # Apply path filter
+            file_path = chunk.get("file_path", "")
+            if path_filter and not file_path.startswith(path_filter):
+                continue
+            # Compute cosine similarity
+            vec = emb.get("vector", [])
+            if vec and query_embedding:
+                dot = sum(a * b for a, b in zip(query_embedding, vec))
+                mag_q = sum(x * x for x in query_embedding) ** 0.5
+                mag_v = sum(x * x for x in vec) ** 0.5
+                score = dot / (mag_q * mag_v) if mag_q > 0 and mag_v > 0 else 0.0
+            else:
+                score = 0.0
+            if threshold is not None and score < threshold:
+                continue
+            chunk["score"] = score
+            scored.append((score, chunk))
+        scored.sort(key=lambda x: x[0], reverse=True)
+        results = [item[1] for item in scored[offset : offset + page_size]]
+        meta = {
+            "total": len(scored),
+            "page_size": page_size,
+            "offset": offset,
+        }
+        return results, meta
+
+    def find_similar_chunks(
+        self,
+        chunk_id: int,
+        provider: str,
+        model: str,
+        limit: int = 10,
+        threshold: float | None = None,
+        path_filter: str | None = None,
+        fuzzy_path: bool = False,
+    ) -> list[dict[str, Any]]:
+        # Find the embedding for this chunk
+        emb = self.get_embedding_by_chunk_id(chunk_id, provider, model)
+        if emb is None:
+            return []
+        results, _ = self.search_semantic(
+            emb.vector, provider, model, page_size=limit + 1,
+            threshold=threshold, path_filter=path_filter,
+        )
+        # Exclude the seed chunk itself
+        return [r for r in results if r.get("id") != chunk_id][:limit]
+
+    def search_by_embedding(
+        self,
+        query_embedding: list[float],
+        provider: str,
+        model: str,
+        limit: int = 10,
+        threshold: float | None = None,
+        path_filter: str | None = None,
+        fuzzy_path: bool = False,
+    ) -> list[dict[str, Any]]:
+        results, _ = self.search_semantic(
+            query_embedding, provider, model, page_size=limit,
+            threshold=threshold, path_filter=path_filter,
+        )
+        return results
+
+    def search_regex(
+        self,
+        pattern: str,
+        page_size: int = 10,
+        offset: int = 0,
+        path_filter: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        compiled = re.compile(pattern)
+        matched: list[dict[str, Any]] = []
+        for chunk in self._chunks.values():
+            file_path = chunk.get("file_path", "")
+            if path_filter and not file_path.startswith(path_filter):
+                continue
+            code = chunk.get("code", "")
+            if compiled.search(code):
+                matched.append(dict(chunk))
+        results = matched[offset : offset + page_size]
+        meta = {"total": len(matched), "page_size": page_size, "offset": offset}
+        return results, meta
+
+    async def search_regex_async(
+        self,
+        pattern: str,
+        page_size: int = 10,
+        offset: int = 0,
+        path_filter: str | None = None,
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        return self.search_regex(pattern, page_size, offset, path_filter)
+
+    def search_text(
+        self, query: str, page_size: int = 10, offset: int = 0
+    ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+        query_lower = query.lower()
+        matched: list[dict[str, Any]] = []
+        for chunk in self._chunks.values():
+            code = chunk.get("code", "").lower()
+            if query_lower in code:
+                matched.append(dict(chunk))
+        results = matched[offset : offset + page_size]
+        meta = {"total": len(matched), "page_size": page_size, "offset": offset}
+        return results, meta
+
+    def get_chunks_in_range(
+        self, file_id: int, start_line: int, end_line: int
+    ) -> list[dict[str, Any]]:
+        results = []
+        for chunk in self._chunks.values():
+            if chunk.get("file_id") != file_id:
+                continue
+            c_start = chunk.get("start_line", 0)
+            c_end = chunk.get("end_line", 0)
+            # Overlap check
+            if c_start <= end_line and c_end >= start_line:
+                results.append(dict(chunk))
+        return results
+
+    # --- Statistics ---
+
+    def get_stats(self) -> dict[str, int]:
+        return {
+            "total_files": len(self._files),
+            "total_chunks": len(self._chunks),
+            "total_embeddings": len(self._embeddings),
+        }
+
+    async def get_stats_async(self) -> dict[str, int]:
+        return self.get_stats()
+
+    def get_file_stats(self, file_id: int) -> dict[str, Any]:
+        chunks = self.get_chunks_by_file_id(file_id)
+        return {"file_id": file_id, "chunk_count": len(chunks)}
+
+    def get_provider_stats(self, provider: str, model: str) -> dict[str, Any]:
+        count = sum(
+            1
+            for e in self._embeddings.values()
+            if e.get("provider") == provider and e.get("model") == model
+        )
+        return {"provider": provider, "model": model, "embedding_count": count}
+
+    # --- Transaction Operations ---
+
+    def execute_query(
+        self, query: str, params: list[Any] | None = None
+    ) -> list[dict[str, Any]]:
+        # FakeDatabaseProvider does not interpret SQL. Tests that use
+        # execute_query with raw SQL must be rewritten to use the typed
+        # API methods (insert_file, insert_chunk, etc.) when converting
+        # to unit tests. This is intentional — the fake replaces the
+        # database engine, not the SQL language.
+        raise NotImplementedError(
+            "FakeDatabaseProvider does not support raw SQL via execute_query. "
+            "Rewrite the test to use typed API methods (insert_file, insert_chunk, etc.)."
+        )
+
+    def begin_transaction(self) -> None:
+        self._in_transaction = True
+
+    def commit_transaction(self, force_checkpoint: bool = False) -> None:
+        self._in_transaction = False
+
+    def rollback_transaction(self) -> None:
+        self._in_transaction = False
+
+    async def begin_transaction_async(self) -> None:
+        self.begin_transaction()
+
+    async def commit_transaction_async(self, force_checkpoint: bool = False) -> None:
+        self.commit_transaction(force_checkpoint)
+
+    async def rollback_transaction_async(self) -> None:
+        self.rollback_transaction()
+
+    # --- File Processing (no-ops for fake) ---
+
+    async def process_file(
+        self, file_path: Path, skip_embeddings: bool = False
+    ) -> dict[str, Any]:
+        return {"status": "skipped", "file": str(file_path)}
+
+    async def process_directory(
+        self,
+        directory: Path,
+        patterns: list[str] | None = None,
+        exclude_patterns: list[str] | None = None,
+    ) -> dict[str, Any]:
+        return {"status": "skipped", "directory": str(directory)}
+
+    # --- Health & Optimization ---
+
+    def optimize_tables(self) -> None:
+        pass
+
+    def should_optimize(self, operation: str = "") -> bool:
+        return False
+
+    def health_check(self) -> dict[str, Any]:
+        return {"status": "healthy", "provider": "fake"}
+
+    def get_connection_info(self) -> dict[str, Any]:
+        return {"provider": "fake", "connected": self._connected}
+
+    # --- Symbol/Edge CRUD ---
+
+    def insert_symbols_batch(self, symbols: list[SymbolRow]) -> None:
+        for sym in symbols:
+            sym_id = self._next_symbol_id
+            self._next_symbol_id += 1
+            record = dict(sym)
+            record["id"] = sym_id
+            self._symbols[sym_id] = record
+
+    def delete_symbols_by_file(self, file_id: int) -> None:
+        to_remove = [
+            sid for sid, s in self._symbols.items() if s.get("file_id") == file_id
+        ]
+        for sid in to_remove:
+            del self._symbols[sid]
+
+    def delete_edges_by_file(self, file_id: int) -> None:
+        sym_ids = {
+            sid for sid, s in self._symbols.items() if s.get("file_id") == file_id
+        }
+        self._edges = [
+            e
+            for e in self._edges
+            if e.get("from_symbol_id") not in sym_ids
+            and e.get("to_symbol_id") not in sym_ids
+        ]
+
+    def query_symbols_by_file(self, file_id: int) -> list[dict[str, Any]]:
+        return [
+            dict(s) for s in self._symbols.values() if s.get("file_id") == file_id
+        ]
+
+    def query_symbols_by_range(
+        self, file_path: str, line: int
+    ) -> dict[str, Any] | None:
+        # Find file_id from path
+        file_id = self._file_path_index.get(file_path)
+        if file_id is None:
+            return None
+        candidates = []
+        for s in self._symbols.values():
+            if s.get("file_id") != file_id:
+                continue
+            r_start = s.get("range_start", 0)
+            r_end = s.get("range_end", 0)
+            if r_start <= line <= r_end:
+                candidates.append(dict(s))
+        if not candidates:
+            return None
+        # Return innermost (smallest range)
+        candidates.sort(key=lambda c: c.get("range_end", 0) - c.get("range_start", 0))
+        return candidates[0]
+
+    def query_symbols_by_range_overlap(
+        self, file_path: str, min_line: int, max_line: int
+    ) -> list[dict[str, Any]]:
+        file_id = self._file_path_index.get(file_path)
+        if file_id is None:
+            return []
+        results = []
+        for s in self._symbols.values():
+            if s.get("file_id") != file_id:
+                continue
+            r_start = s.get("range_start", 0)
+            r_end = s.get("range_end", 0)
+            if r_start <= max_line and r_end >= min_line:
+                results.append(dict(s))
+        return results
+
+    def query_symbol_fqns_by_file(self, file_id: int) -> dict[str, int]:
+        return {
+            s["fqn"]: s["id"]
+            for s in self._symbols.values()
+            if s.get("file_id") == file_id and "fqn" in s and "id" in s
+        }
+
+    def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
+        file_id = self._file_path_index.get(file_path)
+        if file_id is None:
+            return False
+        return any(
+            s.get("fqn") == fqn and s.get("file_id") == file_id
+            for s in self._symbols.values()
+        )
+
+    def insert_edges_batch(self, edges: list[EdgeRow]) -> None:
+        for edge in edges:
+            self._edges.append(dict(edge))
+
+    # Async symbol/edge variants
+
+    async def insert_symbols_batch_async(self, symbols: list[SymbolRow]) -> None:
+        self.insert_symbols_batch(symbols)
+
+    async def delete_symbols_by_file_async(self, file_id: int) -> None:
+        self.delete_symbols_by_file(file_id)
+
+    async def delete_edges_by_file_async(self, file_id: int) -> None:
+        self.delete_edges_by_file(file_id)
+
+    async def query_symbols_by_file_async(self, file_id: int) -> list[dict[str, Any]]:
+        return self.query_symbols_by_file(file_id)
+
+    async def query_symbol_fqns_by_file_async(self, file_id: int) -> dict[str, int]:
+        return self.query_symbol_fqns_by_file(file_id)
+
+    async def insert_edges_batch_async(self, edges: list[EdgeRow]) -> None:
+        self.insert_edges_batch(edges)
+
+    # --- Graph Query Operations ---
+
+    def graph_walk(
+        self,
+        seed_fqns: list[str],
+        depth: int,
+        directed: bool,
+        edge_kind: str | None,
+        limit: int,
+    ) -> tuple[list[dict[str, Any]], list[dict[str, Any]]]:
+        # BFS walk from seed FQNs
+        visited_fqns: set[str] = set()
+        result_nodes: list[dict[str, Any]] = []
+        result_edges: list[dict[str, Any]] = []
+        frontier = set(seed_fqns)
+
+        for _d in range(depth + 1):
+            next_frontier: set[str] = set()
+            for fqn in frontier:
+                if fqn in visited_fqns:
+                    continue
+                visited_fqns.add(fqn)
+                # Find symbol node
+                for s in self._symbols.values():
+                    if s.get("fqn") == fqn:
+                        result_nodes.append(dict(s))
+                        break
+                if len(result_nodes) >= limit:
+                    break
+                # Find edges
+                for e in self._edges:
+                    if edge_kind and e.get("edge_kind") != edge_kind:
+                        continue
+                    if e.get("from_fqn") == fqn:
+                        result_edges.append(dict(e))
+                        next_frontier.add(e["to_fqn"])
+                    elif not directed and e.get("to_fqn") == fqn:
+                        result_edges.append(dict(e))
+                        next_frontier.add(e["from_fqn"])
+            if len(result_nodes) >= limit:
+                break
+            frontier = next_frontier - visited_fqns
+
+        return result_nodes[:limit], result_edges
+
+    def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
+        # Collect symbols in scope
+        scope_syms = {
+            s["fqn"]: dict(s)
+            for s in self._symbols.values()
+            if s.get("file_path", "").startswith(scope)
+        }
+        if not scope_syms:
+            return []
+        scope_fqns = set(scope_syms.keys())
+
+        # Find which scope FQNs have inbound edges FROM OTHER scope symbols
+        has_scope_internal_inbound: set[str] = set()
+        # Build forward adjacency (from_fqn → set of to_fqns) within scope
+        forward: dict[str, set[str]] = {fqn: set() for fqn in scope_fqns}
+        for e in self._edges:
+            from_fqn = e.get("from_fqn", "")
+            to_fqn = e.get("to_fqn", "")
+            if from_fqn in scope_fqns and to_fqn in scope_fqns:
+                has_scope_internal_inbound.add(to_fqn)
+                forward.setdefault(from_fqn, set()).add(to_fqn)
+
+        # Entry points: scope symbols with NO scope-internal inbound edges
+        entry_points = scope_fqns - has_scope_internal_inbound
+
+        # BFS from entry points to find all reachable symbols
+        reachable: set[str] = set()
+        frontier = set(entry_points)
+        while frontier:
+            next_frontier: set[str] = set()
+            for fqn in frontier:
+                if fqn in reachable:
+                    continue
+                reachable.add(fqn)
+                next_frontier.update(forward.get(fqn, set()) - reachable)
+            frontier = next_frontier
+
+        # Unreachable = scope symbols NOT reached from any entry point
+        unreachable = scope_fqns - reachable
+        return [scope_syms[fqn] for fqn in unreachable]
+
+    def graph_boundary(self, scope: str, limit: int) -> list[dict[str, Any]]:
+        scope_files = {
+            s.get("file_path") for s in self._symbols.values()
+            if s.get("file_path", "").startswith(scope)
+        }
+        boundary_edges = []
+        for e in self._edges:
+            from_in = e.get("from_file", "") in scope_files
+            to_in = e.get("to_file", "") in scope_files
+            if from_in != to_in:  # One inside, one outside
+                boundary_edges.append(dict(e))
+        return boundary_edges[:limit]
+
+    def graph_overview(self, scope: str | None, limit: int) -> list[dict[str, Any]]:
+        # Count edges per symbol
+        edge_counts: dict[str, int] = {}
+        for e in self._edges:
+            for fqn_key in ("from_fqn", "to_fqn"):
+                fqn = e.get(fqn_key, "")
+                edge_counts[fqn] = edge_counts.get(fqn, 0) + 1
+        # Filter by scope
+        results = []
+        for s in self._symbols.values():
+            if scope and not s.get("file_path", "").startswith(scope):
+                continue
+            fqn = s.get("fqn", "")
+            record = dict(s)
+            record["edge_count"] = edge_counts.get(fqn, 0)
+            results.append(record)
+        results.sort(key=lambda x: x.get("edge_count", 0), reverse=True)
+        return results[:limit]
+
+    def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
+        fqns: set[str] = set()
+        for chunk in chunks:
+            fp = chunk.get("file_path", "")
+            c_start = chunk.get("start_line", 0)
+            c_end = chunk.get("end_line", 0)
+            file_id = self._file_path_index.get(fp)
+            if file_id is None:
+                continue
+            for s in self._symbols.values():
+                if s.get("file_id") != file_id:
+                    continue
+                r_start = s.get("range_start", 0)
+                r_end = s.get("range_end", 0)
+                if r_start <= c_end and r_end >= c_start:
+                    fqns.add(s["fqn"])
+        return list(fqns)
+
+    def chunk_resolution(self, fqns: list[str]) -> list[dict[str, Any]]:
+        # Resolve FQNs to chunks via file_id + range overlap
+        results = []
+        for fqn in fqns:
+            for s in self._symbols.values():
+                if s.get("fqn") != fqn:
+                    continue
+                file_id = s.get("file_id")
+                r_start = s.get("range_start", 0)
+                r_end = s.get("range_end", 0)
+                for c in self._chunks.values():
+                    if c.get("file_id") != file_id:
+                        continue
+                    c_start = c.get("start_line", 0)
+                    c_end = c.get("end_line", 0)
+                    if c_start <= r_end and c_end >= r_start:
+                        results.append(dict(c))
+        return results
+
+    def symbol_stats(self) -> dict[str, Any]:
+        return {
+            "symbol_count": len(self._symbols),
+            "edge_count": len(self._edges),
+        }
+
+    # --- Symbol Read Query Operations ---
+
+    def query_symbols_by_scope(self, scope: str) -> list[dict[str, Any]]:
+        return [
+            dict(s)
+            for s in self._symbols.values()
+            if s.get("file_path", "").startswith(scope)
+        ]
+
+    def query_test_symbols(self, scope: str | None) -> list[dict[str, Any]]:
+        results = []
+        for s in self._symbols.values():
+            if s.get("kind") != "Function":
+                continue
+            name = s.get("name", "")
+            if not name.startswith("test_"):
+                continue
+            if scope and not s.get("file_path", "").startswith(scope):
+                continue
+            results.append(dict(s))
+        return results
+
+    def query_symbol_type_signatures(self, fqns: list[str]) -> dict[str, str | None]:
+        result: dict[str, str | None] = {}
+        fqn_set = set(fqns)
+        for s in self._symbols.values():
+            fqn = s.get("fqn", "")
+            if fqn in fqn_set:
+                result[fqn] = s.get("type_signature")
+        return result
+
+    def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
+        file_id = self._file_path_index.get(file_path)
+        if file_id is None:
+            return []
+        fqns: set[str] = set()
+        for s in self._symbols.values():
+            if s.get("file_id") == file_id and "fqn" in s:
+                fqns.add(s["fqn"])
+        return list(fqns)
+
+    # --- Scope Aggregation ---
+
+    def get_scope_stats(self, scope_prefix: str | None) -> tuple[int, int]:
+        files = 0
+        chunks = 0
+        for f in self._files.values():
+            if scope_prefix and not f.get("path", "").startswith(scope_prefix):
+                continue
+            files += 1
+        for c in self._chunks.values():
+            file_id = c.get("file_id")
+            if file_id and file_id in self._files:
+                path = self._files[file_id].get("path", "")
+                if scope_prefix and not path.startswith(scope_prefix):
+                    continue
+            chunks += 1
+        return files, chunks
+
+    def get_scope_file_paths(self, scope_prefix: str | None) -> list[str]:
+        paths = []
+        for f in self._files.values():
+            path = f.get("path", "")
+            if scope_prefix and not path.startswith(scope_prefix):
+                continue
+            paths.append(path)
+        return paths

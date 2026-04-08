@@ -15,12 +15,12 @@ import os
 from collections.abc import Sequence
 from pathlib import Path
 
+from loguru import logger
+
 from chunkhound.utils.file_patterns import (
     should_exclude_path,
     should_include_file,
 )
-from loguru import logger
-
 from chunkhound.utils.git_safe import GitCommandError, run_git
 
 
