@@ -281,7 +281,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def _table_exists(self, table_name: str) -> bool:
         """Check if a table exists in the database - delegate to connection manager."""
-        return self._execute_in_db_thread_sync("table_exists", table_name)
+        return self._execute_in_db_thread_sync(self._executor_table_exists, table_name)
 
     def _executor_table_exists(self, conn: Any, state: dict[str, Any], table_name: str) -> bool:
         """Executor method for _table_exists - runs in DB thread."""
@@ -297,7 +297,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def _ensure_embedding_table_exists(self, dims: int) -> str:
         """Ensure embedding table exists for given dimensions - delegate to connection manager."""
-        return self._execute_in_db_thread_sync("ensure_embedding_table_exists", dims)
+        return self._execute_in_db_thread_sync(self._executor_ensure_embedding_table_exists, dims)
 
     def _executor_ensure_embedding_table_exists(self, conn: Any, state: dict[str, Any], dims: int) -> str:
         """Executor method for _ensure_embedding_table_exists - runs in DB thread."""
@@ -343,7 +343,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def _maybe_checkpoint(self, force: bool = False) -> None:
         """Perform checkpoint if needed - delegate to connection manager."""
-        self._execute_in_db_thread_sync("maybe_checkpoint", force)
+        self._execute_in_db_thread_sync(self._executor_maybe_checkpoint, force)
 
     def _executor_maybe_checkpoint(self, conn: Any, state: dict[str, Any], force: bool) -> None:
         """Executor method for _maybe_checkpoint - runs in DB thread."""
@@ -383,7 +383,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def create_schema(self) -> None:
         """Create database schema for files, chunks, and embeddings - delegate to connection manager."""
-        self._execute_in_db_thread_sync("create_schema")
+        self._execute_in_db_thread_sync(self._executor_create_schema)
 
     def _executor_create_schema(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for create_schema - runs in DB thread."""
@@ -653,7 +653,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def _get_all_embedding_tables(self) -> list[str]:
         """Get list of all embedding tables (dimension-specific) - delegate to connection manager."""
-        return self._execute_in_db_thread_sync("get_all_embedding_tables")
+        return self._execute_in_db_thread_sync(self._executor_get_all_embedding_tables)
 
     def _executor_get_all_embedding_tables(self, conn: Any, state: dict[str, Any]) -> list[str]:
         """Executor method for _get_all_embedding_tables - runs in DB thread."""
@@ -666,7 +666,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def create_indexes(self) -> None:
         """Create database indexes for performance optimization - delegate to connection manager."""
-        self._execute_in_db_thread_sync("create_indexes")
+        self._execute_in_db_thread_sync(self._executor_create_indexes)
 
     def _executor_create_indexes(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for create_indexes - runs in DB thread."""
@@ -766,7 +766,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         logger.info(f"Creating HNSW index for {provider}/{model} ({dims}D, {metric})")
 
         # Use synchronous executor for non-async method
-        self._execute_in_db_thread_sync("create_vector_index", provider, model, dims, metric)
+        self._execute_in_db_thread_sync(self._executor_create_vector_index, provider, model, dims, metric)
 
     def _executor_create_vector_index(
         self,
@@ -802,7 +802,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def drop_vector_index(self, provider: str, model: str, dims: int, metric: str = "cosine") -> str:
         """Drop HNSW vector index for specific provider/model/dims combination."""
-        return self._execute_in_db_thread_sync("drop_vector_index", provider, model, dims, metric)
+        return self._execute_in_db_thread_sync(self._executor_drop_vector_index, provider, model, dims, metric)
 
     def _executor_drop_vector_index(
         self,
@@ -843,7 +843,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_existing_vector_indexes(self) -> list[dict[str, Any]]:
         """Get list of existing HNSW vector indexes on all embedding tables."""
-        return self._execute_in_db_thread_sync("get_existing_vector_indexes")
+        return self._execute_in_db_thread_sync(self._executor_get_existing_vector_indexes)
 
     def _executor_get_existing_vector_indexes(self, conn: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
         """Executor method for get_existing_vector_indexes - runs in DB thread."""
@@ -1027,7 +1027,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def insert_file(self, file: File) -> int:
         """Insert file record and return file ID - delegate to file repository."""
-        return self._execute_in_db_thread_sync("insert_file", file)
+        return self._execute_in_db_thread_sync(self._executor_insert_file, file)
 
     def _executor_insert_file(self, conn: Any, state: dict[str, Any], file: File) -> int:
         """Executor method for insert_file - runs in DB thread."""
@@ -1045,7 +1045,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     file.mtime if hasattr(file, "mtime") else None,
                     getattr(file, "content_hash", None),
                 )
-                return file_id
+                return file_id  # type: ignore[no-any-return]  # duckdb fetchone() -> Any
 
             # Track operation for checkpoint management
             track_operation(state)
@@ -1069,7 +1069,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             )
 
             file_id = result.fetchone()[0]
-            return file_id
+            return file_id  # type: ignore[no-any-return]  # duckdb fetchone() -> Any
 
         except Exception as e:
             # Handle duplicate key errors
@@ -1077,12 +1077,12 @@ class DuckDBProvider(SerialDatabaseProvider):
                 existing = self._executor_get_file_by_path(conn, state, str(file.path), False)
                 if existing and isinstance(existing, dict) and "id" in existing:
                     logger.info(f"Returning existing file ID for {file.path}")
-                    return existing["id"]
+                    return existing["id"]  # type: ignore[no-any-return]  # duckdb fetchone() -> Any
             raise
 
     def get_file_by_path(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path - delegate to file repository."""
-        return self._execute_in_db_thread_sync("get_file_by_path", path, as_model)
+        return self._execute_in_db_thread_sync(self._executor_get_file_by_path, path, as_model)
 
     def _executor_get_file_by_path(
         self, conn: Any, state: dict[str, Any], path: str, as_model: bool
@@ -1162,7 +1162,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         **kwargs,
     ) -> None:
         """Update file record with new values - delegate to file repository."""
-        self._execute_in_db_thread_sync("update_file", file_id, size_bytes, mtime, content_hash)
+        self._execute_in_db_thread_sync(self._executor_update_file, file_id, size_bytes, mtime, content_hash)
 
     def _executor_update_file(
         self,
@@ -1201,7 +1201,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def delete_file_completely(self, file_path: str) -> bool:
         """Delete a file and all its chunks/embeddings completely - delegate to file repository."""
-        return self._execute_in_db_thread_sync("delete_file_completely", file_path)
+        return self._execute_in_db_thread_sync(self._executor_delete_file_completely, file_path)
 
     def _executor_delete_file_completely(self, conn: Any, state: dict[str, Any], file_path: str) -> bool:
         """Executor method for delete_file_completely - runs in DB thread."""
@@ -1262,7 +1262,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         # OPTIMAL_BATCH: 5000 chunks (benchmarked)
         # PATTERN: Uses VALUES clause for bulk insert
         """
-        return self._execute_in_db_thread_sync("insert_chunks_batch", chunks)
+        return self._execute_in_db_thread_sync(self._executor_insert_chunks_batch, chunks)
 
     def _executor_insert_chunks_batch(self, conn: Any, state: dict[str, Any], chunks: list[Chunk]) -> list[int]:
         """Executor method for insert_chunks_batch - runs in DB thread."""
@@ -1352,7 +1352,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Get all chunks for a specific file - delegate to chunk repository."""
-        return self._execute_in_db_thread_sync("get_chunks_by_file_id", file_id, as_model)
+        return self._execute_in_db_thread_sync(self._executor_get_chunks_by_file_id, file_id, as_model)
 
     def get_chunks_in_range(self, file_id: int, start_line: int, end_line: int) -> list[dict]:
         """Get all chunks overlapping a line range - delegate to chunk repository."""
@@ -1413,7 +1413,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def delete_file_chunks(self, file_id: int) -> None:
         """Delete all chunks for a file - delegate to chunk repository."""
-        self._execute_in_db_thread_sync("delete_file_chunks", file_id)
+        self._execute_in_db_thread_sync(self._executor_delete_file_chunks, file_id)
 
     def _executor_delete_file_chunks(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         """Executor method for delete_file_chunks - runs in DB thread."""
@@ -1462,7 +1462,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def delete_chunk(self, chunk_id: int) -> None:
         """Delete a single chunk by ID with proper foreign key handling."""
-        self._execute_in_db_thread_sync("delete_chunk", chunk_id)
+        self._execute_in_db_thread_sync(self._executor_delete_chunk, chunk_id)
 
     def update_chunk(self, chunk_id: int, **kwargs) -> None:
         """Update chunk record with new values - delegate to chunk repository."""
@@ -1509,7 +1509,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def _executor_get_chunks_by_file_id_query(self, conn: Any, state: dict[str, Any], file_id: int) -> list:
         """Executor method for get_chunks_by_file_id query - runs in DB thread."""
-        return conn.execute(
+        return conn.execute(  # type: ignore[no-any-return]  # duckdb fetchall() -> Any
             """
             SELECT id, file_id, chunk_type, symbol, code, start_line, end_line,
                    start_byte, end_byte, language, created_at, updated_at, metadata
@@ -1532,7 +1532,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         Executes the overlap query to find chunks that intersect with a line range.
         """
-        return conn.execute(
+        return conn.execute(  # type: ignore[no-any-return]  # duckdb fetchall() -> Any
             query,
             [file_id, start_line, end_line, start_line, end_line, start_line, end_line],
         ).fetchall()
@@ -1547,7 +1547,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def _executor_get_all_chunks_with_metadata_query(self, conn: Any, state: dict[str, Any], query: str) -> list:
         """Executor method for get_all_chunks_with_metadata query - runs in DB thread."""
-        return conn.execute(query).fetchall()
+        return conn.execute(query).fetchall()  # type: ignore[no-any-return]  # duckdb fetchall() -> Any
 
     def _executor_get_file_by_id_query(
         self, conn: Any, state: dict[str, Any], file_id: int, as_model: bool
@@ -1610,7 +1610,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         Returns:
             Number of embeddings inserted
         """
-        return self._execute_in_db_thread_sync("insert_embeddings_batch", embeddings_data, batch_size)
+        return self._execute_in_db_thread_sync(self._executor_insert_embeddings_batch, embeddings_data, batch_size)
 
     def _executor_insert_embeddings_batch(
         self,
@@ -1688,7 +1688,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_existing_embeddings(self, chunk_ids: list[int], provider: str, model: str) -> set[int]:
         """Get chunk IDs that already have embeddings for given provider/model."""
-        return self._execute_in_db_thread_sync("get_existing_embeddings", chunk_ids, provider, model)
+        return self._execute_in_db_thread_sync(self._executor_get_existing_embeddings, chunk_ids, provider, model)
 
     def _executor_get_existing_embeddings(
         self,
@@ -1731,14 +1731,14 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_all_chunks_with_metadata(self) -> list[dict[str, Any]]:
         """Get all chunks with their metadata including file paths - delegate to chunk repository."""
-        return self._execute_in_db_thread_sync("get_all_chunks_with_metadata")
+        return self._execute_in_db_thread_sync(self._executor_get_all_chunks_with_metadata)
 
     def get_scope_stats(self, scope_prefix: str | None) -> tuple[int, int]:
         """Return (total_files, total_chunks) under an optional scope prefix.
 
         This is used by code_mapper coverage and must avoid loading full chunk code.
         """
-        return self._execute_in_db_thread_sync("get_scope_stats", scope_prefix)
+        return self._execute_in_db_thread_sync(self._executor_get_scope_stats, scope_prefix)
 
     def _executor_get_scope_stats(self, conn: Any, state: dict[str, Any], scope_prefix: str | None) -> tuple[int, int]:
         """Executor method for get_scope_stats - runs in DB thread."""
@@ -1773,7 +1773,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_scope_file_paths(self, scope_prefix: str | None) -> list[str]:
         """Return file paths under an optional scope prefix."""
-        return self._execute_in_db_thread_sync("get_scope_file_paths", scope_prefix)
+        return self._execute_in_db_thread_sync(self._executor_get_scope_file_paths, scope_prefix)
 
     def _executor_get_scope_file_paths(self, conn: Any, state: dict[str, Any], scope_prefix: str | None) -> list[str]:
         """Executor method for get_scope_file_paths - runs in DB thread."""
@@ -1901,7 +1901,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         # OPTIMIZATION: Dimension-specific tables (1536D, 3072D, etc.)
         """
         return self._execute_in_db_thread_sync(
-            "search_semantic",
+            self._executor_search_semantic,
             query_embedding,
             provider,
             model,
@@ -2054,7 +2054,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform regex search on code content."""
-        return self._execute_in_db_thread_sync("search_regex", pattern, page_size, offset, path_filter, fuzzy_path)
+        return self._execute_in_db_thread_sync(self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path)
 
     def search_chunks_regex(self, pattern: str, file_path: str | None = None) -> list[dict[str, Any]]:
         """Backward compatibility wrapper for legacy search_chunks_regex calls."""
@@ -2169,7 +2169,7 @@ class DuckDBProvider(SerialDatabaseProvider):
     ) -> list[dict[str, Any]]:
         """Find chunks similar to the given chunk using its embedding."""
         return self._execute_in_db_thread_sync(
-            "find_similar_chunks",
+            self._executor_find_similar_chunks,
             chunk_id,
             provider,
             model,
@@ -2340,7 +2340,7 @@ class DuckDBProvider(SerialDatabaseProvider):
     ) -> list[dict[str, Any]]:
         """Find chunks similar to the given embedding vector."""
         return self._execute_in_db_thread_sync(
-            "search_by_embedding",
+            self._executor_search_by_embedding,
             query_embedding,
             provider,
             model,
@@ -2442,7 +2442,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         self, query: str, page_size: int = 10, offset: int = 0
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform full-text search on code content."""
-        return self._execute_in_db_thread_sync("search_text", query, page_size, offset)
+        return self._execute_in_db_thread_sync(self._executor_search_text, query, page_size, offset)
 
     def _executor_search_text(
         self,
@@ -2512,7 +2512,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_stats(self) -> dict[str, int]:
         """Get database statistics (file count, chunk count, etc.)."""
-        return self._execute_in_db_thread_sync("get_stats")
+        return self._execute_in_db_thread_sync(self._executor_get_stats)
 
     def _executor_get_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, int]:
         """Executor method for get_stats - runs in DB thread."""
@@ -2562,7 +2562,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def get_provider_stats(self, provider: str, model: str) -> dict[str, Any]:
         """Get statistics for a specific embedding provider/model."""
-        return self._execute_in_db_thread_sync("get_provider_stats", provider, model)
+        return self._execute_in_db_thread_sync(self._executor_get_provider_stats, provider, model)
 
     def _executor_get_provider_stats(
         self, conn: Any, state: dict[str, Any], provider: str, model: str
@@ -2633,7 +2633,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def execute_query(self, query: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         """Execute a SQL query and return results."""
-        return self._execute_in_db_thread_sync("execute_query", query, params)
+        return self._execute_in_db_thread_sync(self._executor_execute_query, query, params)
 
     def _executor_execute_query(
         self, conn: Any, state: dict[str, Any], query: str, params: list[Any] | None
@@ -2740,7 +2740,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Batch insert symbol rows with internal chunking."""
         if not symbols:
             return
-        self._execute_in_db_thread_sync("insert_symbols_batch", symbols)
+        self._execute_in_db_thread_sync(self._executor_insert_symbols_batch, symbols)
 
     def _executor_insert_symbols_batch(self, conn: Any, state: dict[str, Any], symbols: list[SymbolRow]) -> None:
         if not symbols:
@@ -2774,14 +2774,14 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def delete_symbols_by_file(self, file_id: int) -> None:
         """Delete all symbols for a given file_id."""
-        self._execute_in_db_thread_sync("delete_symbols_by_file", file_id)
+        self._execute_in_db_thread_sync(self._executor_delete_symbols_by_file, file_id)
 
     def _executor_delete_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         conn.execute("DELETE FROM symbols WHERE file_id = ?", [file_id])
 
     def delete_edges_by_file(self, file_id: int) -> None:
         """Delete all edges referencing symbols belonging to this file."""
-        self._execute_in_db_thread_sync("delete_edges_by_file", file_id)
+        self._execute_in_db_thread_sync(self._executor_delete_edges_by_file, file_id)
 
     def _executor_delete_edges_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         conn.execute(
@@ -2793,7 +2793,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_file(self, file_id: int) -> list[dict[str, Any]]:
         """Return all symbols for a given file_id."""
-        return self._execute_in_db_thread_sync("query_symbols_by_file", file_id)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_file, file_id)
 
     def _executor_query_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> list[dict[str, Any]]:
         rows = conn.execute("SELECT * FROM symbols WHERE file_id = ?", [file_id]).fetchall()
@@ -2801,7 +2801,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_range(self, file_path: str, line: int) -> dict[str, Any] | None:
         """Return the innermost symbol containing the given line."""
-        return self._execute_in_db_thread_sync("query_symbols_by_range", file_path, line)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_range, file_path, line)
 
     def _executor_query_symbols_by_range(
         self, conn: Any, state: dict[str, Any], file_path: str, line: int
@@ -2817,7 +2817,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_range_overlap(self, file_path: str, min_line: int, max_line: int) -> list[dict[str, Any]]:
         """Return all symbols whose range overlaps [min_line, max_line]."""
-        return self._execute_in_db_thread_sync("query_symbols_by_range_overlap", file_path, min_line, max_line)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_range_overlap, file_path, min_line, max_line)
 
     def _executor_query_symbols_by_range_overlap(
         self,
@@ -2835,7 +2835,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def query_symbol_fqns_by_file(self, file_id: int) -> dict[str, int]:
         """Return {fqn: symbol_id} mapping for all symbols in a file."""
-        return self._execute_in_db_thread_sync("query_symbol_fqns_by_file", file_id)
+        return self._execute_in_db_thread_sync(self._executor_query_symbol_fqns_by_file, file_id)
 
     def _executor_query_symbol_fqns_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> dict[str, int]:
         rows = conn.execute("SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]).fetchall()
@@ -2843,7 +2843,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
         """Check whether a symbol with the given FQN and file_path exists."""
-        return self._execute_in_db_thread_sync("query_symbols_by_fqn_exists", fqn, file_path)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_fqn_exists, fqn, file_path)
 
     def _executor_query_symbols_by_fqn_exists(self, conn: Any, state: dict[str, Any], fqn: str, file_path: str) -> bool:
         rows = conn.execute(
@@ -2856,7 +2856,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Batch insert edge rows with internal chunking."""
         if not edges:
             return
-        self._execute_in_db_thread_sync("insert_edges_batch", edges)
+        self._execute_in_db_thread_sync(self._executor_insert_edges_batch, edges)
 
     def _executor_insert_edges_batch(self, conn: Any, state: dict[str, Any], edges: list[EdgeRow]) -> None:
         if not edges:
@@ -2895,7 +2895,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Walk connected symbols from seed FQNs."""
         if not seed_fqns:
             return [], []
-        return self._execute_in_db_thread_sync("graph_walk", seed_fqns, depth, directed, edge_kind, limit)
+        return self._execute_in_db_thread_sync(self._executor_graph_walk, seed_fqns, depth, directed, edge_kind, limit)
 
     def _executor_graph_walk(
         self,
@@ -2983,7 +2983,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
         """Find unreachable symbols within a scope prefix."""
-        return self._execute_in_db_thread_sync("graph_reachability", scope)
+        return self._execute_in_db_thread_sync(self._executor_graph_reachability, scope)
 
     def _executor_graph_reachability(self, conn: Any, state: dict[str, Any], scope: str) -> list[dict[str, Any]]:
         pattern = escape_like_pattern(scope) + "%"
@@ -3027,7 +3027,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def graph_boundary(self, scope: str, limit: int) -> list[dict[str, Any]]:
         """Find cross-boundary edges for a scope prefix."""
-        return self._execute_in_db_thread_sync("graph_boundary", scope, limit)
+        return self._execute_in_db_thread_sync(self._executor_graph_boundary, scope, limit)
 
     def _executor_graph_boundary(
         self, conn: Any, state: dict[str, Any], scope: str, limit: int
@@ -3053,7 +3053,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def graph_overview(self, scope: str | None, limit: int) -> list[dict[str, Any]]:
         """Get top symbols by edge connectivity."""
-        return self._execute_in_db_thread_sync("graph_overview", scope, limit)
+        return self._execute_in_db_thread_sync(self._executor_graph_overview, scope, limit)
 
     def _executor_graph_overview(
         self, conn: Any, state: dict[str, Any], scope: str | None, limit: int
@@ -3091,7 +3091,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Resolve seed chunks to symbol FQNs via range overlap."""
         if not chunks:
             return []
-        return self._execute_in_db_thread_sync("symbol_overlap", chunks)
+        return self._execute_in_db_thread_sync(self._executor_symbol_overlap, chunks)
 
     def _executor_symbol_overlap(self, conn: Any, state: dict[str, Any], chunks: list[dict[str, Any]]) -> list[str]:
         if not chunks:
@@ -3111,7 +3111,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Resolve symbol FQNs to chunks via file_id + range overlap."""
         if not fqns:
             return []
-        return self._execute_in_db_thread_sync("chunk_resolution", fqns)
+        return self._execute_in_db_thread_sync(self._executor_chunk_resolution, fqns)
 
     def _executor_chunk_resolution(self, conn: Any, state: dict[str, Any], fqns: list[str]) -> list[dict[str, Any]]:
         if not fqns:
@@ -3132,7 +3132,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def symbol_stats(self) -> dict[str, Any]:
         """Return symbol and edge counts."""
-        return self._execute_in_db_thread_sync("symbol_stats")
+        return self._execute_in_db_thread_sync(self._executor_symbol_stats)
 
     def _executor_symbol_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, Any]:
         sym_count = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
