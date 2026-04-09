@@ -92,9 +92,7 @@ class MCPServerBase(ABC):
         """Log debug message to file if debug mode is enabled."""
         if self.debug_mode:
             # Write to debug file instead of stderr to preserve JSON-RPC protocol
-            debug_file = os.getenv(
-                "CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_mcp_debug.log"
-            )
+            debug_file = os.getenv("CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_mcp_debug.log")
             try:
                 with open(debug_file, "a") as f:
                     timestamp = datetime.now().isoformat()
@@ -133,13 +131,9 @@ class MCPServerBase(ABC):
             # Setup embedding provider (optional - continue if it fails)
             try:
                 if self.config.embedding:
-                    provider = EmbeddingProviderFactory.create_provider(
-                        self.config.embedding
-                    )
+                    provider = EmbeddingProviderFactory.create_provider(self.config.embedding)
                     self.embedding_manager.register_provider(provider, set_default=True)
-                    self.debug_log(
-                        f"Embedding provider registered: {self.config.embedding.provider}"
-                    )
+                    self.debug_log(f"Embedding provider registered: {self.config.embedding.provider}")
             except ValueError as e:
                 # API key or configuration issue - expected for search-only usage
                 self.debug_log(f"Embedding provider setup skipped: {e}")
@@ -150,9 +144,7 @@ class MCPServerBase(ABC):
             # Initialize LLM manager with dual providers (optional - continue if it fails)
             try:
                 if self.config.llm:
-                    utility_config, synthesis_config = (
-                        self.config.llm.get_provider_configs()
-                    )
+                    utility_config, synthesis_config = self.config.llm.get_provider_configs()
                     self.llm_manager = LLMManager(utility_config, synthesis_config)
                     self.debug_log(
                         f"LLM providers registered: {self.config.llm.provider} "
@@ -186,9 +178,7 @@ class MCPServerBase(ABC):
             self.debug_log("Service initialization complete")
 
             # Defer DB connect + realtime start to background so initialize is fast
-            self._startup_task = asyncio.create_task(
-                self._deferred_connect_and_start(target_path)
-            )
+            self._startup_task = asyncio.create_task(self._deferred_connect_and_start(target_path))
 
     async def _deferred_connect_and_start(self, target_path: Path) -> None:
         """Connect DB and start realtime monitoring in background."""
@@ -204,9 +194,7 @@ class MCPServerBase(ABC):
                 from chunkhound.services.lsp_population import LSPPopulationService
 
                 self._lsp_pool = LSPClientPool()
-                self._lsp_population_service = LSPPopulationService(
-                    self._lsp_pool, self.services.provider, target_path
-                )
+                self._lsp_population_service = LSPPopulationService(self._lsp_pool, self.services.provider, target_path)
 
             # Start real-time indexing service
             self.debug_log("Starting real-time indexing service (deferred)")
@@ -216,25 +204,17 @@ class MCPServerBase(ABC):
                 debug_sink=self.debug_log,
                 lsp_population=self._lsp_population_service,
             )
-            monitoring_task = asyncio.create_task(
-                self.realtime_indexing.start(target_path)
-            )
+            monitoring_task = asyncio.create_task(self.realtime_indexing.start(target_path))
             # Schedule background scan AFTER monitoring is confirmed ready
-            self._scan_task = asyncio.create_task(
-                self._coordinated_initial_scan(target_path, monitoring_task)
-            )
+            self._scan_task = asyncio.create_task(self._coordinated_initial_scan(target_path, monitoring_task))
         except Exception as e:
             self.debug_log(f"Deferred connect/start failed: {e}")
 
-    async def _coordinated_initial_scan(
-        self, target_path: Path, monitoring_task: asyncio.Task
-    ) -> None:
+    async def _coordinated_initial_scan(self, target_path: Path, monitoring_task: asyncio.Task) -> None:
         """Perform initial scan after monitoring is confirmed ready."""
         try:
             # Wait for monitoring to be ready (with timeout)
-            await asyncio.wait_for(
-                self.realtime_indexing.monitoring_ready.wait(), timeout=10.0
-            )
+            await asyncio.wait_for(self.realtime_indexing.monitoring_ready.wait(), timeout=10.0)
             self.debug_log("Monitoring confirmed ready, starting initial scan")
 
             # Add small delay to ensure any startup files are captured by monitoring
@@ -246,9 +226,7 @@ class MCPServerBase(ABC):
             await self._background_initial_scan(target_path)
 
         except asyncio.TimeoutError:
-            self.debug_log(
-                "Monitoring setup timeout - proceeding with initial scan anyway"
-            )
+            self.debug_log("Monitoring setup timeout - proceeding with initial scan anyway")
             # Still do the scan even if monitoring isn't ready
             self._scan_progress["is_scanning"] = True
             self._scan_progress["scan_started_at"] = datetime.now().isoformat()
@@ -281,9 +259,7 @@ class MCPServerBase(ABC):
             )
 
             # Perform scan with lower priority
-            stats = await indexing_service.process_directory(
-                target_path, no_embeddings=False
-            )
+            stats = await indexing_service.process_directory(target_path, no_embeddings=False)
 
             # Update final stats
             self._scan_progress.update(
@@ -296,9 +272,7 @@ class MCPServerBase(ABC):
             )
             self._scan_complete = True
 
-            self.debug_log(
-                f"Background scan completed: {stats.files_processed} files, {stats.chunks_created} chunks"
-            )
+            self.debug_log(f"Background scan completed: {stats.files_processed} files, {stats.chunks_created} chunks")
 
         except Exception as e:
             self.debug_log(f"Background initial scan failed: {e}")
@@ -410,26 +384,18 @@ class MCPServerBase(ABC):
 
         tools = []
         for tool_name, tool in TOOL_REGISTRY.items():
-            if tool.requires_embeddings and (
-                not self.embedding_manager
-                or not self.embedding_manager.list_providers()
-            ):
+            if tool.requires_embeddings and (not self.embedding_manager or not self.embedding_manager.list_providers()):
                 continue
             if tool.requires_llm and not self.llm_manager:
                 continue
-            if tool.requires_reranker and not has_reranker_support(
-                self.embedding_manager
-            ):
+            if tool.requires_reranker and not has_reranker_support(self.embedding_manager):
                 continue
 
             tool_params = copy.deepcopy(tool.parameters)
             description = tool.description
 
             if tool_name == "search":
-                if (
-                    not self.embedding_manager
-                    or not self.embedding_manager.list_providers()
-                ):
+                if not self.embedding_manager or not self.embedding_manager.list_providers():
                     if "type" in tool_params.get("properties", {}):
                         tool_params["properties"]["type"]["enum"] = [
                             "regex",

@@ -91,11 +91,7 @@ class MultiHopStrategy:
 
         # Apply defaults - consult config if available
         effective_time_limit = (
-            time_limit
-            if time_limit is not None
-            else self._config.get_effective_time_limit()
-            if self._config
-            else 5.0
+            time_limit if time_limit is not None else self._config.get_effective_time_limit() if self._config else 5.0
         )
         effective_result_limit = (
             result_limit
@@ -146,14 +142,10 @@ class MultiHopStrategy:
 
             # Log reranking effectiveness
             reranked_count = len(rerank_results)
-            logger.debug(
-                f"Initial reranking: {reranked_count}/{len(initial_results)} results reranked"
-            )
+            logger.debug(f"Initial reranking: {reranked_count}/{len(initial_results)} results reranked")
 
             # Sort by rerank score (highest first)
-            initial_results = sorted(
-                initial_results, key=lambda x: x.get("score", 0.0), reverse=True
-            )
+            initial_results = sorted(initial_results, key=lambda x: x.get("score", 0.0), reverse=True)
         except Exception as e:
             logger.warning(f"Initial reranking failed: {e}")
             # Ensure all results still have scores using similarity as fallback
@@ -174,32 +166,26 @@ class MultiHopStrategy:
         while True:
             # Check termination conditions
             if time.perf_counter() - start_time >= effective_time_limit:
-                logger.debug(
-                    f"Dynamic expansion terminated: {effective_time_limit:.1f} second time limit reached"
-                )
+                logger.debug(f"Dynamic expansion terminated: {effective_time_limit:.1f} second time limit reached")
                 break
-            if (
-                effective_result_limit is not None
-                and len(all_results) >= effective_result_limit
-            ):
-                logger.debug(
-                    f"Dynamic expansion terminated: {effective_result_limit} result limit reached"
-                )
+            if effective_result_limit is not None and len(all_results) >= effective_result_limit:
+                logger.debug(f"Dynamic expansion terminated: {effective_result_limit} result limit reached")
                 break
 
             # Get top 5 candidates for expansion
             top_candidates = [r for r in all_results if r.get("score", 0.0) > 0.0][:5]
             if len(top_candidates) < 5:
-                logger.debug(
-                    "Dynamic expansion terminated: insufficient high-scoring candidates"
-                )
+                logger.debug("Dynamic expansion terminated: insufficient high-scoring candidates")
                 break
 
             # Expand using find_similar_chunks for each top candidate
             new_candidates = []
             for candidate in top_candidates:
                 try:
-                    # logger.debug(f"Expanding chunk_id={candidate['chunk_id']} using provider='{provider}', model='{model}'")
+                    # logger.debug(
+                    #     f"Expanding chunk_id={candidate['chunk_id']}"
+                    #     f" using provider='{provider}', model='{model}'"
+                    # )
                     # Select neighbor limit based on exhaustive mode
                     neighbor_limit = (
                         NEIGHBORS_PER_CANDIDATE_EXHAUSTIVE
@@ -226,9 +212,7 @@ class MultiHopStrategy:
                     #            f"{len([n for n in neighbors if n['chunk_id'] not in seen_chunk_ids])} new")
 
                 except Exception as e:
-                    logger.warning(
-                        f"Failed to expand chunk {candidate['chunk_id']}: {e}"
-                    )
+                    logger.warning(f"Failed to expand chunk {candidate['chunk_id']}: {e}")
                     # Continue with other candidates even if one fails
 
             if not new_candidates:
@@ -260,29 +244,19 @@ class MultiHopStrategy:
 
                 # Log reranking effectiveness
                 reranked_count = len(rerank_results)
-                logger.debug(
-                    f"Expansion reranking: {reranked_count}/{len(all_results)} results reranked"
-                )
+                logger.debug(f"Expansion reranking: {reranked_count}/{len(all_results)} results reranked")
 
                 # Sort by rerank score
-                all_results = sorted(
-                    all_results, key=lambda x: x.get("score", 0.0), reverse=True
-                )
+                all_results = sorted(all_results, key=lambda x: x.get("score", 0.0), reverse=True)
 
             except Exception as e:
-                logger.warning(
-                    f"Reranking failed in expansion round {expansion_round}: {e}"
-                )
+                logger.warning(f"Reranking failed in expansion round {expansion_round}: {e}")
                 # Scores already initialized, just sort and continue
-                all_results = sorted(
-                    all_results, key=lambda x: x.get("score", 0.0), reverse=True
-                )
+                all_results = sorted(all_results, key=lambda x: x.get("score", 0.0), reverse=True)
                 break
 
             # Check score derivative for termination (track specific chunks, not positions)
-            current_top_scores = [
-                result.get("score", 0.0) for result in all_results[:5]
-            ]
+            current_top_scores = [result.get("score", 0.0) for result in all_results[:5]]
 
             # Check if any of the originally top chunks have degraded significantly
             score_drops = []
@@ -290,11 +264,7 @@ class MultiHopStrategy:
                 for chunk_id, prev_score in top_chunk_scores.items():
                     # Find this chunk's current score
                     current_score = next(
-                        (
-                            r.get("score", 0.0)
-                            for r in all_results
-                            if r["chunk_id"] == chunk_id
-                        ),
+                        (r.get("score", 0.0) for r in all_results if r["chunk_id"] == chunk_id),
                         0.0,  # If not in results anymore, score is 0
                     )
                     if current_score < prev_score:
@@ -307,23 +277,15 @@ class MultiHopStrategy:
 
             # Check termination conditions
             if score_drops and max(score_drops) >= 0.15:
-                logger.debug(
-                    f"Dynamic expansion terminated: tracked chunk score drop "
-                    f"{max(score_drops):.3f} >= 0.15"
-                )
+                logger.debug(f"Dynamic expansion terminated: tracked chunk score drop {max(score_drops):.3f} >= 0.15")
                 break
 
             if min(current_top_scores) < 0.3:
-                logger.debug(
-                    f"Dynamic expansion terminated: minimum score "
-                    f"{min(current_top_scores):.3f} < 0.3"
-                )
+                logger.debug(f"Dynamic expansion terminated: minimum score {min(current_top_scores):.3f} < 0.3")
                 break
             expansion_round += 1
 
-            logger.debug(
-                f"Expansion round {expansion_round}: {len(all_results)} total results"
-            )
+            logger.debug(f"Expansion round {expansion_round}: {len(all_results)} total results")
 
         # Step 3: Final filtering and pagination
         # In multi-hop search, threshold applies to rerank scores (not similarity scores)
@@ -331,9 +293,7 @@ class MultiHopStrategy:
         if threshold is not None:
             # Use 0.0 default so unscored results are treated as low relevance, not perfect matches
             all_results = [r for r in all_results if r.get("score", 0.0) >= threshold]
-            logger.debug(
-                f"Applied rerank score threshold {threshold}, {len(all_results)} results remain"
-            )
+            logger.debug(f"Applied rerank score threshold {threshold}, {len(all_results)} results remain")
 
         # Apply pagination
         total_results = len(all_results)
@@ -343,9 +303,7 @@ class MultiHopStrategy:
             "offset": offset,
             "page_size": page_size,
             "has_more": offset + page_size < total_results,
-            "next_offset": offset + page_size
-            if offset + page_size < total_results
-            else None,
+            "next_offset": offset + page_size if offset + page_size < total_results else None,
             "total": total_results,
         }
 

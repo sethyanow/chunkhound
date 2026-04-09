@@ -60,25 +60,13 @@ def _summarize_include_patterns(patterns: list[str]) -> tuple[set[str], set[str]
 
     def is_simple_ext(s: str) -> str | None:
         # Accept forms like "*.py" exactly (no other wildcards or path separators)
-        if (
-            s.startswith("*.")
-            and ("*" not in s[2:])
-            and ("?" not in s)
-            and ("[" not in s)
-            and ("/" not in s)
-        ):
+        if s.startswith("*.") and ("*" not in s[2:]) and ("?" not in s) and ("[" not in s) and ("/" not in s):
             return s[1:]
         return None
 
     def is_exact_name(s: str) -> str | None:
         # No wildcards and no path separators
-        if (
-            ("*" not in s)
-            and ("?" not in s)
-            and ("[" not in s)
-            and ("/" not in s)
-            and s
-        ):
+        if ("*" not in s) and ("?" not in s) and ("[" not in s) and ("/" not in s) and s:
             return s
         return None
 
@@ -148,9 +136,7 @@ def _can_prune_dir_by_prefix(include_prefixes: set[str], current_rel: str) -> bo
     return True
 
 
-def _should_prune_heavy_dir(
-    heavy_names: set[str], include_prefixes: set[str], current_name: str
-) -> bool:
+def _should_prune_heavy_dir(heavy_names: set[str], include_prefixes: set[str], current_name: str) -> bool:
     """Return True to prune a heavy directory by name when not explicitly anchored."""
     if current_name not in heavy_names:
         return False
@@ -318,12 +304,8 @@ def load_gitignore_patterns(dir_path: Path, root_dir: Path) -> list[str]:
                     patterns_from_gitignore.append(f"{line[1:]}/**")
                 else:
                     # In subdirectory
-                    patterns_from_gitignore.append(
-                        (rel_from_root / line[1:]).as_posix()
-                    )
-                    patterns_from_gitignore.append(
-                        f"{(rel_from_root / line[1:]).as_posix()}/**"
-                    )
+                    patterns_from_gitignore.append((rel_from_root / line[1:]).as_posix())
+                    patterns_from_gitignore.append(f"{(rel_from_root / line[1:]).as_posix()}/**")
             else:
                 # Recursive pattern
                 rel_from_root = dir_path.relative_to(root_dir)
@@ -331,9 +313,7 @@ def load_gitignore_patterns(dir_path: Path, root_dir: Path) -> list[str]:
                     # Use shared normalization utility to avoid double prefixing
                     patterns_from_gitignore.append(normalize_include_pattern(line))
                 else:
-                    patterns_from_gitignore.append(
-                        f"{rel_from_root.as_posix()}/**/{line}"
-                    )
+                    patterns_from_gitignore.append(f"{rel_from_root.as_posix()}/**/{line}")
                     patterns_from_gitignore.append(f"{rel_from_root.as_posix()}/{line}")
 
         return patterns_from_gitignore
@@ -369,27 +349,19 @@ def scan_directory_files(
                 # Check against exclude patterns or ignore engine
                 if ignore_engine is not None:
                     try:
-                        if getattr(
-                            ignore_engine, "matches", None
-                        ) and ignore_engine.matches(item, is_dir=False):  # type: ignore[attr-defined]
+                        if getattr(ignore_engine, "matches", None) and ignore_engine.matches(item, is_dir=False):  # type: ignore[attr-defined]
                             continue
                     except Exception:
                         pass
-                elif should_exclude_path(
-                    item, directory, exclude_patterns, pattern_cache
-                ):
+                elif should_exclude_path(item, directory, exclude_patterns, pattern_cache):
                     continue
 
                 # Check against gitignore patterns
-                if gitignore_patterns and should_exclude_path(
-                    item, directory, gitignore_patterns, pattern_cache
-                ):
+                if gitignore_patterns and should_exclude_path(item, directory, gitignore_patterns, pattern_cache):
                     continue
 
                 # Fast include prefilter: avoid regex matching when file can't possibly match
-                allow_exts, allow_names, has_complex = _summarize_include_patterns(
-                    patterns
-                )
+                allow_exts, allow_names, has_complex = _summarize_include_patterns(patterns)
                 if not has_complex:
                     fname = item.name
                     if (fname not in allow_names) and (item.suffix not in allow_exts):
@@ -446,20 +418,16 @@ def walk_directory_tree(
         return files, gitignore_patterns
 
     # Precompute include summary once for this walk
-    inc_allow_exts, inc_allow_names, inc_has_complex = _summarize_include_patterns(
-        patterns
-    )
+    inc_allow_exts, inc_allow_names, inc_has_complex = _summarize_include_patterns(patterns)
     include_prefixes = _extract_include_prefixes(patterns)
-    HEAVY_DIRS = {".git", "node_modules", ".venv", "venv", "dist", "build", "target"}
+    heavy_dirs = {".git", "node_modules", ".venv", "venv", "dist", "build", "target"}
 
     for dirpath, dirnames, filenames in walk_iter:
         current_dir = Path(dirpath)
 
         # Load gitignore for current directory
         if ignore_engine is None:
-            gitignore_patterns[current_dir] = load_gitignore_patterns(
-                current_dir, root_directory
-            )
+            gitignore_patterns[current_dir] = load_gitignore_patterns(current_dir, root_directory)
         else:
             gitignore_patterns[current_dir] = []
 
@@ -490,25 +458,19 @@ def walk_directory_tree(
                 continue
 
             # Fast prune heavy directories when not explicitly anchored
-            if _should_prune_heavy_dir(HEAVY_DIRS, include_prefixes, dirname):
+            if _should_prune_heavy_dir(heavy_dirs, include_prefixes, dirname):
                 dirs_to_remove.append(dirname)
                 continue
             if ignore_engine is not None:
                 try:
-                    if getattr(
-                        ignore_engine, "matches", None
-                    ) and ignore_engine.matches(dir_path, is_dir=True):  # type: ignore[attr-defined]
+                    if getattr(ignore_engine, "matches", None) and ignore_engine.matches(dir_path, is_dir=True):  # type: ignore[attr-defined]
                         excluded = True
                 except Exception:
                     excluded = False
             else:
-                if should_exclude_path(
-                    dir_path, root_directory, exclude_patterns, pattern_cache
-                ) or (
+                if should_exclude_path(dir_path, root_directory, exclude_patterns, pattern_cache) or (
                     all_gitignore_patterns
-                    and should_exclude_path(
-                        dir_path, root_directory, all_gitignore_patterns, pattern_cache
-                    )
+                    and should_exclude_path(dir_path, root_directory, all_gitignore_patterns, pattern_cache)
                 ):
                     excluded = True
 
@@ -532,15 +494,11 @@ def walk_directory_tree(
 
             if ignore_engine is not None:
                 try:
-                    if getattr(
-                        ignore_engine, "matches", None
-                    ) and ignore_engine.matches(file_path, is_dir=False):  # type: ignore[attr-defined]
+                    if getattr(ignore_engine, "matches", None) and ignore_engine.matches(file_path, is_dir=False):  # type: ignore[attr-defined]
                         continue
                 except Exception:
                     pass
-            elif should_exclude_path(
-                file_path, root_directory, exclude_patterns, pattern_cache
-            ):
+            elif should_exclude_path(file_path, root_directory, exclude_patterns, pattern_cache):
                 continue
 
             if ignore_engine is None:
@@ -551,9 +509,7 @@ def walk_directory_tree(
 
             # Fast include prefilter: skip files that cannot match simple include patterns
             if not inc_has_complex:
-                if (filename not in inc_allow_names) and (
-                    file_path.suffix not in inc_allow_exts
-                ):
+                if (filename not in inc_allow_names) and (file_path.suffix not in inc_allow_exts):
                     continue
 
             if should_include_file(file_path, root_directory, patterns, pattern_cache):
@@ -625,15 +581,10 @@ def walk_subtree_worker(
                     build_repo_aware_ignore_engine_from_roots,
                 )  # type: ignore
 
-                if (
-                    isinstance(ignore_engine_args, dict)
-                    and ignore_engine_args.get("mode") == "repo_aware"
-                ):
+                if isinstance(ignore_engine_args, dict) and ignore_engine_args.get("mode") == "repo_aware":
                     roots = ignore_engine_args.get("roots")
                     backend = ignore_engine_args.get("backend", "python")
-                    overlay = bool(
-                        ignore_engine_args.get("workspace_nonrepo_overlay", False)
-                    )
+                    overlay = bool(ignore_engine_args.get("workspace_nonrepo_overlay", False))
                     if roots:
                         ignore_engine_obj = build_repo_aware_ignore_engine_from_roots(
                             root=ignore_engine_args["root"],
@@ -685,8 +636,6 @@ def walk_subtree_worker(
         return [], errors
     except Exception as e:
         # Unexpected error - capture for debugging
-        error_msg = (
-            f"Unexpected error in worker for {subtree_path}: {type(e).__name__}: {e}"
-        )
+        error_msg = f"Unexpected error in worker for {subtree_path}: {type(e).__name__}: {e}"
         errors.append(error_msg)
         return [], errors

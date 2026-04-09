@@ -6,7 +6,8 @@ Generates follow-up questions to deepen code understanding during BFS exploratio
 # Simplified system prompt per GPT-5-Nano best practices
 SYSTEM_MESSAGE = """Generate follow-up questions to deepen code understanding."""
 
-# User prompt template with variables: gist_section, context, code_section, chunks_preview, constants_section, max_questions, target_instruction
+# User prompt template with variables: gist_section, context, code_section,
+# chunks_preview, constants_section, max_questions, target_instruction
 USER_TEMPLATE = """{gist_section}Root: {root_query}
 Current: {query}
 Context: {ancestors}

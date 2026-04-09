@@ -304,9 +304,7 @@ class EvidenceLedger:
 
         return conflicts
 
-    def _check_conflict(
-        self, fact_a: FactEntry, fact_b: FactEntry, entity_name: str
-    ) -> FactConflict | None:
+    def _check_conflict(self, fact_a: FactEntry, fact_b: FactEntry, entity_name: str) -> FactConflict | None:
         """Check if two facts conflict.
 
         Args:
@@ -336,10 +334,7 @@ class EvidenceLedger:
             return FactConflict(
                 fact_id_a=fact_a.fact_id,
                 fact_id_b=fact_b.fact_id,
-                reason=(
-                    f"Different numeric values for entity '{entity_name}': "
-                    f"{a_nums} vs {b_nums}"
-                ),
+                reason=(f"Different numeric values for entity '{entity_name}': {a_nums} vs {b_nums}"),
             )
 
         return None
@@ -348,9 +343,7 @@ class EvidenceLedger:
     # Constants Prompt Generation
     # =========================================================================
 
-    def _format_constants_by_file(
-        self, max_entries: int | None = None
-    ) -> tuple[list[str], int]:
+    def _format_constants_by_file(self, max_entries: int | None = None) -> tuple[list[str], int]:
         """Format constants grouped by file.
 
         Args:
@@ -409,9 +402,7 @@ class EvidenceLedger:
 
         return "\n".join(lines)
 
-    def get_constants_prompt_instruction(
-        self, max_entries: int = 50, use_short_form: bool = False
-    ) -> str:
+    def get_constants_prompt_instruction(self, max_entries: int = 50, use_short_form: bool = False) -> str:
         """Generate constants context with instruction text for LLM prompts.
 
         Args:
@@ -425,11 +416,7 @@ class EvidenceLedger:
         if not context:
             return ""
 
-        instruction = (
-            CONSTANTS_INSTRUCTION_SHORT
-            if use_short_form
-            else CONSTANTS_INSTRUCTION_FULL
-        )
+        instruction = CONSTANTS_INSTRUCTION_SHORT if use_short_form else CONSTANTS_INSTRUCTION_FULL
         return f"\n\n{context}\n\n{instruction}"
 
     # =========================================================================
@@ -468,10 +455,7 @@ class EvidenceLedger:
         for fact in sorted_facts:
             conf = fact.confidence.value[:3].upper()  # DEF, LIK, INF, UNC
             file_name = Path(fact.file_path).name
-            lines.append(
-                f"- [{conf}] {fact.statement} "
-                f"({file_name}:{fact.start_line}-{fact.end_line})"
-            )
+            lines.append(f"- [{conf}] {fact.statement} ({file_name}:{fact.start_line}-{fact.end_line})")
 
         result = "\n".join(lines)
 
@@ -547,10 +531,7 @@ class EvidenceLedger:
                 reason = conflict.reason
                 if len(reason) > 50:
                     reason = reason[:50] + "..."
-                conflict_lines.append(
-                    f"- [{conflict.fact_id_a[:6]}] vs [{conflict.fact_id_b[:6]}]: "
-                    f"{reason}"
-                )
+                conflict_lines.append(f"- [{conflict.fact_id_a[:6]}] vs [{conflict.fact_id_b[:6]}]: {reason}")
             if len(self.conflicts) > 5:
                 remaining = len(self.conflicts) - 5
                 conflict_lines.append(f"... and {remaining} more conflicts")
@@ -608,10 +589,7 @@ class EvidenceLedger:
                 continue
             lines.append(f"\n#### {confidence.value.title()} Facts")
             for fact in sorted(facts_list, key=lambda f: (f.category, f.file_path)):
-                lines.append(
-                    f"- [F-{fact.fact_id}] {fact.statement} "
-                    f"({fact.file_path}:{fact.start_line})"
-                )
+                lines.append(f"- [F-{fact.fact_id}] {fact.statement} ({fact.file_path}:{fact.start_line})")
 
         return "\n".join(lines)
 

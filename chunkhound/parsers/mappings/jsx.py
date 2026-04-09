@@ -318,10 +318,7 @@ class JSXMapping(JavaScriptMapping):
 
         # Check if function returns JSX
         node_text = self.get_node_text(node, source)
-        if any(
-            jsx_indicator in node_text
-            for jsx_indicator in ["<", "jsx", "React.createElement"]
-        ):
+        if any(jsx_indicator in node_text for jsx_indicator in ["<", "jsx", "React.createElement"]):
             # Check if function name starts with uppercase (React convention)
             name = self.extract_function_name(node, source)
             if name and len(name) > 0 and name[0].isupper():
@@ -397,11 +394,7 @@ class JSXMapping(JavaScriptMapping):
         # Include hook usage
         if node.type == "call_expression":
             hook_name = self.extract_hook_name(node, source)
-            if (
-                hook_name.startswith("use")
-                and len(hook_name) > 3
-                and hook_name[3].isupper()
-            ):
+            if hook_name.startswith("use") and len(hook_name) > 3 and hook_name[3].isupper():
                 return True
 
         return True
@@ -424,9 +417,7 @@ class JSXMapping(JavaScriptMapping):
         # Use base JavaScript cleaning
         return self.clean_comment_text(text)
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve relative import path to absolute file path.
 
         Args:

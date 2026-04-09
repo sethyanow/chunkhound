@@ -9,9 +9,7 @@ import argparse
 from chunkhound.core.config.config import Config
 
 
-def create_validated_config(
-    args: argparse.Namespace, command: str
-) -> tuple[Config, list[str]]:
+def create_validated_config(args: argparse.Namespace, command: str) -> tuple[Config, list[str]]:
     """Create and validate config for a specific command.
 
     This centralizes the config loading pattern that was duplicated across

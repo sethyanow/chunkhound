@@ -29,7 +29,5 @@ def parse_audience(value: str) -> Audience:
     normalized = value.strip().lower()
     resolved = _AUDIENCE_ALIASES.get(normalized)
     if resolved is None:
-        raise ValueError(
-            "Invalid audience value. Use 1|2|3 or technical|balanced|end-user."
-        )
+        raise ValueError("Invalid audience value. Use 1|2|3 or technical|balanced|end-user.")
     return resolved

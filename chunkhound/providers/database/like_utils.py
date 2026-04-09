@@ -3,9 +3,7 @@
 LIKE_ESCAPE_CHAR = "!"
 
 
-def escape_like_pattern(
-    value: str, *, escape_quotes: bool = False, escape_char: str = LIKE_ESCAPE_CHAR
-) -> str:
+def escape_like_pattern(value: str, *, escape_quotes: bool = False, escape_char: str = LIKE_ESCAPE_CHAR) -> str:
     """Escape SQL LIKE metacharacters for literal prefix/substring matching.
 
     Uses '!' as the escape character (paired with ESCAPE '!' in SQL).

@@ -36,9 +36,7 @@ class HydeConfig:
 
         for name, value in values.items():
             if not isinstance(value, int) or isinstance(value, bool):
-                raise ValueError(
-                    f"HydeConfig.{name} must be an int (got {type(value)})"
-                )
+                raise ValueError(f"HydeConfig.{name} must be an int (got {type(value)})")
 
         non_negative = ("max_scope_files", "max_snippet_files", "max_snippet_chars")
         for name in non_negative:

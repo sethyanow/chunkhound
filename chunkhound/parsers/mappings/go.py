@@ -166,9 +166,7 @@ class GoMapping(BaseMapping):
 
         assert_never(concept)
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -197,9 +195,7 @@ class GoMapping(BaseMapping):
                 # For methods, prepend receiver type
                 if "receiver_type" in captures:
                     receiver_type_node = captures["receiver_type"]
-                    receiver_type = self.get_node_text(
-                        receiver_type_node, source
-                    ).strip()
+                    receiver_type = self.get_node_text(receiver_type_node, source).strip()
                     # Remove pointer indicators for cleaner names
                     receiver_type = receiver_type.lstrip("*")
                     return f"{receiver_type}.{name}"
@@ -249,9 +245,7 @@ class GoMapping(BaseMapping):
 
         assert_never(concept)
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -267,9 +261,7 @@ class GoMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract Go-specific metadata."""
 
         source = content.decode("utf-8")
@@ -301,9 +293,7 @@ class GoMapping(BaseMapping):
 
                     if "receiver_type" in captures:
                         receiver_node = captures["receiver_type"]
-                        metadata["receiver_type"] = self.get_node_text(
-                            receiver_node, source
-                        ).strip()
+                        metadata["receiver_type"] = self.get_node_text(receiver_node, source).strip()
 
                 # For type definitions, extract type kind
                 elif def_node.type == "type_declaration":
@@ -374,9 +364,7 @@ class GoMapping(BaseMapping):
 
         if param_list:
             # Find parameter_declaration nodes
-            param_declarations = self.find_children_by_type(
-                param_list, "parameter_declaration"
-            )
+            param_declarations = self.find_children_by_type(param_list, "parameter_declaration")
             for param_decl in param_declarations:
                 # Find the type node
                 type_node = None
@@ -505,9 +493,7 @@ class GoMapping(BaseMapping):
 
         return constants if constants else None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve Go import to file path.
 
         Args:

@@ -134,54 +134,41 @@ class QuestionGenerator:
             for path, content in file_contents.items():
                 content_tokens = llm.estimate_tokens(content)
                 if total_tokens + content_tokens <= max_tokens_for_context:
-                    code_context.append(
-                        f"File: {path}\n{'=' * 60}\n{content}\n{'=' * 60}"
-                    )
+                    code_context.append(f"File: {path}\n{'=' * 60}\n{content}\n{'=' * 60}")
                     total_tokens += content_tokens
                 else:
                     # Truncate to fit within total budget
                     remaining_tokens = max_tokens_for_context - total_tokens
                     if remaining_tokens > 500:  # Only include if meaningful
                         chars_to_include = remaining_tokens * 4  # ~4 chars per token
-                        code_context.append(
-                            f"File: {path}\n{'=' * 60}\n{content[:chars_to_include]}...\n{'=' * 60}"
-                        )
+                        code_context.append(f"File: {path}\n{'=' * 60}\n{content[:chars_to_include]}...\n{'=' * 60}")
                     break
 
             logger.debug(
-                f"LLM input: {total_tokens} tokens from {len(code_context)} files "
-                f"(budget: {max_tokens_for_context})"
+                f"LLM input: {total_tokens} tokens from {len(code_context)} files (budget: {max_tokens_for_context})"
             )
-            code_section = (
-                "\n\n".join(code_context) if code_context else "No code files loaded"
-            )
+            code_section = "\n\n".join(code_context) if code_context else "No code files loaded"
         elif chunks:
             # Build context from chunks when file_contents not available
             builder = ChunkContextBuilder(
                 import_context_service=self._import_context_service,
                 llm_manager=self._llm_manager,
             )
-            code_section = builder.build_code_context_with_imports(
-                chunks, max_tokens_for_context
-            )
+            code_section = builder.build_code_context_with_imports(chunks, max_tokens_for_context)
             if not code_section:
                 code_section = "No code files loaded"
-            logger.debug(
-                f"LLM input: built from {len(chunks)} chunks "
-                f"(budget: {max_tokens_for_context})"
-            )
+            logger.debug(f"LLM input: built from {len(chunks)} chunks (budget: {max_tokens_for_context})")
         else:
             # Neither file_contents nor chunks available
-            logger.warning(
-                f"Cannot generate follow-up questions: no file contents or chunks. "
-                f"Query: {query}"
-            )
+            logger.warning(f"Cannot generate follow-up questions: no file contents or chunks. Query: {query}")
             return []
 
         # Also include chunk snippets for context
         chunks_preview = "\n".join(
             [
-                f"- {chunk.get('file_path', 'unknown')}:{chunk.get('start_line', '?')}-{chunk.get('end_line', '?')} ({chunk.get('symbol', 'no symbol')})"
+                f"- {chunk.get('file_path', 'unknown')}"
+                f":{chunk.get('start_line', '?')}-{chunk.get('end_line', '?')}"
+                f" ({chunk.get('symbol', 'no symbol')})"
                 for chunk in chunks[:10]
             ]
         )
@@ -197,15 +184,11 @@ class QuestionGenerator:
         )
 
         target_instruction = (
-            "NEW code elements (not in explored files above)"
-            if exploration_gist
-            else "specific code elements found"
+            "NEW code elements (not in explored files above)" if exploration_gist else "specific code elements found"
         )
 
         # Build constants section if available
-        constants_section = (
-            f"\nConstants:\n{constants_context}\n" if constants_context else ""
-        )
+        constants_section = f"\nConstants:\n{constants_context}\n" if constants_context else ""
 
         # Construct prompt with conditional gist section
         prompt = prompts.FOLLOWUP_GENERATION_USER.format(
@@ -221,21 +204,16 @@ class QuestionGenerator:
         )
 
         # Augment prompt with structural guidance when root query matches graph patterns
-        augmentations = [
-            aug for pat, aug in ALL_PATTERNS if pat.search(context.root_query)
-        ]
+        augmentations = [aug for pat, aug in ALL_PATTERNS if pat.search(context.root_query)]
         if augmentations:
             structural_guidance = "\n\n".join(augmentations)
             prompt = f"{prompt}\n\n{structural_guidance}"
-            logger.debug(
-                f"Structural augmentation: {len(augmentations)} pattern(s) matched root query"
-            )
+            logger.debug(f"Structural augmentation: {len(augmentations)} pattern(s) matched root query")
 
         # Calculate adaptive output budget (scales 3k → 8k with depth)
         depth_ratio = depth / max(max_depth, 1)
         max_output_tokens = int(
-            FOLLOWUP_OUTPUT_TOKENS_MIN
-            + (FOLLOWUP_OUTPUT_TOKENS_MAX - FOLLOWUP_OUTPUT_TOKENS_MIN) * depth_ratio
+            FOLLOWUP_OUTPUT_TOKENS_MIN + (FOLLOWUP_OUTPUT_TOKENS_MAX - FOLLOWUP_OUTPUT_TOKENS_MIN) * depth_ratio
         )
         logger.debug(
             f"Follow-up generation budget: {max_output_tokens:,} tokens "
@@ -264,9 +242,7 @@ class QuestionGenerator:
             return valid_questions[:MAX_FOLLOWUP_QUESTIONS]
 
         except Exception as e:
-            logger.warning(
-                f"Follow-up question generation failed: {e}, returning empty list"
-            )
+            logger.warning(f"Follow-up question generation failed: {e}, returning empty list")
             return []
 
     async def synthesize_questions(
@@ -294,23 +270,20 @@ class QuestionGenerator:
             node
             for node in nodes
             if len(node.query.strip()) > 10  # Minimum length
-            and not node.query.lower()
-            .strip()
-            .startswith(("what is ", "is there ", "does "))  # Avoid simple yes/no
+            and not node.query.lower().strip().startswith(("what is ", "is there ", "does "))  # Avoid simple yes/no
         ]
 
         # If filtering reduced below target, skip synthesis
         if len(filtered_nodes) <= target_count:
             logger.debug(
-                f"After quality filtering, {len(filtered_nodes)} questions remain (<= target {target_count}), skipping synthesis"
+                f"After quality filtering, {len(filtered_nodes)} questions remain"
+                f" (<= target {target_count}), skipping synthesis"
             )
             return filtered_nodes
 
         # Use filtered nodes for synthesis
         synthesis_nodes = filtered_nodes
-        questions_str = "\n".join(
-            [f"{i + 1}. {node.query}" for i, node in enumerate(synthesis_nodes)]
-        )
+        questions_str = "\n".join([f"{i + 1}. {node.query}" for i, node in enumerate(synthesis_nodes)])
 
         llm = self._llm_manager.get_utility_provider()
 
@@ -328,12 +301,17 @@ class QuestionGenerator:
             "properties": {
                 "reasoning": {
                     "type": "string",
-                    "description": "Brief explanation of synthesis strategy and why these questions explore different unexplored aspects",
+                    "description": (
+                        "Brief explanation of synthesis strategy and why"
+                        " these questions explore different unexplored aspects"
+                    ),
                 },
                 "questions": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": f"Array of 1 to {target_count} synthesized research questions, each exploring a distinct aspect",
+                    "description": (
+                        f"Array of 1 to {target_count} synthesized research questions, each exploring a distinct aspect"
+                    ),
                 },
             },
             "required": ["reasoning", "questions"],
@@ -349,9 +327,7 @@ class QuestionGenerator:
             target_count=target_count,
         )
 
-        logger.debug(
-            f"Question synthesis budget: {QUESTION_SYNTHESIS_TOKENS:,} tokens (model: {llm.model})"
-        )
+        logger.debug(f"Question synthesis budget: {QUESTION_SYNTHESIS_TOKENS:,} tokens (model: {llm.model})")
 
         try:
             result = await llm.complete_structured(
@@ -390,21 +366,15 @@ class QuestionGenerator:
                 synthesized_nodes.append(node)
 
             if not synthesized_nodes:
-                logger.warning(
-                    "All synthesized questions were empty, falling back to first N nodes"
-                )
+                logger.warning("All synthesized questions were empty, falling back to first N nodes")
                 return nodes[:target_count]
 
-            logger.info(
-                f"Synthesized {len(nodes)} questions into {len(synthesized_nodes)} new research directions"
-            )
+            logger.info(f"Synthesized {len(nodes)} questions into {len(synthesized_nodes)} new research directions")
 
             return synthesized_nodes
 
         except Exception as e:
-            logger.warning(
-                f"Question synthesis failed: {e}, falling back to first N nodes"
-            )
+            logger.warning(f"Question synthesis failed: {e}, falling back to first N nodes")
             return nodes[:target_count]
 
     async def filter_relevant_followups(
@@ -441,26 +411,16 @@ class QuestionGenerator:
             max_questions=MAX_FOLLOWUP_QUESTIONS,
         )
 
-        logger.debug(
-            f"Question filtering budget: {QUESTION_FILTERING_TOKENS:,} tokens (model: {llm.model})"
-        )
+        logger.debug(f"Question filtering budget: {QUESTION_FILTERING_TOKENS:,} tokens (model: {llm.model})")
 
         try:
-            response = await llm.complete(
-                prompt, system=system, max_completion_tokens=QUESTION_FILTERING_TOKENS
-            )
+            response = await llm.complete(prompt, system=system, max_completion_tokens=QUESTION_FILTERING_TOKENS)
             # Parse selected indices
-            selected = [
-                int(n.strip()) - 1
-                for n in response.content.replace(",", " ").split()
-                if n.strip().isdigit()
-            ]
+            selected = [int(n.strip()) - 1 for n in response.content.replace(",", " ").split() if n.strip().isdigit()]
             filtered = [questions[i] for i in selected if 0 <= i < len(questions)]
 
             if filtered:
-                logger.debug(
-                    f"Filtered {len(questions)} follow-ups to {len(filtered)} relevant ones"
-                )
+                logger.debug(f"Filtered {len(questions)} follow-ups to {len(filtered)} relevant ones")
                 return filtered[:MAX_FOLLOWUP_QUESTIONS]
         except Exception as e:
             logger.warning(f"Follow-up filtering failed: {e}, using all questions")

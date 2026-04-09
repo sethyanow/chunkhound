@@ -13,12 +13,7 @@ from .tree_cache import TreeCache, get_default_cache
 
 def is_tree_sitter_node(obj: Any) -> bool:
     """Check if object is a valid TreeSitterNode with required attributes."""
-    return (
-        obj is not None
-        and hasattr(obj, "start_byte")
-        and hasattr(obj, "end_byte")
-        and hasattr(obj, "id")
-    )
+    return obj is not None and hasattr(obj, "start_byte") and hasattr(obj, "end_byte") and hasattr(obj, "id")
 
 
 class CodeParser:
@@ -45,13 +40,9 @@ class CodeParser:
             logger.debug("Parser registry initialized successfully")
         except ImportError as e:
             logger.error(f"Registry not available: {e}")
-            raise RuntimeError(
-                "Registry system is required for parser operation"
-            ) from e
+            raise RuntimeError("Registry system is required for parser operation") from e
 
-    def parse_file(
-        self, file_path: Path, source: str | None = None
-    ) -> list[dict[str, Any]]:
+    def parse_file(self, file_path: Path, source: str | None = None) -> list[dict[str, Any]]:
         """Parse a file and extract semantic chunks using the registry system.
 
         Args:
@@ -75,9 +66,7 @@ class CodeParser:
         parser = self._registry.get_language_parser(language)
 
         if not parser:
-            raise RuntimeError(
-                f"No parser plugin available for language {language}. File: {file_path}"
-            )
+            raise RuntimeError(f"No parser plugin available for language {language}. File: {file_path}")
 
         # Use the parser interface
         try:

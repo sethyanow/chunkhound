@@ -40,9 +40,7 @@ def apply_code_mapper_workspace_overrides(
     config.target_dir = workspace_root
 
     # Do NOT override an explicitly configured database path.
-    explicit_db_cli = bool(
-        getattr(args, "db", None) or getattr(args, "database_path", None)
-    )
+    explicit_db_cli = bool(getattr(args, "db", None) or getattr(args, "database_path", None))
     explicit_db_in_file = False
     try:
         raw = json.loads(cfg_override.read_text(encoding="utf-8"))

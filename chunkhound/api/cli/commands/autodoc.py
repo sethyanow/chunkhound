@@ -98,7 +98,4 @@ async def autodoc_command(args: argparse.Namespace, config: Config) -> None:
     formatter.info(f"Output directory: {result.output_dir}")
     formatter.info(f"Pages generated: {len(result.pages)}")
     if result.missing_topics:
-        formatter.warning(
-            "Missing topic files referenced in index: "
-            + ", ".join(result.missing_topics)
-        )
+        formatter.warning("Missing topic files referenced in index: " + ", ".join(result.missing_topics))

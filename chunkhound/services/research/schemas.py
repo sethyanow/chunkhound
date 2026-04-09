@@ -10,9 +10,7 @@ from pydantic import BaseModel, Field
 class QueryExpansionResponse(BaseModel):
     """Response schema for query expansion."""
 
-    queries: list[str] = Field(
-        description="Expanded search queries (semantically complete sentences)"
-    )
+    queries: list[str] = Field(description="Expanded search queries (semantically complete sentences)")
 
     model_config = {"extra": "forbid"}
 
@@ -30,12 +28,9 @@ class QuestionSynthesisResponse(BaseModel):
 
     reasoning: str = Field(
         description=(
-            "Brief explanation of synthesis strategy and why these questions "
-            "explore different unexplored aspects"
+            "Brief explanation of synthesis strategy and why these questions explore different unexplored aspects"
         )
     )
-    questions: list[str] = Field(
-        description="Synthesized research questions, each exploring a distinct aspect"
-    )
+    questions: list[str] = Field(description="Synthesized research questions, each exploring a distinct aspect")
 
     model_config = {"extra": "forbid"}

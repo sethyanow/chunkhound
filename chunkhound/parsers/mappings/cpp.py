@@ -303,17 +303,12 @@ class CppMapping(BaseMapping):
             # Get all identifiers in the nested namespace
             identifiers = self.find_children_by_type(nested_node, "identifier")
             if identifiers:
-                names = [
-                    self.get_node_text(id_node, source).strip()
-                    for id_node in identifiers
-                ]
+                names = [self.get_node_text(id_node, source).strip() for id_node in identifiers]
                 return "::".join(names)
 
         return self.get_fallback_name(node, "namespace")
 
-    def extract_template_parameters(
-        self, node: TSNode | None, source: str
-    ) -> list[str]:
+    def extract_template_parameters(self, node: TSNode | None, source: str) -> list[str]:
         """Extract template parameters from a template declaration.
 
         Args:
@@ -346,9 +341,7 @@ class CppMapping(BaseMapping):
 
         return parameters
 
-    def extract_inheritance(
-        self, node: TSNode | None, source: str
-    ) -> list[dict[str, str]]:
+    def extract_inheritance(self, node: TSNode | None, source: str) -> list[dict[str, str]]:
         """Extract inheritance information from a C++ class definition.
 
         Args:
@@ -380,9 +373,7 @@ class CppMapping(BaseMapping):
                 ):
                     base_class = self.get_node_text(child, source).strip()
                     if base_class:
-                        inheritance_info.append(
-                            {"base_class": base_class, "access_specifier": access_spec}
-                        )
+                        inheritance_info.append({"base_class": base_class, "access_specifier": access_spec})
 
         return inheritance_info
 
@@ -405,9 +396,7 @@ class CppMapping(BaseMapping):
         for child in self.walk_tree(node):
             if child and child.type == "parameter_list":
                 # Walk through parameter declarations
-                for param_node in self.find_children_by_type(
-                    child, "parameter_declaration"
-                ):
+                for param_node in self.find_children_by_type(child, "parameter_declaration"):
                     param_text = self.get_node_text(param_node, source).strip()
                     if param_text and param_text not in ("(", ")", ","):
                         parameters.append(param_text)
@@ -596,9 +585,7 @@ class CppMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -614,9 +601,7 @@ class CppMapping(BaseMapping):
                     def_node = captures.get("definition")
                     if def_node and self.is_template(def_node):
                         # Add template parameters
-                        template_params = self.extract_template_parameters(
-                            def_node.parent, source
-                        )
+                        template_params = self.extract_template_parameters(def_node.parent, source)
                         if template_params:
                             return f"{name}<{','.join(template_params)}>"
                     return name
@@ -672,9 +657,7 @@ class CppMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -722,9 +705,7 @@ class CppMapping(BaseMapping):
                     # Check if it's templated
                     if self.is_template(def_node):
                         metadata["is_template"] = True
-                        template_params = self.extract_template_parameters(
-                            def_node.parent, source
-                        )
+                        template_params = self.extract_template_parameters(def_node.parent, source)
                         metadata["template_parameters"] = template_params
 
                 # For classes, extract inheritance and template info
@@ -736,9 +717,7 @@ class CppMapping(BaseMapping):
 
                     if self.is_template(def_node):
                         metadata["is_template"] = True
-                        template_params = self.extract_template_parameters(
-                            def_node.parent, source
-                        )
+                        template_params = self.extract_template_parameters(def_node.parent, source)
                         metadata["template_parameters"] = template_params
 
                 # For namespaces, extract nested namespace info
@@ -752,9 +731,7 @@ class CppMapping(BaseMapping):
         elif concept == UniversalConcept.IMPORT:
             if "include_path" in captures:
                 path_node = captures["include_path"]
-                include_path = (
-                    self.get_node_text(path_node, source).strip().strip('"<>')
-                )
+                include_path = self.get_node_text(path_node, source).strip().strip('"<>')
                 metadata["include_path"] = include_path
 
                 # Determine if it's a system or local include
@@ -765,9 +742,7 @@ class CppMapping(BaseMapping):
 
             elif "define_name" in captures:
                 define_node = captures["define_name"]
-                metadata["define_name"] = self.get_node_text(
-                    define_node, source
-                ).strip()
+                metadata["define_name"] = self.get_node_text(define_node, source).strip()
                 metadata["directive_type"] = "define"
 
             elif "using_name" in captures:
@@ -778,12 +753,8 @@ class CppMapping(BaseMapping):
             elif "alias_name" in captures and "alias_value" in captures:
                 alias_name_node = captures["alias_name"]
                 alias_value_node = captures["alias_value"]
-                metadata["alias_name"] = self.get_node_text(
-                    alias_name_node, source
-                ).strip()
-                metadata["alias_value"] = self.get_node_text(
-                    alias_value_node, source
-                ).strip()
+                metadata["alias_name"] = self.get_node_text(alias_name_node, source).strip()
+                metadata["alias_value"] = self.get_node_text(alias_value_node, source).strip()
                 metadata["directive_type"] = "namespace_alias"
 
         elif concept == UniversalConcept.COMMENT:
@@ -940,9 +911,7 @@ class CppMapping(BaseMapping):
 
         return constants if constants else None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve C++ include to file path.
 
         Args:

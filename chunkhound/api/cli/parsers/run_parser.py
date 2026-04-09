@@ -48,8 +48,7 @@ def validate_batch_sizes(
         if not (1 <= embedding_batch_size <= 1000):
             return (
                 False,
-                f"Embedding batch size {embedding_batch_size} invalid. "
-                f"Must be between 1 and 1000.",
+                f"Embedding batch size {embedding_batch_size} invalid. Must be between 1 and 1000.",
             )
 
     # Validate database batch size
@@ -57,8 +56,7 @@ def validate_batch_sizes(
     if not (min_db <= db_batch_size <= max_db):
         return (
             False,
-            f"Database batch size {db_batch_size} invalid. "
-            f"Must be between {min_db} and {max_db}.",
+            f"Database batch size {db_batch_size} invalid. Must be between {min_db} and {max_db}.",
         )
 
     return True, ""
@@ -119,10 +117,7 @@ def add_run_subparser(subparsers: Any) -> argparse.ArgumentParser:
     run_parser = subparsers.add_parser(
         "index",
         help="Index directory for code search",
-        description=(
-            "Scan and index a directory for code search, "
-            "generating embeddings for semantic search."
-        ),
+        description=("Scan and index a directory for code search, generating embeddings for semantic search."),
     )
 
     # Optional positional argument with default to current directory
@@ -219,10 +214,7 @@ def add_run_subparser(subparsers: Any) -> argparse.ArgumentParser:
         "--perf-output",
         type=Path,
         default=None,
-        help=(
-            "Output path for performance diagnostics JSON "
-            "(default: <db_dir>/perf_diagnostics_<timestamp>.json)"
-        ),
+        help=("Output path for performance diagnostics JSON (default: <db_dir>/perf_diagnostics_<timestamp>.json)"),
     )
 
     return cast(argparse.ArgumentParser, run_parser)

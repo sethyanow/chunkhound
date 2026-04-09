@@ -40,9 +40,7 @@ _BLOCK_SCALAR_TPL_THRESHOLD = 12
 _TPL_QUOTED_KEY_RE = re.compile(r'"{{.*?}}"\s*:')
 # Broad match: any quoted key that contains a template anywhere inside quotes
 _TPL_QUOTED_ANY_RE = re.compile(r'"[^"\n]*{{[^"\n]*}}[^"\n]*"\s*:')
-_COMPLEX_KEY_SINGLE_RE = re.compile(
-    r"^(?P<indent>\s*)\?\s*(?P<key>.+?):(\s*)(?P<rest>.*)$"
-)
+_COMPLEX_KEY_SINGLE_RE = re.compile(r"^(?P<indent>\s*)\?\s*(?P<key>.+?):(\s*)(?P<rest>.*)$")
 
 
 @dataclass(frozen=True)
@@ -134,9 +132,7 @@ def sanitize_helm_templates(content: str) -> SanitizedYaml:
         # Single-line complex key salvage
         m = cx_single.match(core)
         if m:
-            out_lines.append(
-                f'{m.group("indent")}"__CH_TPL_CKEY__": {m.group("rest")}{nl}'
-            )
+            out_lines.append(f'{m.group("indent")}"__CH_TPL_CKEY__": {m.group("rest")}{nl}')
             i += 1
             continue
 
@@ -218,9 +214,7 @@ def sanitize_helm_templates(content: str) -> SanitizedYaml:
                 continue
             in_block_scalar = False
 
-        template_body = (
-            _extract_template_body(stripped) if stripped.startswith("{{") else None
-        )
+        template_body = _extract_template_body(stripped) if stripped.startswith("{{") else None
         start_comment_block = False
         if template_body and template_body.startswith("/*"):
             start_comment_block = True
@@ -229,10 +223,7 @@ def sanitize_helm_templates(content: str) -> SanitizedYaml:
             stripped=stripped,
             indent=indent_chars,
             newline=newline,
-            record=lambda kind,
-            snippet,
-            _idx=idx,
-            _indent=len(indent_chars): rewrites.append(
+            record=lambda kind, snippet, _idx=idx, _indent=len(indent_chars): rewrites.append(
                 TemplateRewrite(
                     line=_idx,
                     indent=_indent,
@@ -289,9 +280,7 @@ def _rewrite_line(
                 child_indent = indent + "  "
                 nl = newline or "\n"
                 lines = [f"{indent}{key}:"]
-                lines.append(
-                    f'{child_indent}{_PLACEHOLDER_MAP_KEY}: "{_PLACEHOLDER_BLOCK}"'
-                )
+                lines.append(f'{child_indent}{_PLACEHOLDER_MAP_KEY}: "{_PLACEHOLDER_BLOCK}"')
                 if template_note:
                     lines.append(f"{child_indent}# CH_TPL_INLINE: {template_note}")
                 return nl.join(lines) + newline
@@ -312,9 +301,7 @@ def _rewrite_line(
     return indent + stripped + newline
 
 
-def _rewrite_template_only_line(
-    stripped: str, newline: str, record: Callable[[str, str], None]
-) -> str:
+def _rewrite_template_only_line(stripped: str, newline: str, record: Callable[[str, str], None]) -> str:
     body = _extract_template_body(stripped)
 
     lowered = body.lower()

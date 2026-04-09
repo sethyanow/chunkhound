@@ -72,9 +72,7 @@ class LSPPopulationService:
         try:
             client = await self._pool.get(language, str(self._workspace_root))
         except LSPError:
-            logger.debug(
-                "No LSP server for language=%s, skipping %s", language, file_path
-            )
+            logger.debug("No LSP server for language=%s, skipping %s", language, file_path)
             return PopulateResult.SKIPPED
 
         abs_path = self._workspace_root / file_path
@@ -89,11 +87,7 @@ class LSPPopulationService:
         try:
             await client.notify_did_open(uri, content, language)
             symbols = await client.document_symbols(uri)
-            type_signatures = (
-                await self._collect_type_signatures(client, uri, symbols)
-                if symbols
-                else {}
-            )
+            type_signatures = await self._collect_type_signatures(client, uri, symbols) if symbols else {}
 
             if not symbols:
                 return PopulateResult.SKIPPED
@@ -168,13 +162,9 @@ class LSPPopulationService:
         """Recursively walk symbols and call hover for each."""
         for sym in symbols:
             try:
-                hover = await client.hover(
-                    uri, sym.range_start_line, sym.range_start_char
-                )
+                hover = await client.hover(uri, sym.range_start_line, sym.range_start_char)
                 if hover is not None:
-                    result[(sym.range_start_line, sym.range_start_char)] = (
-                        hover.contents
-                    )
+                    result[(sym.range_start_line, sym.range_start_char)] = hover.contents
             except Exception:
                 logger.debug(
                     "Hover failed for symbol %s at %d:%d, skipping",
@@ -308,9 +298,7 @@ class LSPPopulationService:
             try:
                 symbols = await client.workspace_symbols("")
             except LSPError:
-                logger.debug(
-                    "workspaceSymbol failed for language=%s, skipping", language
-                )
+                logger.debug("workspaceSymbol failed for language=%s, skipping", language)
                 continue
 
             lsp_server = self._server_name(language)
@@ -340,9 +328,7 @@ class LSPPopulationService:
                     continue
 
                 file_id = file_rows[0]["id"]
-                fqn = (
-                    sym.name
-                )  # workspaceSymbol returns flat results, no parent context
+                fqn = sym.name  # workspaceSymbol returns flat results, no parent context
 
                 # In-batch dedup
                 dedup_key = (fqn, file_path_str)
@@ -470,14 +456,10 @@ class LSPPopulationService:
 
             # Prefer selectionRange (name position) over range (keyword position)
             op_line = (
-                sym.selection_range_start_line
-                if sym.selection_range_start_line is not None
-                else sym.range_start_line
+                sym.selection_range_start_line if sym.selection_range_start_line is not None else sym.range_start_line
             )
             op_char = (
-                sym.selection_range_start_char
-                if sym.selection_range_start_char is not None
-                else sym.range_start_char
+                sym.selection_range_start_char if sym.selection_range_start_char is not None else sym.range_start_char
             )
 
             try:
@@ -495,9 +477,7 @@ class LSPPopulationService:
                         continue
 
                     for loc in results:
-                        target = await self._resolve_symbol(
-                            loc.uri, loc.range_start_line
-                        )
+                        target = await self._resolve_symbol(loc.uri, loc.range_start_line)
                         if target is None:
                             continue
                         to_id, to_fqn, to_file = target
@@ -594,6 +574,4 @@ class LSPPopulationService:
 
     async def delete_file_symbols(self, file_id: int) -> None:
         """Remove all symbols for a given file_id."""
-        await self._provider.execute_query_async(
-            "DELETE FROM symbols WHERE file_id = ?", [file_id]
-        )
+        await self._provider.execute_query_async("DELETE FROM symbols WHERE file_id = ?", [file_id])

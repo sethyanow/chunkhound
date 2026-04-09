@@ -148,15 +148,9 @@ class OpenCodeCLIProvider(BaseCLIProvider):
 
                 if process.returncode != 0:
                     error_msg = stderr.decode("utf-8") if stderr else "Unknown error"
-                    last_error = RuntimeError(
-                        f"OpenCode CLI command failed (exit {process.returncode}): "
-                        f"{error_msg}"
-                    )
+                    last_error = RuntimeError(f"OpenCode CLI command failed (exit {process.returncode}): {error_msg}")
                     if attempt < self._max_retries - 1:
-                        logger.warning(
-                            f"OpenCode CLI attempt {attempt + 1} failed, "
-                            f"retrying: {error_msg}"
-                        )
+                        logger.warning(f"OpenCode CLI attempt {attempt + 1} failed, retrying: {error_msg}")
                         continue
                     raise last_error
 
@@ -168,13 +162,9 @@ class OpenCodeCLIProvider(BaseCLIProvider):
                     process.kill()
                     await process.wait()
 
-                last_error = RuntimeError(
-                    f"OpenCode CLI command timed out after {request_timeout}s"
-                )
+                last_error = RuntimeError(f"OpenCode CLI command timed out after {request_timeout}s")
                 if attempt < self._max_retries - 1:
-                    logger.warning(
-                        f"OpenCode CLI attempt {attempt + 1} timed out, retrying"
-                    )
+                    logger.warning(f"OpenCode CLI attempt {attempt + 1} timed out, retrying")
                     continue
                 raise last_error from e
 
@@ -184,9 +174,7 @@ class OpenCodeCLIProvider(BaseCLIProvider):
                     process.kill()
                     await process.wait()
 
-                last_error = RuntimeError(
-                    f"OpenCode CLI command failed: {e}, with command {cmd}"
-                )
+                last_error = RuntimeError(f"OpenCode CLI command failed: {e}, with command {cmd}")
                 if attempt < self._max_retries - 1:
                     logger.warning(f"OpenCode CLI attempt {attempt + 1} failed: {e}")
                     continue

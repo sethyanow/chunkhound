@@ -25,9 +25,7 @@ def _build_overlap_query(
     conditions: list[str] = []
     params: list[Any] = []
     for chunk in chunks:
-        conditions.append(
-            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-        )
+        conditions.append("(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)")
         params.extend([chunk["file_path"], chunk["end_line"], chunk["start_line"]])
 
     where_clause = " OR ".join(conditions)
@@ -152,11 +150,5 @@ class GraphWalkExpander:
         discovered_chunks = self._db.execute_query(chunk_sql, chunk_params)
 
         # Stage 4: Deduplicate against seed set
-        seed_keys = {
-            (c["file_path"], c["start_line"], c["end_line"]) for c in seed_chunks
-        }
-        return [
-            c
-            for c in discovered_chunks
-            if (c["file_path"], c["start_line"], c["end_line"]) not in seed_keys
-        ]
+        seed_keys = {(c["file_path"], c["start_line"], c["end_line"]) for c in seed_chunks}
+        return [c for c in discovered_chunks if (c["file_path"], c["start_line"], c["end_line"]) not in seed_keys]

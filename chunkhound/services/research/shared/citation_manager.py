@@ -78,9 +78,7 @@ class CitationManager:
         """
         return [c for c in chunks if c.get("file_path") in files]
 
-    def build_file_reference_map(
-        self, chunks: list[dict[str, Any]], files: dict[str, str]
-    ) -> dict[str, int]:
+    def build_file_reference_map(self, chunks: list[dict[str, Any]], files: dict[str, str]) -> dict[str, int]:
         """Build mapping of file paths to reference numbers.
 
         Assigns sequential numbers to unique files in alphabetical order
@@ -216,15 +214,11 @@ class CitationManager:
             new_citation = f"[{global_num}]"
             remapped_summary = remapped_summary.replace(old_citation, new_citation)
 
-        logger.debug(
-            f"Remapped {len(remapping)} citation references in cluster summary"
-        )
+        logger.debug(f"Remapped {len(remapping)} citation references in cluster summary")
 
         return remapped_summary
 
-    def validate_citation_references(
-        self, text: str, file_reference_map: dict[str, int]
-    ) -> list[int]:
+    def validate_citation_references(self, text: str, file_reference_map: dict[str, int]) -> list[int]:
         """Validate that all [N] citations exist in the file reference map.
 
         Checks that every citation [N] in the text corresponds to a valid
@@ -353,11 +347,7 @@ class CitationManager:
                 display_name = node.name
 
                 # Add reference number for files (if map provided)
-                if (
-                    node.is_file
-                    and file_reference_map
-                    and node.full_path in file_reference_map
-                ):
+                if node.is_file and file_reference_map and node.full_path in file_reference_map:
                     ref_num = file_reference_map[node.full_path]
                     display_name = f"[{ref_num}] {display_name}"
 
@@ -375,9 +365,7 @@ class CitationManager:
 
                         # Get line ranges
                         ranges = []
-                        for chunk in sorted(
-                            file_chunks, key=lambda c: c.get("start_line", 0)
-                        ):
+                        for chunk in sorted(file_chunks, key=lambda c: c.get("start_line", 0)):
                             start = chunk.get("start_line", "?")
                             end = chunk.get("end_line", "?")
                             ranges.append(f"L{start}-{end}")
@@ -386,9 +374,7 @@ class CitationManager:
                         if len(ranges) <= 3:
                             range_str = ", ".join(ranges)
                         else:
-                            range_str = (
-                                f"{', '.join(ranges[:3])}, +{len(ranges) - 3} more"
-                            )
+                            range_str = f"{', '.join(ranges[:3])}, +{len(ranges) - 3} more"
 
                         line += f" ({chunk_count} chunks: {range_str})"
                     else:

@@ -13,6 +13,7 @@ Tests run parametrically against all available reranking-capable providers:
 """
 
 from pathlib import Path
+from typing import Any
 from unittest.mock import Mock, patch
 
 import pytest
@@ -29,8 +30,9 @@ from chunkhound.parsers.parser_factory import create_parser_for_language
 from .provider_configs import get_reranking_providers
 from tests.fixtures.fake_providers import FakeEmbeddingProvider
 
-# All tests in this file require live API access — skip by default
-pytestmark = pytest.mark.integration
+# Live API embedding tests — results shift with any source code change.
+# e2e, not integration, because they test embedding model quality not ChunkHound logic.
+pytestmark = pytest.mark.e2e
 
 # Cache providers at module level to avoid multiple calls during parametrize
 reranking_providers = get_reranking_providers()
@@ -95,36 +97,36 @@ async def content_aware_test_data(request, tmp_path):
         file_path = tmp_path / filename
         file_path.write_text(content)
         await coordinator.process_file(file_path)
-        
-        # Verify we actually created chunks
-        stats = db.get_stats()
-        print(f"Test database created: {stats}")
-        assert stats['chunks'] > 0, "Should have created chunks"
-        
-        # Analyze content to inform test queries
-        sample_results, _ = db.search_regex(".*", page_size=100, offset=0)
-        
-        content_analysis = {
-            'available_terms': set(),
-            'common_themes': [],
-        }
-        
-        for result in sample_results:
-            content = result.get('content', '').lower()
-            words = [w.strip('.,()[]{}":') for w in content.split() if len(w) > 3]
-            content_analysis['available_terms'].update(words)
-        
-        # Identify common terms
-        term_counts = {}
-        for term in content_analysis['available_terms']:
-            if len(term) > 4:
-                term_counts[term] = sum(1 for result in sample_results 
-                                      if term in result.get('content', '').lower())
-        
-        content_analysis['common_themes'] = sorted(term_counts.items(), 
-                                                 key=lambda x: x[1], 
-                                                 reverse=True)[:20]
-        
+
+    # Verify we actually created chunks
+    stats = db.get_stats()
+    print(f"Test database created: {stats}")
+    assert stats['chunks'] > 0, "Should have created chunks"
+
+    # Analyze content to inform test queries
+    sample_results, _ = db.search_regex(".*", page_size=100, offset=0)
+
+    content_analysis: dict[str, Any] = {
+        'available_terms': set(),
+        'common_themes': [],
+    }
+
+    for result in sample_results:
+        content = result.get('content', '').lower()
+        words = [w.strip('.,()[]{}":') for w in content.split() if len(w) > 3]
+        content_analysis['available_terms'].update(words)
+
+    # Identify common terms
+    term_counts = {}
+    for term in content_analysis['available_terms']:
+        if len(term) > 4:
+            term_counts[term] = sum(1 for result in sample_results
+                                  if term in result.get('content', '').lower())
+
+    content_analysis['common_themes'] = sorted(term_counts.items(),
+                                             key=lambda x: x[1],
+                                             reverse=True)[:20]
+
     yield db, content_analysis, (provider_name, provider_class, provider_config)
 
 

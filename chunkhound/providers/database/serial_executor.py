@@ -36,9 +36,7 @@ def get_thread_local_connection(provider: Any) -> Any:
         _executor_local.connection = provider._create_connection()
         if _executor_local.connection is None:
             raise RuntimeError("Failed to create database connection")
-        logger.debug(
-            f"Created new connection in executor thread {threading.get_ident()}"
-        )
+        logger.debug(f"Created new connection in executor thread {threading.get_ident()}")
     return _executor_local.connection
 
 
@@ -95,9 +93,7 @@ class SerialDatabaseExecutor:
             thread_name_prefix="serial-db",
         )
 
-    def execute_sync(
-        self, provider: Any, operation_name: str, *args: Any, **kwargs: Any
-    ) -> Any:
+    def execute_sync(self, provider: Any, operation_name: str, *args: Any, **kwargs: Any) -> Any:
         """Execute named operation synchronously in DB thread.
 
         All database operations MUST go through this method to ensure serialization.
@@ -140,14 +136,10 @@ class SerialDatabaseExecutor:
         try:
             return future.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:
-            logger.error(
-                f"Database operation '{operation_name}' timed out after {timeout_s} seconds"
-            )
+            logger.error(f"Database operation '{operation_name}' timed out after {timeout_s} seconds")
             raise TimeoutError(f"Operation '{operation_name}' timed out")
 
-    async def execute_async(
-        self, provider: Any, operation_name: str, *args, **kwargs
-    ) -> Any:
+    async def execute_async(self, provider: Any, operation_name: str, *args, **kwargs) -> Any:
         """Execute named operation asynchronously in DB thread.
 
         All database operations MUST go through this method to ensure serialization.
@@ -186,9 +178,7 @@ class SerialDatabaseExecutor:
         ctx = contextvars.copy_context()
 
         # Run in executor with context
-        return await loop.run_in_executor(
-            self._db_executor, ctx.run, executor_operation
-        )
+        return await loop.run_in_executor(self._db_executor, ctx.run, executor_operation)
 
     def shutdown(self, wait: bool = True) -> None:
         """Shutdown the executor with proper cleanup.

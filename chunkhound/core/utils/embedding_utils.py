@@ -59,9 +59,7 @@ def format_chunk_for_embedding(
 
     # Append constants summary to header (limited to avoid bloat)
     if constants:
-        const_items = [
-            f"{c['name']}={c['value']}" for c in constants[:MAX_CONSTANTS_IN_HEADER]
-        ]
+        const_items = [f"{c['name']}={c['value']}" for c in constants[:MAX_CONSTANTS_IN_HEADER]]
         const_str = ", ".join(const_items)
         if len(constants) > MAX_CONSTANTS_IN_HEADER:
             const_str += f", +{len(constants) - MAX_CONSTANTS_IN_HEADER} more"

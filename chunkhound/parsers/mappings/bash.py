@@ -125,9 +125,7 @@ class BashMapping(BaseMapping):
         # All cases handled above
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -187,9 +185,7 @@ class BashMapping(BaseMapping):
         # All cases handled above
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -208,9 +204,7 @@ class BashMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract Bash-specific metadata."""
 
         source = content.decode("utf-8")
@@ -248,11 +242,7 @@ class BashMapping(BaseMapping):
                     metadata["kind"] = "loop_variable"
                     # Extract the list being iterated over
                     for child in self.walk_tree(def_node):
-                        if (
-                            child
-                            and child.type == "word"
-                            and child != captures.get("name")
-                        ):
+                        if child and child.type == "word" and child != captures.get("name"):
                             # This might be part of the iteration list
                             list_text = self.get_node_text(child, source).strip()
                             if list_text and not list_text.startswith("$"):
@@ -312,18 +302,14 @@ class BashMapping(BaseMapping):
 
                 if clean_text:
                     upper_text = clean_text.upper()
-                    if any(
-                        prefix in upper_text
-                        for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]
-                    ):
+                    if any(prefix in upper_text for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]):
                         comment_type = "annotation"
                         is_doc = True
                     elif clean_text.startswith("#!/"):
                         comment_type = "shebang"
                         is_doc = True
                     elif len(clean_text) > 50 and any(
-                        word in clean_text.lower()
-                        for word in ["function", "parameter", "return", "usage"]
+                        word in clean_text.lower() for word in ["function", "parameter", "return", "usage"]
                     ):
                         comment_type = "documentation"
                         is_doc = True
@@ -452,9 +438,7 @@ class BashMapping(BaseMapping):
 
         return [{"name": name, "value": value}]
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path from Bash source/. command.
 
         Args:

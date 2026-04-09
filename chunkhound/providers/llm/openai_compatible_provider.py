@@ -52,9 +52,7 @@ class OpenAICompatibleProvider(LLMProvider):
             max_retries: Number of retry attempts for failed requests
         """
         if not OPENAI_AVAILABLE:
-            raise ImportError(
-                "OpenAI not available - install with: uv pip install openai"
-            )
+            raise ImportError("OpenAI not available - install with: uv pip install openai")
 
         self._model = model
         self._timeout = timeout
@@ -149,10 +147,7 @@ class OpenAICompatibleProvider(LLMProvider):
 
             # Validate content
             if content is None or not content.strip():
-                logger.error(
-                    f"{self.name} returned empty content "
-                    f"(finish_reason={finish_reason}, tokens={tokens})"
-                )
+                logger.error(f"{self.name} returned empty content (finish_reason={finish_reason}, tokens={tokens})")
                 raise RuntimeError(
                     f"LLM returned empty response (finish_reason={finish_reason}). "
                     "This may indicate a content filter, API error, or model refusal."
@@ -163,8 +158,7 @@ class OpenAICompatibleProvider(LLMProvider):
                 usage_info = ""
                 if response.usage:
                     usage_info = (
-                        f" (prompt={response.usage.prompt_tokens:,}, "
-                        f"completion={response.usage.completion_tokens:,})"
+                        f" (prompt={response.usage.prompt_tokens:,}, completion={response.usage.completion_tokens:,})"
                     )
 
                 raise RuntimeError(
@@ -176,14 +170,10 @@ class OpenAICompatibleProvider(LLMProvider):
 
             # Warn on unexpected finish_reason
             if finish_reason not in ("stop",):
-                logger.warning(
-                    f"Unexpected finish_reason: {finish_reason} "
-                    f"(content_length={len(content)})"
-                )
+                logger.warning(f"Unexpected finish_reason: {finish_reason} (content_length={len(content)})")
                 if finish_reason == "content_filter":
                     raise RuntimeError(
-                        "LLM response blocked by content filter. "
-                        "Try rephrasing your query or adjusting the prompt."
+                        "LLM response blocked by content filter. Try rephrasing your query or adjusting the prompt."
                     )
 
             return LLMResponse(
@@ -256,21 +246,16 @@ class OpenAICompatibleProvider(LLMProvider):
             # Validate content
             if content is None or not content.strip():
                 logger.error(
-                    f"{self.name} structured completion returned empty content "
-                    f"(finish_reason={finish_reason})"
+                    f"{self.name} structured completion returned empty content (finish_reason={finish_reason})"
                 )
-                raise RuntimeError(
-                    f"LLM structured completion returned empty response "
-                    f"(finish_reason={finish_reason})"
-                )
+                raise RuntimeError(f"LLM structured completion returned empty response (finish_reason={finish_reason})")
 
             # Check for truncation
             if finish_reason == "length":
                 usage_info = ""
                 if response.usage:
                     usage_info = (
-                        f" (prompt={response.usage.prompt_tokens:,}, "
-                        f"completion={response.usage.completion_tokens:,})"
+                        f" (prompt={response.usage.prompt_tokens:,}, completion={response.usage.completion_tokens:,})"
                     )
 
                 raise RuntimeError(
@@ -300,9 +285,7 @@ class OpenAICompatibleProvider(LLMProvider):
         max_completion_tokens: int = 4096,
     ) -> list[LLMResponse]:
         """Generate completions for multiple prompts concurrently."""
-        tasks = [
-            self.complete(prompt, system, max_completion_tokens) for prompt in prompts
-        ]
+        tasks = [self.complete(prompt, system, max_completion_tokens) for prompt in prompts]
         return await asyncio.gather(*tasks)
 
     def estimate_tokens(self, text: str) -> int:

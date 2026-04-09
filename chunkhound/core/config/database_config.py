@@ -26,9 +26,7 @@ class DatabaseConfig(BaseModel):
     path: Path | None = Field(default=None, description="Path to database directory")
 
     # Provider selection
-    provider: Literal["duckdb", "lancedb"] = Field(
-        default="duckdb", description="Database provider to use"
-    )
+    provider: Literal["duckdb", "lancedb"] = Field(default="duckdb", description="Database provider to use")
 
     # LanceDB-specific settings
     lancedb_index_type: Literal["auto", "ivf_hnsw_sq", "ivf_rq"] | None = Field(
@@ -39,7 +37,10 @@ class DatabaseConfig(BaseModel):
     lancedb_optimize_fragment_threshold: int = Field(
         default=100,
         ge=0,
-        description="Minimum fragment count to trigger optimization (0 = always optimize, 50 = aggressive, 100 = balanced, 500 = conservative)",
+        description=(
+            "Minimum fragment count to trigger optimization"
+            " (0 = always, 50 = aggressive, 100 = balanced, 500 = conservative)"
+        ),
     )
 
     # Disk usage limits
@@ -50,14 +51,16 @@ class DatabaseConfig(BaseModel):
     )
 
     @field_validator("path")
-    def validate_path(self, v: Path | None) -> Path | None:
+    @classmethod
+    def validate_path(cls, v: Path | None) -> Path | None:
         """Convert string paths to Path objects."""
         if v is not None and not isinstance(v, Path):
             return Path(v)
         return v
 
     @field_validator("provider")
-    def validate_provider(self, v: str) -> str:
+    @classmethod
+    def validate_provider(cls, v: str) -> str:
         """Validate database provider selection."""
         valid_providers = ["duckdb", "lancedb"]
         if v not in valid_providers:
@@ -112,9 +115,7 @@ class DatabaseConfig(BaseModel):
         return self.path is not None
 
     @classmethod
-    def add_cli_arguments(
-        cls, parser: argparse.ArgumentParser, required_path: bool = False
-    ) -> None:
+    def add_cli_arguments(cls, parser: argparse.ArgumentParser, required_path: bool = False) -> None:
         """Add database-related CLI arguments."""
         parser.add_argument(
             "--db",
@@ -141,17 +142,13 @@ class DatabaseConfig(BaseModel):
         """Load database config from environment variables."""
         config = {}
         # Support both new and legacy env var names
-        if db_path := (
-            os.getenv("CHUNKHOUND_DATABASE__PATH") or os.getenv("CHUNKHOUND_DB_PATH")
-        ):
+        if db_path := (os.getenv("CHUNKHOUND_DATABASE__PATH") or os.getenv("CHUNKHOUND_DB_PATH")):
             config["path"] = Path(db_path)
         if provider := os.getenv("CHUNKHOUND_DATABASE__PROVIDER"):
             config["provider"] = provider
         if index_type := os.getenv("CHUNKHOUND_DATABASE__LANCEDB_INDEX_TYPE"):
             config["lancedb_index_type"] = index_type
-        if threshold := os.getenv(
-            "CHUNKHOUND_DATABASE__LANCEDB_OPTIMIZE_FRAGMENT_THRESHOLD"
-        ):
+        if threshold := os.getenv("CHUNKHOUND_DATABASE__LANCEDB_OPTIMIZE_FRAGMENT_THRESHOLD"):
             config["lancedb_optimize_fragment_threshold"] = int(threshold)
         # Disk usage limit from environment
         if max_disk_gb := os.getenv("CHUNKHOUND_DATABASE__MAX_DISK_USAGE_GB"):

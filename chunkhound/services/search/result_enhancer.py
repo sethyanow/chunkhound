@@ -129,9 +129,7 @@ class ResultEnhancer:
                 # Score based on position and similarity
                 position_score = (len(semantic_results) - i) / len(semantic_results)
                 similarity_score = result.get("similarity", 0.5)
-                score = (
-                    position_score * 0.3 + similarity_score * 0.7
-                ) * semantic_weight
+                score = (position_score * 0.3 + similarity_score * 0.7) * semantic_weight
 
                 combined[chunk_id] = {
                     **result,
@@ -162,8 +160,6 @@ class ResultEnhancer:
                     }
 
         # Sort by combined score and return top results
-        sorted_results = sorted(
-            combined.values(), key=lambda x: x["combined_score"], reverse=True
-        )
+        sorted_results = sorted(combined.values(), key=lambda x: x["combined_score"], reverse=True)
 
         return sorted_results[:limit]

@@ -245,12 +245,8 @@ class JavaMapping(BaseMapping):
             # Look for modifiers node which contains annotations
             modifiers_node = self.find_child_by_type(node, "modifiers")
             if modifiers_node:
-                annotation_nodes = self.find_children_by_type(
-                    modifiers_node, "annotation"
-                )
-                annotation_nodes.extend(
-                    self.find_children_by_type(modifiers_node, "marker_annotation")
-                )
+                annotation_nodes = self.find_children_by_type(modifiers_node, "annotation")
+                annotation_nodes.extend(self.find_children_by_type(modifiers_node, "marker_annotation"))
 
                 for ann_node in annotation_nodes:
                     annotation_text = self.get_node_text(ann_node, source).strip()
@@ -259,9 +255,7 @@ class JavaMapping(BaseMapping):
 
             # Also check direct children for annotations (fallback)
             annotation_nodes = self.find_children_by_type(node, "annotation")
-            annotation_nodes.extend(
-                self.find_children_by_type(node, "marker_annotation")
-            )
+            annotation_nodes.extend(self.find_children_by_type(node, "marker_annotation"))
 
             for ann_node in annotation_nodes:
                 annotation_text = self.get_node_text(ann_node, source).strip()
@@ -602,9 +596,7 @@ class JavaMapping(BaseMapping):
                 type_node = child
                 break
 
-        const_type = (
-            self.get_node_text(type_node, source).strip() if type_node else None
-        )
+        const_type = self.get_node_text(type_node, source).strip() if type_node else None
 
         # Extract value by finding the assignment after "="
         const_value: str | None = None
@@ -695,9 +687,7 @@ class JavaMapping(BaseMapping):
             # BLOCK concept not supported for Java
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -718,11 +708,7 @@ class JavaMapping(BaseMapping):
                     if var_name_node:
                         return self.get_node_text(var_name_node, source).strip()
                 line = def_node.start_point[0] + 1
-                node_type = (
-                    "local"
-                    if def_node.type == "local_variable_declaration"
-                    else "field"
-                )
+                node_type = "local" if def_node.type == "local_variable_declaration" else "field"
                 return f"{node_type}_line_{line}"
 
             return "unnamed_definition"
@@ -767,9 +753,7 @@ class JavaMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept."""
         source = content.decode("utf-8")
 

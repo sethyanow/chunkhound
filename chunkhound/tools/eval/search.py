@@ -114,9 +114,7 @@ async def _index_corpus(
         )
 
         if stats.errors_encountered:
-            logger.warning(
-                f"Indexing completed with {len(stats.errors_encountered)} errors"
-            )
+            logger.warning(f"Indexing completed with {len(stats.errors_encountered)} errors")
     finally:
         # Ensure DuckDB connections are closed so temp dirs can be removed on Windows
         _cleanup_services(services)
@@ -178,11 +176,7 @@ async def _run_queries(
 
                 recall = float(hits) / float(total_relevant) if total_relevant else 0.0
                 if k > 0:
-                    precision = (
-                        float(hits) / float(min(k, len(result_paths)))
-                        if result_paths
-                        else 0.0
-                    )
+                    precision = float(hits) / float(min(k, len(result_paths))) if result_paths else 0.0
                 else:
                     precision = 0.0
 
@@ -229,18 +223,12 @@ async def _run_mode_mixed(
         config = _build_config(project_dir, config_path)
         db_path = config.database.path
 
-        logger.info(
-            f"Mixed-mode evaluation: {len(languages)} languages, "
-            f"{len(queries)} queries, db={db_path}"
-        )
+        logger.info(f"Mixed-mode evaluation: {len(languages)} languages, {len(queries)} queries, db={db_path}")
 
         if search_mode == "semantic":
             errors = config.validate_for_command("search")
             if errors:
-                raise RuntimeError(
-                    "Semantic search requires a configured embedding provider.\n"
-                    + "\n".join(errors)
-                )
+                raise RuntimeError("Semantic search requires a configured embedding provider.\n" + "\n".join(errors))
 
         await _index_corpus(
             project_dir,
@@ -261,17 +249,13 @@ async def _run_mode_mixed(
             config = _build_config(project_dir, config_path)
             db_path = config.database.path
 
-            logger.info(
-                f"Mixed-mode evaluation: {len(languages)} languages, "
-                f"{len(queries)} queries, db={db_path}"
-            )
+            logger.info(f"Mixed-mode evaluation: {len(languages)} languages, {len(queries)} queries, db={db_path}")
 
             if search_mode == "semantic":
                 errors = config.validate_for_command("search")
                 if errors:
                     raise RuntimeError(
-                        "Semantic search requires a configured embedding provider.\n"
-                        + "\n".join(errors)
+                        "Semantic search requires a configured embedding provider.\n" + "\n".join(errors)
                     )
 
             await _index_corpus(
@@ -322,17 +306,13 @@ async def _run_mode_per_language(
             config = _build_config(project_dir, config_path)
             db_path = config.database.path
 
-            logger.info(
-                f"Per-language evaluation (bench): {language.value}, "
-                f"{len(queries)} queries, db={db_path}"
-            )
+            logger.info(f"Per-language evaluation (bench): {language.value}, {len(queries)} queries, db={db_path}")
 
             if search_mode == "semantic":
                 errors = config.validate_for_command("search")
                 if errors:
                     raise RuntimeError(
-                        "Semantic search requires a configured embedding provider.\n"
-                        + "\n".join(errors)
+                        "Semantic search requires a configured embedding provider.\n" + "\n".join(errors)
                     )
 
             await _index_corpus(
@@ -352,17 +332,13 @@ async def _run_mode_per_language(
                 config = _build_config(project_dir, config_path)
                 db_path = config.database.path
 
-                logger.info(
-                    f"Per-language evaluation: {language.value}, "
-                    f"{len(queries)} queries, db={db_path}"
-                )
+                logger.info(f"Per-language evaluation: {language.value}, {len(queries)} queries, db={db_path}")
 
                 if search_mode == "semantic":
                     errors = config.validate_for_command("search")
                     if errors:
                         raise RuntimeError(
-                            "Semantic search requires a configured embedding provider.\n"
-                            + "\n".join(errors)
+                            "Semantic search requires a configured embedding provider.\n" + "\n".join(errors)
                         )
 
                 await _index_corpus(
@@ -371,9 +347,7 @@ async def _run_mode_per_language(
                     db_path,
                     with_embeddings=(search_mode == "semantic"),
                 )
-                per_query = await _run_queries(
-                    config, db_path, queries, ks, search_mode
-                )
+                per_query = await _run_queries(config, db_path, queries, ks, search_mode)
 
         all_queries.extend(per_query)
         per_language[language.value] = aggregate_metrics(per_query, ks)
@@ -482,19 +456,13 @@ async def _async_main(argv: list[str] | None = None) -> int:
         if args.bench_root:
             bench_root = Path(args.bench_root) / args.bench_id / "source"
         else:
-            bench_root = (
-                Path.cwd() / ".chunkhound" / "benches" / args.bench_id / "source"
-            )
+            bench_root = Path.cwd() / ".chunkhound" / "benches" / args.bench_id / "source"
 
     try:
         if args.mode == "mixed":
-            result = await _run_mode_mixed(
-                languages, ks, search_mode, config_path, bench_root
-            )
+            result = await _run_mode_mixed(languages, ks, search_mode, config_path, bench_root)
         else:
-            result = await _run_mode_per_language(
-                languages, ks, search_mode, config_path, bench_root
-            )
+            result = await _run_mode_per_language(languages, ks, search_mode, config_path, bench_root)
     except Exception as e:  # pragma: no cover - defensive
         logger.error(f"Evaluation failed: {e}")
         return 1

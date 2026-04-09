@@ -95,9 +95,7 @@ class TextInputState:
         return display_text
 
 
-def create_text_input_display(
-    question: str, state: TextInputState, password: bool = False
-) -> Text:
+def create_text_input_display(question: str, state: TextInputState, password: bool = False) -> Text:
     """Create complete text input display with question, input, and hints.
 
     Args:
@@ -118,9 +116,7 @@ def create_text_input_display(
 
     # Add navigation hints
     display.append("\n", style="")
-    display.append(
-        "(Arrow keys to navigate, Enter to confirm, ESC to cancel)", style="dim"
-    )
+    display.append("(Arrow keys to navigate, Enter to confirm, ESC to cancel)", style="dim")
 
     # Add validation error if present
     if state.validation_error:

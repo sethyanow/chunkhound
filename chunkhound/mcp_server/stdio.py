@@ -18,9 +18,7 @@ import warnings
 # CRITICAL: Suppress SWIG warnings that break JSON-RPC protocol in CI
 # The DuckDB Python bindings generate a DeprecationWarning that goes to stdout
 # in some environments (Ubuntu CI with Python 3.12), breaking MCP protocol
-warnings.filterwarnings(
-    "ignore", message=".*swigvarlink.*", category=DeprecationWarning
-)
+warnings.filterwarnings("ignore", message=".*swigvarlink.*", category=DeprecationWarning)
 from collections.abc import AsyncIterator  # noqa: E402
 from contextlib import asynccontextmanager  # noqa: E402
 from typing import TYPE_CHECKING, Any  # noqa: E402
@@ -155,9 +153,7 @@ class StdioMCPServer(MCPServerBase):
             return  # no-op when SDK not available
 
         @self.server.call_tool()  # type: ignore[misc]
-        async def handle_all_tools(
-            tool_name: str, arguments: dict[str, Any]
-        ) -> list[types.TextContent]:
+        async def handle_all_tools(tool_name: str, arguments: dict[str, Any]) -> list[types.TextContent]:
             """Universal tool handler that routes to the unified handler."""
             return await handle_tool_call(
                 tool_name=tool_name,
@@ -197,9 +193,7 @@ class StdioMCPServer(MCPServerBase):
             """List available tools."""
             # Wait for initialization
             try:
-                await asyncio.wait_for(
-                    self._initialization_complete.wait(), timeout=5.0
-                )
+                await asyncio.wait_for(self._initialization_complete.wait(), timeout=5.0)
             except asyncio.TimeoutError:
                 # Return basic tools even if not fully initialized
                 pass

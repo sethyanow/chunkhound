@@ -14,6 +14,27 @@ from chunkhound.parsers.concept_extractor import LanguageMapping
 from chunkhound.parsers.mappings.base import BaseMapping
 from chunkhound.parsers.universal_engine import UniversalConcept
 
+# File-level and large container nodes that should never be returned as definitions.
+# These would create oversized chunks containing entire files or large code sections.
+_FILE_LEVEL_NODES = {
+    # File-level nodes
+    "module",
+    "source_file",
+    "program",
+    "translation_unit",
+    "compilation_unit",
+    # Large container nodes that can contain massive amounts of code
+    "class_body",
+    "struct_body",
+    "interface_body",
+    "namespace_body",
+    "enum_body",
+    "field_declaration_list",
+    "declaration_list",
+    "member_declaration_list",
+    "compound_statement",  # When it's a large top-level block
+}
+
 
 class MappingAdapter(LanguageMapping):
     """Adapter that converts BaseMapping to LanguageMapping protocol.
@@ -100,9 +121,7 @@ class MappingAdapter(LanguageMapping):
         else:
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures using BaseMapping methods.
 
         Args:
@@ -114,9 +133,7 @@ class MappingAdapter(LanguageMapping):
             Extracted name or fallback name
         """
         # Check if base_mapping implements LanguageMapping protocol directly
-        if hasattr(self.base_mapping, "extract_name") and callable(
-            getattr(self.base_mapping, "extract_name")
-        ):
+        if hasattr(self.base_mapping, "extract_name") and callable(getattr(self.base_mapping, "extract_name")):
             return self.base_mapping.extract_name(concept, captures, content)
 
         # Fallback to adapter behavior
@@ -160,9 +177,7 @@ class MappingAdapter(LanguageMapping):
         else:
             return f"unnamed_{concept.value}"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures.
 
         Args:
@@ -174,9 +189,7 @@ class MappingAdapter(LanguageMapping):
             Extracted content
         """
         # Check if base_mapping implements LanguageMapping protocol directly
-        if hasattr(self.base_mapping, "extract_content") and callable(
-            getattr(self.base_mapping, "extract_content")
-        ):
+        if hasattr(self.base_mapping, "extract_content") and callable(getattr(self.base_mapping, "extract_content")):
             return self.base_mapping.extract_content(concept, captures, content)
 
         # Fallback to adapter behavior
@@ -187,9 +200,7 @@ class MappingAdapter(LanguageMapping):
         else:
             return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract metadata from captures.
 
         Args:
@@ -201,9 +212,7 @@ class MappingAdapter(LanguageMapping):
             Dictionary of metadata
         """
         # Check if base_mapping implements LanguageMapping protocol directly
-        if hasattr(self.base_mapping, "extract_metadata") and callable(
-            getattr(self.base_mapping, "extract_metadata")
-        ):
+        if hasattr(self.base_mapping, "extract_metadata") and callable(getattr(self.base_mapping, "extract_metadata")):
             return self.base_mapping.extract_metadata(concept, captures, content)
 
         # Fallback to adapter behavior
@@ -259,27 +268,6 @@ class MappingAdapter(LanguageMapping):
             "comment",
         ]
 
-        # File-level and large container nodes that should never be returned as definitions
-        # These would create oversized chunks containing entire files or large code sections
-        FILE_LEVEL_NODES = {
-            # File-level nodes
-            "module",
-            "source_file",
-            "program",
-            "translation_unit",
-            "compilation_unit",
-            # Large container nodes that can contain massive amounts of code
-            "class_body",
-            "struct_body",
-            "interface_body",
-            "namespace_body",
-            "enum_body",
-            "field_declaration_list",
-            "declaration_list",
-            "member_declaration_list",
-            "compound_statement",  # When it's a large top-level block
-        }
-
         # Try to find a definition node
         for key in definition_keys:
             if key in captures:
@@ -287,7 +275,7 @@ class MappingAdapter(LanguageMapping):
 
         # Fallback: return first non-file-level capture
         for node in captures.values():
-            if node.type not in FILE_LEVEL_NODES:
+            if node.type not in _FILE_LEVEL_NODES:
                 return node
 
         # If only file-level captures found, return None to skip this concept
@@ -390,6 +378,4 @@ class MappingAdapter(LanguageMapping):
         Returns:
             List of resolved paths (empty list if unresolvable)
         """
-        return self.base_mapping.resolve_import_paths(
-            import_text, base_dir, source_file
-        )
+        return self.base_mapping.resolve_import_paths(import_text, base_dir, source_file)

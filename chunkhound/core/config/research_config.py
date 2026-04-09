@@ -101,9 +101,7 @@ class ResearchConfig(BaseSettings):
         default=_DEFAULT_REGEX_AUGMENTATION_RATIO,
         ge=0.1,
         le=1.0,
-        description=(
-            "Regex target as fraction of semantic count (industry standard: 0.3)"
-        ),
+        description=("Regex target as fraction of semantic count (industry standard: 0.3)"),
     )
 
     regex_min_results: int = Field(
@@ -332,7 +330,11 @@ class ResearchConfig(BaseSettings):
         parser.add_argument(
             "--research-algorithm",
             choices=["v1", "v2", "v3"],
-            help="Research algorithm version (v1=BFS exploration, v2=hybrid v1 synthesis + wide coverage exploration, v3=parallel BFS + wide coverage)",
+            help=(
+                "Research algorithm version (v1=BFS exploration,"
+                " v2=hybrid v1 synthesis + wide coverage,"
+                " v3=parallel BFS + wide coverage)"
+            ),
         )
         parser.add_argument(
             "--exhaustive-mode",
@@ -495,16 +497,10 @@ class ResearchConfig(BaseSettings):
         if hasattr(args, "exhaustive_mode") and args.exhaustive_mode is not None:
             overrides["exhaustive_mode"] = args.exhaustive_mode
 
-        if (
-            hasattr(args, "multi_hop_time_limit")
-            and args.multi_hop_time_limit is not None
-        ):
+        if hasattr(args, "multi_hop_time_limit") and args.multi_hop_time_limit is not None:
             overrides["multi_hop_time_limit"] = args.multi_hop_time_limit
 
-        if (
-            hasattr(args, "multi_hop_result_limit")
-            and args.multi_hop_result_limit is not None
-        ):
+        if hasattr(args, "multi_hop_result_limit") and args.multi_hop_result_limit is not None:
             overrides["multi_hop_result_limit"] = args.multi_hop_result_limit
 
         return overrides

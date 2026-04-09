@@ -143,12 +143,12 @@ include = [
 packages = ["chunkhound"]
 
 [tool.black]
-line-length = 88
+line-length = 120
 target-version = ["py310"]
 
 [tool.ruff]
 target-version = "py310"
-line-length = 88
+line-length = 120
 
 [tool.ruff.lint]
 select = [
@@ -170,6 +170,10 @@ ignore = []
 "chunkhound/mcp_server/tools/lsp_tools.py" = ["E501"]
 "chunkhound/mcp_server/tools/registry.py" = ["E501"]
 "chunkhound/mcp_server/tools/queries/graph.py" = ["E501"]
+# LLM prompt templates — line breaks would change prompt content
+"chunkhound/services/prompts/question_synthesis.py" = ["E501"]
+"chunkhound/services/prompts/synthesis.py" = ["E501"]
+"chunkhound/services/research/v1/synthesis_engine.py" = ["E501"]
 
 [tool.mypy]
 python_version = "3.10"

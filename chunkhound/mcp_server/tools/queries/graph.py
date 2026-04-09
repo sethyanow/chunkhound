@@ -81,9 +81,7 @@ def build_walk_query(
     return sql, params
 
 
-def build_walk_edges_query(
-    fqns: list[str], edge_kind: str | None
-) -> tuple[str, list[Any]]:
+def build_walk_edges_query(fqns: list[str], edge_kind: str | None) -> tuple[str, list[Any]]:
     """Fetch edges between a set of discovered FQNs.
 
     Returns (sql, params) where params are [*fqns, *fqns, edge_kind?].

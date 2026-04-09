@@ -94,9 +94,7 @@ def write_astro_site(
 
     _write_text(
         site_dirs.pages_dir / "index.md",
-        _render_index_page(
-            site=site, pages=pages, index=index, overview_markdown=homepage_overview
-        ),
+        _render_index_page(site=site, pages=pages, index=index, overview_markdown=homepage_overview),
     )
 
     glossary_path = site_dirs.pages_dir / "glossary.md"
@@ -170,16 +168,10 @@ def _load_site_from_existing(output_dir: Path) -> DocsiteSite | None:
         title = payload.get("title")
         tagline = payload.get("tagline")
         scope_label = payload.get("scopeLabel")
-        generated_at = (
-            payload.get("generatedAt") or datetime.now(timezone.utc).isoformat()
-        )
+        generated_at = payload.get("generatedAt") or datetime.now(timezone.utc).isoformat()
         source_dir = payload.get("sourceDir") or str(output_dir)
         topic_count = payload.get("topicCount") or 0
-        if (
-            not isinstance(title, str)
-            or not isinstance(tagline, str)
-            or not isinstance(scope_label, str)
-        ):
+        if not isinstance(title, str) or not isinstance(tagline, str) or not isinstance(scope_label, str):
             return None
         if not isinstance(generated_at, str) or not isinstance(source_dir, str):
             return None

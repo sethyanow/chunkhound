@@ -77,9 +77,7 @@ class FileReader:
         for file_path, file_chunks in files_to_chunks.items():
             # Check if we've hit the overall token limit (skip if unlimited)
             if budget_limit is not None and total_tokens >= budget_limit:
-                logger.debug(
-                    f"Reached token limit ({budget_limit:,}), stopping file reading"
-                )
+                logger.debug(f"Reached token limit ({budget_limit:,}), stopping file reading")
                 break
 
             try:
@@ -105,10 +103,7 @@ class FileReader:
 
                 if estimated_tokens <= budget:
                     # File fits in budget, check against overall limit (skip if unlimited)
-                    if (
-                        budget_limit is None
-                        or total_tokens + estimated_tokens <= budget_limit
-                    ):
+                    if budget_limit is None or total_tokens + estimated_tokens <= budget_limit:
                         file_contents[file_path] = content
                         total_tokens += estimated_tokens
                     else:
@@ -129,10 +124,8 @@ class FileReader:
                         end_line = chunk.get("end_line", 1)
 
                         # Use smart boundary detection to expand to complete functions/classes
-                        expanded_start, expanded_end = (
-                            self.expand_to_natural_boundaries(
-                                lines, start_line, end_line, chunk, file_path
-                            )
+                        expanded_start, expanded_end = self.expand_to_natural_boundaries(
+                            lines, start_line, end_line, chunk, file_path
                         )
 
                         # Store expanded range in chunk for later deduplication
@@ -150,10 +143,7 @@ class FileReader:
                     chunk_tokens = llm.estimate_tokens(combined_chunks)
 
                     # Check against overall token limit (skip if unlimited)
-                    if (
-                        budget_limit is None
-                        or total_tokens + chunk_tokens <= budget_limit
-                    ):
+                    if budget_limit is None or total_tokens + chunk_tokens <= budget_limit:
                         file_contents[file_path] = combined_chunks
                         total_tokens += chunk_tokens
                     else:
@@ -161,9 +151,7 @@ class FileReader:
                         remaining_tokens = budget_limit - total_tokens
                         if remaining_tokens > 500:
                             chars_to_include = remaining_tokens * 4
-                            file_contents[file_path] = combined_chunks[
-                                :chars_to_include
-                            ]
+                            file_contents[file_path] = combined_chunks[:chars_to_include]
                             total_tokens = budget_limit
                         break
 
@@ -174,9 +162,7 @@ class FileReader:
         # FAIL-FAST: Validate that at least some files were loaded if chunks were provided
         # This prevents silent data loss where searches find chunks but synthesis gets no code
         if chunks and not file_contents:
-            budget_desc = (
-                "unlimited" if budget_limit is None else f"{budget_limit:,} tokens"
-            )
+            budget_desc = "unlimited" if budget_limit is None else f"{budget_limit:,} tokens"
             raise RuntimeError(
                 f"DATA LOSS DETECTED: Found {len(chunks)} chunks across {len(files_to_chunks)} files "
                 f"but failed to read ANY file contents. "
@@ -234,9 +220,7 @@ class FileReader:
             padding = 3  # A few lines for docstrings/decorators/comments
             start_idx = max(1, start_line - padding)
             end_idx = min(len(lines), end_line + padding)
-            logger.debug(
-                f"Using complete {chunk_kind} boundaries: {file_path}:{start_idx}-{end_idx}"
-            )
+            logger.debug(f"Using complete {chunk_kind} boundaries: {file_path}:{start_idx}-{end_idx}")
             return start_idx, end_idx
 
         # For non-complete chunks, expand to natural boundaries
@@ -310,9 +294,7 @@ class FileReader:
         if is_python:
             # Find end by detecting dedentation back to original level
             if expanded_start < len(lines):
-                start_indent = len(lines[expanded_start]) - len(
-                    lines[expanded_start].lstrip()
-                )
+                start_indent = len(lines[expanded_start]) - len(lines[expanded_start].lstrip())
                 for i in range(end_idx + 1, min(len(lines), end_idx + 200)):
                     line = lines[i]
                     if line.strip():  # Non-empty line
@@ -408,8 +390,6 @@ class FileReader:
             logger.debug(f"Could not re-read file for expansion: {file_path}: {e}")
             return (start_line, end_line)
 
-        expanded_start, expanded_end = self.expand_to_natural_boundaries(
-            lines, start_line, end_line, chunk, file_path
-        )
+        expanded_start, expanded_end = self.expand_to_natural_boundaries(lines, start_line, end_line, chunk, file_path)
 
         return (expanded_start, expanded_end)

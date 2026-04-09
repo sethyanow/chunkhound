@@ -23,7 +23,6 @@ def verify_database_exists(config: Config) -> Path:
     actual_db_path = config.database.get_db_path()
     if not actual_db_path.exists():
         raise FileNotFoundError(
-            f"Database not found at {actual_db_path}. "
-            f"Run 'chunkhound index <directory>' to create the database first."
+            f"Database not found at {actual_db_path}. Run 'chunkhound index <directory>' to create the database first."
         )
     return actual_db_path

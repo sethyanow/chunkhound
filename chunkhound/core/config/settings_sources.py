@@ -91,9 +91,7 @@ class BaseFileConfigSettingsSource(PydanticBaseSettingsSource, ABC):
         """
         pass
 
-    def get_field_value(
-        self, field: FieldInfo, field_name: str
-    ) -> tuple[Any, str, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """Get field value from configuration data."""
         if field_name in self._data:
             return self._data[field_name], field_name, True
@@ -127,10 +125,7 @@ class YamlConfigSettingsSource(BaseFileConfigSettingsSource):
         try:
             import yaml
         except ImportError:
-            raise ImportError(
-                "PyYAML is required for YAML configuration files. "
-                "Install with: pip install pyyaml"
-            )
+            raise ImportError("PyYAML is required for YAML configuration files. Install with: pip install pyyaml")
 
         with open(path, encoding="utf-8") as f:
             data = yaml.safe_load(f)
@@ -232,9 +227,7 @@ class FilteredCliSettingsSource(PydanticBaseSettingsSource):
                     parsed[key] = self._parse_value(value)
                     i += 1
                 # Handle --key value format
-                elif i + 1 < len(self.cli_args) and not self.cli_args[i + 1].startswith(
-                    "--"
-                ):
+                elif i + 1 < len(self.cli_args) and not self.cli_args[i + 1].startswith("--"):
                     key = arg_name
                     value = self.cli_args[i + 1]
                     parsed[key] = self._parse_value(value)
@@ -313,9 +306,7 @@ class FilteredCliSettingsSource(PydanticBaseSettingsSource):
 
         return result
 
-    def get_field_value(
-        self, field: FieldInfo, field_name: str
-    ) -> tuple[Any, str, bool]:
+    def get_field_value(self, field: FieldInfo, field_name: str) -> tuple[Any, str, bool]:
         """Get field value from parsed CLI arguments."""
         if field_name in self._parsed_args:
             return self._parsed_args[field_name], field_name, True

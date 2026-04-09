@@ -58,8 +58,11 @@ class QualityValidator:
             r"^No information (?:was )?found (?:for|about)[^\n]+\n",
             r"^Unfortunately, the (?:code|analysis) does not (?:show|provide)[^\n]+\n",
             # Remove vague precision statements
-            r"The (?:exact|precise|specific) (?:implementation|details?|mechanism|values?) (?:is|are) not (?:provided|documented|shown|clear|available) in the (?:code|analysis)[,.]?\s*",
-            r"(?:More|Additional) (?:research|investigation|analysis|context) (?:is|would be) (?:needed|required)[,.]?\s*",
+            r"The (?:exact|precise|specific) (?:implementation|details?|mechanism|values?)"
+            r" (?:is|are) not (?:provided|documented|shown|clear|available)"
+            r" in the (?:code|analysis)[,.]?\s*",
+            r"(?:More|Additional) (?:research|investigation|analysis|context)"
+            r" (?:is|would be) (?:needed|required)[,.]?\s*",
         ]
 
         filtered = text
@@ -72,15 +75,11 @@ class QualityValidator:
         # Log if we actually filtered anything
         if filtered != text:
             chars_removed = len(text) - len(filtered)
-            logger.debug(
-                f"Verbosity filter removed {chars_removed} chars of meta-commentary"
-            )
+            logger.debug(f"Verbosity filter removed {chars_removed} chars of meta-commentary")
 
         return filtered
 
-    def validate_output_quality(
-        self, answer: str, target_tokens: int
-    ) -> tuple[str, list[str]]:
+    def validate_output_quality(self, answer: str, target_tokens: int) -> tuple[str, list[str]]:
         """Validate output quality for conciseness and actionability.
 
         Args:
@@ -125,9 +124,7 @@ class QualityValidator:
                 f"QUALITY: Low citation density ({citation_count} citations in {answer_tokens} tokens). "
                 "Output may lack concrete code references."
             )
-            logger.warning(
-                f"Low citation density: {citation_count} citations in {answer_tokens} tokens"
-            )
+            logger.warning(f"Low citation density: {citation_count} citations in {answer_tokens} tokens")
 
         # Check 3: Excessive length
         if answer_tokens > target_tokens * 1.5:
@@ -135,9 +132,7 @@ class QualityValidator:
                 f"QUALITY: Output is verbose ({answer_tokens:,} tokens vs {target_tokens:,} target). "
                 "May need tighter prompting."
             )
-            logger.warning(
-                f"Verbose output: {answer_tokens:,} tokens (target: {target_tokens:,})"
-            )
+            logger.warning(f"Verbose output: {answer_tokens:,} tokens (target: {target_tokens:,})")
 
         # Check 4: Vague measurements (should use exact numbers)
         vague_patterns = [
@@ -150,10 +145,7 @@ class QualityValidator:
         for pattern in vague_patterns:
             matches = re.findall(pattern, answer, re.IGNORECASE)
             if matches:
-                warnings.append(
-                    f"QUALITY: Vague measurement detected: {matches[0]}. "
-                    "Should use exact values."
-                )
+                warnings.append(f"QUALITY: Vague measurement detected: {matches[0]}. Should use exact values.")
                 logger.warning(f"Vague measurement in output: {matches[0]}")
                 break  # Only report first instance
 
@@ -180,9 +172,7 @@ class QualityValidator:
         citation_count = len(citations)
 
         # Calculate citation density (citations per 100 lines of analysis)
-        citation_density = (
-            (citation_count / answer_lines * 100) if answer_lines > 0 else 0
-        )
+        citation_density = (citation_count / answer_lines * 100) if answer_lines > 0 else 0
 
         # Log citation metrics
         logger.info(

@@ -36,9 +36,7 @@ async def handle_token_limit_error(
     """
     if len(texts) > 1:
         # Calculate optimal number of splits based on token estimates
-        num_splits = max(
-            2, (total_tokens + token_limit - 1) // token_limit
-        )  # Ceiling division
+        num_splits = max(2, (total_tokens + token_limit - 1) // token_limit)  # Ceiling division
 
         logger.debug(
             f"Token limit exceeded for batch of {len(texts)} texts "
@@ -74,9 +72,7 @@ async def handle_token_limit_error(
 
         if len(chunks) == 1:
             # Text can't be split further, raise error
-            raise ValueError(
-                f"Text too large to embed even after chunking: {len(text)} chars"
-            )
+            raise ValueError(f"Text too large to embed even after chunking: {len(text)} chars")
 
         if single_text_fallback:
             # Return embedding of first chunk as representative
@@ -168,9 +164,7 @@ def with_token_limit_handling(
 
     def decorator(embed_func: Callable[..., Awaitable[list[list[float]]]]):
         @wraps(embed_func)
-        async def wrapper(
-            self: TokenLimitHandler, texts: list[str], *args, **kwargs
-        ) -> list[list[float]]:
+        async def wrapper(self: TokenLimitHandler, texts: list[str], *args, **kwargs) -> list[list[float]]:
             try:
                 return await embed_func(self, texts, *args, **kwargs)
             except Exception as e:
@@ -182,9 +176,7 @@ def with_token_limit_handling(
                         texts=texts,
                         total_tokens=total_tokens,
                         token_limit=token_limit,
-                        embed_function=lambda batch: embed_func(
-                            self, batch, *args, **kwargs
-                        ),
+                        embed_function=lambda batch: embed_func(self, batch, *args, **kwargs),
                         chunk_text_function=self.chunk_text_by_tokens,
                         single_text_fallback=single_text_fallback,
                     )
@@ -201,13 +193,9 @@ def openai_token_limit_check(error: Exception) -> bool:
     try:
         import openai
 
-        if hasattr(openai, "BadRequestError") and isinstance(
-            error, openai.BadRequestError
-        ):
+        if hasattr(openai, "BadRequestError") and isinstance(error, openai.BadRequestError):
             error_message = str(error)
-            return (
-                "maximum context length" in error_message and "tokens" in error_message
-            )
+            return "maximum context length" in error_message and "tokens" in error_message
     except ImportError:
         pass
     return False
@@ -237,11 +225,11 @@ def generic_token_limit_check(error: Exception) -> bool:
 # Convenience decorators for specific providers
 def with_openai_token_handling():
     return with_token_limit_handling(openai_token_limit_check)
+
+
 def with_anthropic_token_handling():
-    return with_token_limit_handling(
-    anthropic_token_limit_check
-)
+    return with_token_limit_handling(anthropic_token_limit_check)
+
+
 def with_generic_token_handling():
-    return with_token_limit_handling(
-    generic_token_limit_check
-)
+    return with_token_limit_handling(generic_token_limit_check)

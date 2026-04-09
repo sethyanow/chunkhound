@@ -20,9 +20,7 @@ from chunkhound.parsers.universal_engine import UniversalConcept
 _MODULE_KEYWORDS = r"^(defmodule|defprotocol|defimpl)$"
 
 # Elixir keywords that define functions/macros
-_FUNCTION_KEYWORDS = (
-    r"^(def|defp|defmacro|defmacrop|defguard|defguardp|defdelegate|defstruct)$"
-)
+_FUNCTION_KEYWORDS = r"^(def|defp|defmacro|defmacrop|defguard|defguardp|defdelegate|defstruct)$"
 
 # Elixir keywords for imports/dependencies
 _IMPORT_KEYWORDS = r"^(use|import|alias|require)$"
@@ -154,9 +152,7 @@ class ElixirMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         source = content.decode("utf-8")
 
         if concept == UniversalConcept.DEFINITION:
@@ -208,9 +204,7 @@ class ElixirMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         source = content.decode("utf-8")
 
         if concept == UniversalConcept.BLOCK and "block" in captures:
@@ -222,9 +216,7 @@ class ElixirMapping(BaseMapping):
             return self.get_node_text(node, source)
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         source = content.decode("utf-8")
         metadata: dict[str, Any] = {}
 
@@ -269,10 +261,7 @@ class ElixirMapping(BaseMapping):
                     clean = self.clean_comment_text(text)
                     if clean:
                         upper = clean.upper()
-                        if any(
-                            p in upper
-                            for p in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]
-                        ):
+                        if any(p in upper for p in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]):
                             metadata["comment_type"] = "annotation"
                         else:
                             metadata["comment_type"] = "regular"
@@ -296,9 +285,7 @@ class ElixirMapping(BaseMapping):
                 if args_node:
                     alias_node = self.find_child_by_type(args_node, "alias")
                     if alias_node:
-                        metadata["module"] = self.get_node_text(
-                            alias_node, source
-                        ).strip()
+                        metadata["module"] = self.get_node_text(alias_node, source).strip()
 
         elif concept == UniversalConcept.BLOCK:
             if "block" in captures:
@@ -312,9 +299,7 @@ class ElixirMapping(BaseMapping):
             cleaned = cleaned[1:]
         return cleaned.strip()
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         # Elixir imports are module aliases, not file paths.
         # We can try to resolve alias/import to lib/ paths.
         match = re.search(r"(?:alias|import|use|require)\s+([\w.]+)", import_text)
@@ -375,9 +360,7 @@ class ElixirMapping(BaseMapping):
                 return self.get_node_text(target, source).strip()
         return None
 
-    def _extract_keyword_and_name(
-        self, node: Node, source: str
-    ) -> tuple[str | None, str | None]:
+    def _extract_keyword_and_name(self, node: Node, source: str) -> tuple[str | None, str | None]:
         """Extract the keyword and name from a call node.
 
         Returns (keyword, name) tuple. For defmodule, name is the alias.

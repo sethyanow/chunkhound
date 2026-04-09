@@ -108,9 +108,7 @@ class FileDiscoveryCache:
             Dictionary with cache hit/miss statistics
         """
         total_requests = self.stats["hits"] + self.stats["misses"]
-        hit_rate = (
-            (self.stats["hits"] / total_requests * 100) if total_requests > 0 else 0
-        )
+        hit_rate = (self.stats["hits"] / total_requests * 100) if total_requests > 0 else 0
 
         return {
             **self.stats,
@@ -118,9 +116,7 @@ class FileDiscoveryCache:
             "hit_rate_percent": int(round(hit_rate, 2)),
         }
 
-    def _make_cache_key(
-        self, directory: Path, patterns: list[str], exclude_patterns: list[str] | None
-    ) -> str:
+    def _make_cache_key(self, directory: Path, patterns: list[str], exclude_patterns: list[str] | None) -> str:
         """Create a cache key from directory and patterns.
 
         Args:
@@ -164,9 +160,7 @@ class FileDiscoveryCache:
             if current_mtime > cached_mtime:
                 del self._cache[cache_key]
                 self.stats["invalidations"] += 1
-                logger.debug(
-                    f"Cache entry invalidated (directory modified): {cache_key}"
-                )
+                logger.debug(f"Cache entry invalidated (directory modified): {cache_key}")
                 return None
         except OSError:
             # Directory might not exist anymore
@@ -178,9 +172,7 @@ class FileDiscoveryCache:
         self._cache.move_to_end(cache_key)
         return files
 
-    def _store_in_cache(
-        self, cache_key: str, files: list[Path], directory: Path
-    ) -> None:
+    def _store_in_cache(self, cache_key: str, files: list[Path], directory: Path) -> None:
         """Store files in cache.
 
         Args:
@@ -204,9 +196,7 @@ class FileDiscoveryCache:
         self._cache[cache_key] = (files, time.time(), directory_mtime)
         logger.debug(f"Cached {len(files)} files for key: {cache_key}")
 
-    def _discover_files(
-        self, directory: Path, patterns: list[str], exclude_patterns: list[str] | None
-    ) -> list[Path]:
+    def _discover_files(self, directory: Path, patterns: list[str], exclude_patterns: list[str] | None) -> list[Path]:
         """Perform actual file discovery.
 
         Args:
@@ -240,9 +230,7 @@ class FileDiscoveryCache:
                     rel_path = file_path.relative_to(directory)
                     excluded = False
                     for exclude_pattern in exclude_patterns:
-                        if fnmatch(str(rel_path), exclude_pattern) or fnmatch(
-                            str(file_path), exclude_pattern
-                        ):
+                        if fnmatch(str(rel_path), exclude_pattern) or fnmatch(str(file_path), exclude_pattern):
                             excluded = True
                             break
                     if not excluded:

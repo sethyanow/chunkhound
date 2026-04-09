@@ -89,13 +89,9 @@ class VueSymbolTable:
 
 
 # Regex patterns for symbol extraction
-CONST_VAR_PATTERN = re.compile(
-    r"(?:^|\n)\s*(const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=", re.MULTILINE
-)
+CONST_VAR_PATTERN = re.compile(r"(?:^|\n)\s*(const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=", re.MULTILINE)
 
-FUNCTION_DECL_PATTERN = re.compile(
-    r"(?:^|\n)\s*function\s+([a-zA-Z_$][\w$]*)\s*\(", re.MULTILINE
-)
+FUNCTION_DECL_PATTERN = re.compile(r"(?:^|\n)\s*function\s+([a-zA-Z_$][\w$]*)\s*\(", re.MULTILINE)
 
 ARROW_FUNCTION_PATTERN = re.compile(
     r"(?:^|\n)\s*(?:const|let|var)\s+([a-zA-Z_$][\w$]*)\s*=\s*(?:\([^)]*\)|[a-zA-Z_$][\w$]*)\s*=>",
@@ -108,9 +104,7 @@ REACTIVE_PATTERNS = {
     "computed": re.compile(r"\bcomputed\s*\("),
 }
 
-DEFINE_PROPS_PATTERN = re.compile(
-    r"defineProps\s*(?:<[^>]+>)?\s*\(", re.MULTILINE | re.DOTALL
-)
+DEFINE_PROPS_PATTERN = re.compile(r"defineProps\s*(?:<[^>]+>)?\s*\(", re.MULTILINE | re.DOTALL)
 
 COMPOSABLE_PATTERN = re.compile(
     r"(?:const|let|var)\s+(?:\{([^}]+)\}|([a-zA-Z_$][\w$]*))\s*=\s*(use[A-Z][\w$]*)\s*\(",
@@ -163,9 +157,7 @@ def _is_reactive(code: str) -> bool:
     return any(pattern in code for pattern in ["ref(", "reactive(", "computed("])
 
 
-def _extract_vue_macro_symbols(
-    script_chunks: list[Chunk], symbol_table: VueSymbolTable
-) -> None:
+def _extract_vue_macro_symbols(script_chunks: list[Chunk], symbol_table: VueSymbolTable) -> None:
     """Extract Vue macro symbols (defineProps, defineEmits, etc.) from chunks.
 
     Vue macros are compile-time transforms that aren't in the TypeScript AST,
@@ -226,11 +218,7 @@ def build_symbol_table_from_chunks(script_chunks: list[Chunk]) -> VueSymbolTable
             continue
 
         # Get the chunk type as string (ChunkType enum has a value attribute)
-        chunk_type_str = (
-            chunk.chunk_type.value
-            if hasattr(chunk.chunk_type, "value")
-            else str(chunk.chunk_type)
-        )
+        chunk_type_str = chunk.chunk_type.value if hasattr(chunk.chunk_type, "value") else str(chunk.chunk_type)
 
         # Determine symbol type from chunk type
         symbol_type = chunk_type_to_symbol_type.get(chunk_type_str.lower(), "variable")
@@ -297,9 +285,7 @@ def build_symbol_table_from_chunks(script_chunks: list[Chunk]) -> VueSymbolTable
 
                 if destructured:
                     # Parse destructured variables
-                    var_names = [
-                        v.strip() for v in destructured.split(",") if v.strip()
-                    ]
+                    var_names = [v.strip() for v in destructured.split(",") if v.strip()]
                     for var_name in var_names:
                         # Remove any aliases (e.g., "user: userData" -> "user")
                         if ":" in var_name:
@@ -330,9 +316,7 @@ def build_symbol_table_from_chunks(script_chunks: list[Chunk]) -> VueSymbolTable
     return symbol_table
 
 
-def build_symbol_table(
-    script_chunks: list[Chunk], script_content: str | None = None
-) -> VueSymbolTable:
+def build_symbol_table(script_chunks: list[Chunk], script_content: str | None = None) -> VueSymbolTable:
     """Build a symbol table from script section chunks.
 
     Uses an optimized implementation that leverages TypeScript parser output
@@ -358,13 +342,7 @@ def build_symbol_table(
                 # Real parsed chunks have the symbol name in the code
                 chunk.symbol in chunk.code
                 # Or have TypeScript parser metadata
-                or (
-                    chunk.metadata
-                    and any(
-                        k in chunk.metadata
-                        for k in ["parameters", "return_type", "decorators"]
-                    )
-                )
+                or (chunk.metadata and any(k in chunk.metadata for k in ["parameters", "return_type", "decorators"]))
                 # Or are recognizable chunk types
                 or chunk.chunk_type.value in ["function", "method", "class"]
             )
@@ -563,9 +541,7 @@ def extract_props_from_define_props(code: str) -> list[str]:
 
     # Try to find defineProps with TypeScript interface
     # defineProps<{ title: string, count?: number }>()
-    ts_interface_pattern = re.compile(
-        r"defineProps\s*<\s*\{([^}]+)\}\s*>", re.MULTILINE | re.DOTALL
-    )
+    ts_interface_pattern = re.compile(r"defineProps\s*<\s*\{([^}]+)\}\s*>", re.MULTILINE | re.DOTALL)
     match = ts_interface_pattern.search(code)
 
     if match:
@@ -578,9 +554,7 @@ def extract_props_from_define_props(code: str) -> list[str]:
         # Try to find defineProps with object syntax
         # defineProps({ title: String, count: Number })
         # This is more complex, so we'll just look for identifiers before ":"
-        obj_pattern = re.compile(
-            r"defineProps\s*\(\s*\{([^}]+)\}", re.MULTILINE | re.DOTALL
-        )
+        obj_pattern = re.compile(r"defineProps\s*\(\s*\{([^}]+)\}", re.MULTILINE | re.DOTALL)
         match = obj_pattern.search(code)
         if match:
             props_str = match.group(1)
@@ -613,9 +587,7 @@ def extract_identifiers_from_expression(expression: str) -> list[str]:
     return identifiers
 
 
-def match_template_references(
-    template_chunks: list[Chunk], symbol_table: VueSymbolTable
-) -> list[Chunk]:
+def match_template_references(template_chunks: list[Chunk], symbol_table: VueSymbolTable) -> list[Chunk]:
     """Match template references to script symbols and add metadata.
 
     Args:

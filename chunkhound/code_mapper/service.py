@@ -68,14 +68,8 @@ def _audience_guidance_lines(*, audience: str) -> list[str]:
     if normalized == "end-user":
         return [
             "Audience: end-user (less technical).",
-            (
-                "Prefer practical workflows and plain language; explain code "
-                "identifiers briefly when needed."
-            ),
-            (
-                "De-emphasize internal implementation details unless essential to user "
-                "outcomes."
-            ),
+            ("Prefer practical workflows and plain language; explain code identifiers briefly when needed."),
+            ("De-emphasize internal implementation details unless essential to user outcomes."),
         ]
     return []
 
@@ -125,13 +119,9 @@ def _resolve_poi_concurrency(total_points: int) -> int:
         try:
             parsed = int(raw)
         except ValueError:
-            raise CodeMapperInvalidConcurrencyError(
-                "CH_CODE_MAPPER_POI_CONCURRENCY must be an integer >= 1."
-            ) from None
+            raise CodeMapperInvalidConcurrencyError("CH_CODE_MAPPER_POI_CONCURRENCY must be an integer >= 1.") from None
         if parsed < 1:
-            raise CodeMapperInvalidConcurrencyError(
-                "CH_CODE_MAPPER_POI_CONCURRENCY must be >= 1."
-            )
+            raise CodeMapperInvalidConcurrencyError("CH_CODE_MAPPER_POI_CONCURRENCY must be >= 1.")
         return min(parsed, max(total_points, 1))
     if total_points <= 1:
         return 1
@@ -180,10 +170,7 @@ class _PoiProgressProxy:
             if self._on_error is not None:
                 self._on_error(event_type, exc)
             else:
-                logger.debug(
-                    "[Code Mapper] Progress emit failed for event_type="
-                    f"{event_type}: {exc}"
-                )
+                logger.debug(f"[Code Mapper] Progress emit failed for event_type={event_type}: {exc}")
 
 
 async def run_code_mapper_overview_only(
@@ -277,11 +264,7 @@ async def run_code_mapper_pipeline(
     total_points_of_interest = len(points_of_interest)
 
     audience_lines = _audience_guidance_lines(audience=audience)
-    audience_block = (
-        ("\n".join(f"- {line}" for line in audience_lines) + "\n\n")
-        if audience_lines
-        else ""
-    )
+    audience_block = ("\n".join(f"- {line}" for line in audience_lines) + "\n\n") if audience_lines else ""
 
     progress_failures: set[str] = set()
 
@@ -289,9 +272,7 @@ async def run_code_mapper_pipeline(
         if event_type in progress_failures:
             return
         progress_failures.add(event_type)
-        logger.debug(
-            f"[Code Mapper] Progress emit failed for event_type={event_type}: {exc}"
-        )
+        logger.debug(f"[Code Mapper] Progress emit failed for event_type={event_type}: {exc}")
 
     async def _safe_progress_emit(
         event_type: str,
@@ -323,15 +304,9 @@ async def run_code_mapper_pipeline(
     else:
         poi_concurrency = _resolve_poi_concurrency(total_points_of_interest)
     if log_info and poi_concurrency > 1:
-        log_info(
-            "[Code Mapper] Running PoI deep research with "
-            f"concurrency={poi_concurrency}"
-        )
+        log_info(f"[Code Mapper] Running PoI deep research with concurrency={poi_concurrency}")
     if log_warning and poi_concurrency >= 8:
-        log_warning(
-            "[Code Mapper] High PoI concurrency may overwhelm your LLM provider. "
-            f"jobs={poi_concurrency}"
-        )
+        log_warning(f"[Code Mapper] High PoI concurrency may overwhelm your LLM provider. jobs={poi_concurrency}")
 
     def _failure_markdown(
         *,
@@ -344,9 +319,7 @@ async def run_code_mapper_pipeline(
         lines: list[str] = [f"# {heading} (failed)", ""]
         lines.append("This point of interest failed to generate content after a retry.")
         lines.append("")
-        lines.append(
-            f"- Point of interest ({idx}/{total_points_of_interest}): {poi.text}"
-        )
+        lines.append(f"- Point of interest ({idx}/{total_points_of_interest}): {poi.text}")
         lines.append(f"- First attempt: {first_error}")
         if retry_error is not None:
             lines.append(f"- Retry attempt: {retry_error}")
@@ -355,10 +328,7 @@ async def run_code_mapper_pipeline(
 
     backoff_to_serial = asyncio.Event()
     pending = deque(
-        [
-            (idx, poi, derive_heading_from_point(poi.text))
-            for idx, poi in enumerate(points_of_interest, start=1)
-        ]
+        [(idx, poi, derive_heading_from_point(poi.text)) for idx, poi in enumerate(points_of_interest, start=1)]
     )
     pending_lock = asyncio.Lock()
     pending_cond = asyncio.Condition(pending_lock)
@@ -472,10 +442,7 @@ async def run_code_mapper_pipeline(
 
         try:
             if log_info:
-                log_info(
-                    f"[Code Mapper] Processing point of interest {idx}/"
-                    f"{len(points_of_interest)}: {heading}"
-                )
+                log_info(f"[Code Mapper] Processing point of interest {idx}/{len(points_of_interest)}: {heading}")
             result = await run_deep_research(
                 services=services,
                 embedding_manager=embedding_manager,
@@ -487,10 +454,7 @@ async def run_code_mapper_pipeline(
             )
             if is_empty_research_result(result):
                 if log_warning:
-                    log_warning(
-                        f"[Code Mapper] Point of interest {idx} returned no usable "
-                        "content (will retry)."
-                    )
+                    log_warning(f"[Code Mapper] Point of interest {idx} returned no usable content (will retry).")
                 return heading, None, "empty result", False
             return heading, result, None, False
         except asyncio.CancelledError:
@@ -592,14 +556,10 @@ async def run_code_mapper_pipeline(
             await _emit_poi_failed(idx, heading)
 
     successful_sections.sort(key=lambda item: item[0])
-    poi_sections_indexed = [
-        (idx, poi, result) for idx, poi, result in successful_sections
-    ]
+    poi_sections_indexed = [(idx, poi, result) for idx, poi, result in successful_sections]
     poi_sections = [(poi, result) for _, poi, result in successful_sections]
 
-    all_results: list[dict[str, Any]] = [overview_result] + [
-        result for _, result in poi_sections
-    ]
+    all_results: list[dict[str, Any]] = [overview_result] + [result for _, result in poi_sections]
     (
         unified_source_files,
         unified_chunks_dedup,
@@ -607,9 +567,7 @@ async def run_code_mapper_pipeline(
         total_chunks_global,
     ) = merge_sources_metadata(all_results)
 
-    scope_total_files, scope_total_chunks, _scoped_files = compute_db_scope_stats(
-        services, scope_label
-    )
+    scope_total_files, scope_total_chunks, _scoped_files = compute_db_scope_stats(services, scope_label)
 
     return CodeMapperPipelineResult(
         overview_result=overview_result,

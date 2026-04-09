@@ -205,13 +205,9 @@ def format_detected_config_summary(configs: dict[str, dict[str, Any] | None]) ->
         elif provider == "local":
             detection_source = config.get("detected_from", "scan")
             if detection_source == "environment":
-                lines.append(
-                    f"  - {config['provider_name']} configured via environment"
-                )
+                lines.append(f"  - {config['provider_name']} configured via environment")
             else:
-                lines.append(
-                    f"  - {config['provider_name']} server at {config['base_url']}"
-                )
+                lines.append(f"  - {config['provider_name']} server at {config['base_url']}")
 
     return "\n".join(lines)
 
@@ -234,9 +230,7 @@ def get_priority_config(
     if configs.get("openai"):
         openai_config = configs["openai"]
         # Prefer official OpenAI over local endpoints configured via OPENAI_BASE_URL
-        if not openai_config.get("base_url") or not _is_local_url(
-            openai_config["base_url"]
-        ):
+        if not openai_config.get("base_url") or not _is_local_url(openai_config["base_url"]):
             return openai_config
 
     # Check for local endpoints

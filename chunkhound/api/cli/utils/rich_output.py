@@ -108,15 +108,11 @@ class RichOutputFormatter:
 
     def success(self, message: str) -> None:
         """Print a success message."""
-        self._safe_print(
-            f"[green][SUCCESS][/green] {escape(message)}", MessagePrefixes.SUCCESS
-        )
+        self._safe_print(f"[green][SUCCESS][/green] {escape(message)}", MessagePrefixes.SUCCESS)
 
     def warning(self, message: str) -> None:
         """Print a warning message."""
-        self._safe_print(
-            f"[yellow][WARN][/yellow] {escape(message)}", MessagePrefixes.WARN
-        )
+        self._safe_print(f"[yellow][WARN][/yellow] {escape(message)}", MessagePrefixes.WARN)
 
     def error(self, message: str) -> None:
         """Print an error message."""
@@ -124,22 +120,16 @@ class RichOutputFormatter:
 
         # Skip stderr output in MCP mode to avoid JSON-RPC interference
         if not os.environ.get("CHUNKHOUND_MCP_MODE"):
-            self._safe_print(
-                f"[red][ERROR][/red] {escape(message)}", MessagePrefixes.ERROR
-            )
+            self._safe_print(f"[red][ERROR][/red] {escape(message)}", MessagePrefixes.ERROR)
 
     def verbose_info(self, message: str) -> None:
         """Print a verbose info message if verbose mode is enabled."""
         if self.verbose:
-            self._safe_print(
-                f"[cyan][DEBUG][/cyan] {escape(message)}", MessagePrefixes.DEBUG
-            )
+            self._safe_print(f"[cyan][DEBUG][/cyan] {escape(message)}", MessagePrefixes.DEBUG)
 
     def progress_indicator(self, message: str) -> None:
         """Print a progress indicator message."""
-        self._safe_print(
-            f"[cyan][PROGRESS][/cyan] {escape(message)}", MessagePrefixes.PROGRESS
-        )
+        self._safe_print(f"[cyan][PROGRESS][/cyan] {escape(message)}", MessagePrefixes.PROGRESS)
 
     def safe_progress_indicator(self, message: str) -> None:
         """
@@ -191,9 +181,7 @@ class RichOutputFormatter:
         else:
             print(json_str)
 
-    def box_section(
-        self, title: str, content: list[tuple[str, str]], width: int = 50
-    ) -> None:
+    def box_section(self, title: str, content: list[tuple[str, str]], width: int = 50) -> None:
         """Print a bordered section with key-value pairs."""
         from rich.table import Table
 
@@ -246,9 +234,7 @@ class RichOutputFormatter:
             sys.stdout.write(f"\n=== {title} ===\n\n")
         sys.stdout.write(text.rstrip() + "\n")
 
-    def startup_info(
-        self, version: str, directory: str, database: str, config: dict[str, Any]
-    ) -> None:
+    def startup_info(self, version: str, directory: str, database: str, config: dict[str, Any]) -> None:
         """Display startup information in a styled panel."""
         info_table = Table.grid(padding=(0, 2))
         info_table.add_column(style="cyan")
@@ -290,9 +276,7 @@ class RichOutputFormatter:
             return _NoRichProgressManager()
 
         # Create custom text columns that handle missing fields gracefully
-        def render_field(
-            task, field_name: str, default: str = "", style: str = ""
-        ) -> str:
+        def render_field(task, field_name: str, default: str = "", style: str = "") -> str:
             try:
                 return task.fields.get(field_name, default)
             except (AttributeError, KeyError):
@@ -314,11 +298,7 @@ class RichOutputFormatter:
                 super().__init__("", style=style, justify=justify)
 
             def render(self, task) -> Text:
-                value = (
-                    task.fields.get(self.field_name, self.default)
-                    if hasattr(task, "fields")
-                    else self.default
-                )
+                value = task.fields.get(self.field_name, self.default) if hasattr(task, "fields") else self.default
 
                 # Truncate value if max_width is specified and exceeded
                 if self.max_width and len(value) > self.max_width:
@@ -350,12 +330,8 @@ class RichOutputFormatter:
         summary_table.add_column(style="cyan")
         summary_table.add_column()
 
-        summary_table.add_row(
-            "Processed:", f"[green]{stats.get('files_processed', 0)}[/green] files"
-        )
-        summary_table.add_row(
-            "Skipped:", f"[yellow]{stats.get('files_skipped', 0)}[/yellow] files"
-        )
+        summary_table.add_row("Processed:", f"[green]{stats.get('files_processed', 0)}[/green] files")
+        summary_table.add_row("Skipped:", f"[yellow]{stats.get('files_skipped', 0)}[/yellow] files")
         if stats.get("skipped_unchanged", 0) > 0:
             summary_table.add_row(
                 "  └─ Unchanged:",
@@ -366,29 +342,19 @@ class RichOutputFormatter:
                 "  └─ Filtered:",
                 f"[yellow]{stats.get('skipped_filtered', 0)}[/yellow] files",
             )
-        summary_table.add_row(
-            "Errors:", f"[red]{stats.get('files_errors', 0)}[/red] files"
-        )
-        summary_table.add_row(
-            "Total chunks:", f"[blue]{stats.get('chunks_created', 0)}[/blue]"
-        )
+        summary_table.add_row("Errors:", f"[red]{stats.get('files_errors', 0)}[/red] files")
+        summary_table.add_row("Total chunks:", f"[blue]{stats.get('chunks_created', 0)}[/blue]")
 
         if "embeddings_generated" in stats:
-            summary_table.add_row(
-                "Embeddings:", f"[magenta]{stats['embeddings_generated']}[/magenta]"
-            )
+            summary_table.add_row("Embeddings:", f"[magenta]{stats['embeddings_generated']}[/magenta]")
 
         summary_table.add_row("Time:", f"[cyan]{processing_time:.2f}s[/cyan]")
 
         # Add cleanup stats if any
         if stats.get("cleanup_deleted_files", 0) > 0:
-            summary_table.add_row(
-                "Cleaned files:", f"[yellow]{stats['cleanup_deleted_files']}[/yellow]"
-            )
+            summary_table.add_row("Cleaned files:", f"[yellow]{stats['cleanup_deleted_files']}[/yellow]")
         if stats.get("cleanup_deleted_chunks", 0) > 0:
-            summary_table.add_row(
-                "Cleaned chunks:", f"[yellow]{stats['cleanup_deleted_chunks']}[/yellow]"
-            )
+            summary_table.add_row("Cleaned chunks:", f"[yellow]{stats['cleanup_deleted_chunks']}[/yellow]")
 
         panel = Panel(
             summary_table,
@@ -442,11 +408,15 @@ class RichOutputFormatter:
 
         if self.console is not None:
             self.console.print(
-                f"[dim]Initial stats: {stats.get('files', 0)} files, {stats.get('chunks', 0)} chunks, {stats.get('embeddings', 0)} embeddings[/dim]"
+                f"[dim]Initial stats: {stats.get('files', 0)} files,"
+                f" {stats.get('chunks', 0)} chunks,"
+                f" {stats.get('embeddings', 0)} embeddings[/dim]"
             )
         else:
             print(
-                f"Initial stats: {stats.get('files', 0)} files, {stats.get('chunks', 0)} chunks, {stats.get('embeddings', 0)} embeddings"
+                f"Initial stats: {stats.get('files', 0)} files,"
+                f" {stats.get('chunks', 0)} chunks,"
+                f" {stats.get('embeddings', 0)} embeddings"
             )
 
 
@@ -485,9 +455,7 @@ class ProgressManager:
         info: str = "",
     ) -> TaskID:
         """Add a new progress task."""
-        task_id = self.progress.add_task(
-            description, total=total, speed=speed, info=info
-        )
+        task_id = self.progress.add_task(description, total=total, speed=speed, info=info)
         self._tasks[name] = task_id
         return task_id
 
@@ -538,9 +506,7 @@ class ProgressManager:
         """Add a subtask under a parent task with visual hierarchy."""
         # Create indented description for visual hierarchy
         indent = "  " + "└─ " if indent_level == 1 else "    " * indent_level + "└─ "
-        task_id = self.progress.add_task(
-            f"{indent}{description}", total=total, speed="", info=""
-        )
+        task_id = self.progress.add_task(f"{indent}{description}", total=total, speed="", info="")
         self._tasks[name] = task_id
         return task_id
 

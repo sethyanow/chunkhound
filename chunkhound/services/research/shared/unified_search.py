@@ -132,16 +132,10 @@ class UnifiedSearch:
             )
 
             # Run all semantic searches in parallel
-            logger.debug(
-                f"Step 2b: Running {len(expanded_queries)} parallel semantic searches"
-            )
+            logger.debug(f"Step 2b: Running {len(expanded_queries)} parallel semantic searches")
             # Determine time and result limits from config (if available)
-            time_limit = (
-                self._config.get_effective_time_limit() if self._config else None
-            )
-            result_limit = (
-                self._config.get_effective_result_limit() if self._config else None
-            )
+            time_limit = self._config.get_effective_time_limit() if self._config else None
+            result_limit = self._config.get_effective_result_limit() if self._config else None
 
             page_size = self._config.initial_page_size if self._config else 30
             search_tasks = [
@@ -164,15 +158,11 @@ class UnifiedSearch:
             semantic_map = {}
             for result in search_results:
                 if isinstance(result, Exception):
-                    logger.warning(
-                        f"Semantic search failed during query expansion: {result}"
-                    )
+                    logger.warning(f"Semantic search failed during query expansion: {result}")
                     continue
                 # Validate tuple structure before unpacking
                 if not isinstance(result, tuple) or len(result) != 2:
-                    logger.error(
-                        f"Unexpected search result structure: {type(result)}, skipping"
-                    )
+                    logger.error(f"Unexpected search result structure: {type(result)}, skipping")
                     continue
                 results, _ = result
                 for chunk in results:
@@ -200,9 +190,7 @@ class UnifiedSearch:
             )
         else:
             # Original single-query approach (fallback)
-            logger.debug(
-                f"Step 2: Running multi-hop semantic search for query: '{query}'"
-            )
+            logger.debug(f"Step 2: Running multi-hop semantic search for query: '{query}'")
             await emit_event(
                 "search_semantic",
                 "Searching semantically",
@@ -211,12 +199,8 @@ class UnifiedSearch:
             )
 
             # Determine time and result limits from config (if available)
-            time_limit = (
-                self._config.get_effective_time_limit() if self._config else None
-            )
-            result_limit = (
-                self._config.get_effective_result_limit() if self._config else None
-            )
+            time_limit = self._config.get_effective_time_limit() if self._config else None
+            result_limit = self._config.get_effective_result_limit() if self._config else None
 
             page_size = self._config.initial_page_size if self._config else 30
             semantic_results, _ = await search_service.search_semantic(
@@ -246,9 +230,7 @@ class UnifiedSearch:
                 expander = GraphWalkExpander(self._db_services.provider)
                 graph_chunks = await expander.expand(semantic_results, depth=2)
                 if graph_chunks:
-                    logger.debug(
-                        f"Step 2.5: Graph expansion added {len(graph_chunks)} chunks"
-                    )
+                    logger.debug(f"Step 2.5: Graph expansion added {len(graph_chunks)} chunks")
                     semantic_results = graph_chunks + semantic_results
                     await emit_event(
                         "graph_expansion",
@@ -258,39 +240,28 @@ class UnifiedSearch:
                         chunks=len(graph_chunks),
                     )
             except Exception as e:
-                logger.warning(
-                    f"Step 2.5: Graph expansion failed, continuing with "
-                    f"semantic-only results: {e}"
-                )
+                logger.warning(f"Step 2.5: Graph expansion failed, continuing with semantic-only results: {e}")
 
         # Steps 3-5: Symbol extraction, reranking, and regex search
         regex_results = []
         if semantic_results:
             # Step 3: Extract symbols from semantic results
             logger.debug("Step 3: Extracting symbols from semantic results")
-            await emit_event(
-                "extract_symbols", "Extracting symbols", node_id=node_id, depth=depth
-            )
+            await emit_event("extract_symbols", "Extracting symbols", node_id=node_id, depth=depth)
 
             symbols = await self.extract_symbols_from_chunks(semantic_results)
 
             if symbols:
                 # Step 4: Select top symbols (deterministic first-seen order from
                 # semantic results).
-                max_symbols = (
-                    self._config.max_symbols if self._config else MAX_SYMBOLS_TO_SEARCH
-                )
-                logger.debug(
-                    f"Step 4: Selecting top {max_symbols} symbols from {len(symbols)} "
-                    "extracted symbols"
-                )
+                max_symbols = self._config.max_symbols if self._config else MAX_SYMBOLS_TO_SEARCH
+                logger.debug(f"Step 4: Selecting top {max_symbols} symbols from {len(symbols)} extracted symbols")
                 top_symbols = symbols[:max_symbols]
 
                 # Emit symbol extraction results
                 await emit_event(
                     "extract_symbols_complete",
-                    f"Extracted {len(symbols)} symbols, searching top "
-                    f"{len(top_symbols)}",
+                    f"Extracted {len(symbols)} symbols, searching top {len(top_symbols)}",
                     node_id=node_id,
                     depth=depth,
                     symbols=len(symbols),
@@ -299,16 +270,8 @@ class UnifiedSearch:
                 if top_symbols:
                     # Step 5: Regex search for top symbols
                     # Compute dynamic target using config values with fallback
-                    regex_min = (
-                        self._config.regex_min_results
-                        if self._config
-                        else REGEX_MIN_RESULTS
-                    )
-                    regex_ratio = (
-                        self._config.regex_augmentation_ratio
-                        if self._config
-                        else REGEX_AUGMENTATION_RATIO
-                    )
+                    regex_min = self._config.regex_min_results if self._config else REGEX_MIN_RESULTS
+                    regex_ratio = self._config.regex_augmentation_ratio if self._config else REGEX_AUGMENTATION_RATIO
                     target_count = max(
                         regex_min,
                         int(len(semantic_results) * regex_ratio),
@@ -351,10 +314,7 @@ class UnifiedSearch:
                     )
 
         # Step 6: Unify results at chunk level (deduplicate by chunk_id)
-        logger.debug(
-            f"Step 6: Unifying {len(semantic_results)} semantic + "
-            f"{len(regex_results)} regex results"
-        )
+        logger.debug(f"Step 6: Unifying {len(semantic_results)} semantic + {len(regex_results)} regex results")
         unified_map = {}
 
         # Add semantic results first (they have relevance scores from multi-hop)
@@ -387,10 +347,7 @@ class UnifiedSearch:
 
                 # Compound reranking: rerank against each query and average scores
                 if rerank_queries and len(rerank_queries) > 1:
-                    logger.debug(
-                        f"Step 7: Compound reranking against {len(rerank_queries)} "
-                        "queries"
-                    )
+                    logger.debug(f"Step 7: Compound reranking against {len(rerank_queries)} queries")
 
                     # Rerank against each query
                     all_scores: list[dict[int, float]] = []
@@ -409,21 +366,16 @@ class UnifiedSearch:
 
                     # Compute compound score as average across all queries
                     for idx in range(len(combined_pool)):
-                        scores = [
-                            query_scores.get(idx, 0.0) for query_scores in all_scores
-                        ]
+                        scores = [query_scores.get(idx, 0.0) for query_scores in all_scores]
                         compound_score = sum(scores) / len(scores) if scores else 0.0
                         combined_pool[idx]["rerank_score"] = compound_score
 
                     logger.debug(
-                        "Step 7: Compound rerank complete - averaged scores from "
-                        f"{len(rerank_queries)} queries"
+                        f"Step 7: Compound rerank complete - averaged scores from {len(rerank_queries)} queries"
                     )
                 else:
                     # Single query reranking (default behavior)
-                    rerank_query = (
-                        rerank_queries[0] if rerank_queries else context.root_query
-                    )
+                    rerank_query = rerank_queries[0] if rerank_queries else context.root_query
                     rerank_results = await embedding_provider.rerank(
                         query=rerank_query,
                         documents=documents,
@@ -432,13 +384,10 @@ class UnifiedSearch:
                     # Apply reranking scores (same pattern as multi_hop_strategy.py)
                     for rerank_result in rerank_results:
                         if 0 <= rerank_result.index < len(combined_pool):
-                            combined_pool[rerank_result.index]["rerank_score"] = (
-                                rerank_result.score
-                            )
+                            combined_pool[rerank_result.index]["rerank_score"] = rerank_result.score
 
                     logger.debug(
-                        f"Step 7: Unified rerank complete - {len(combined_pool)} "
-                        "chunks reranked against root query"
+                        f"Step 7: Unified rerank complete - {len(combined_pool)} chunks reranked against root query"
                     )
 
                 # Sort by rerank score descending
@@ -448,15 +397,11 @@ class UnifiedSearch:
                 )
 
             except Exception as e:
-                logger.warning(
-                    f"Unified rerank failed, keeping semantic-priority order: {e}"
-                )
+                logger.warning(f"Unified rerank failed, keeping semantic-priority order: {e}")
 
         return combined_pool
 
-    async def extract_symbols_from_chunks(
-        self, chunks: list[dict[str, Any]]
-    ) -> list[str]:
+    async def extract_symbols_from_chunks(self, chunks: list[dict[str, Any]]) -> list[str]:
         """Extract symbols from already-parsed chunks (language-agnostic).
 
         Leverages existing chunk data from UniversalParser which already extracted
@@ -514,16 +459,10 @@ class UnifiedSearch:
 
         # Filter out common noise (single chars, numbers, common keywords)
         filtered_symbols = [
-            s
-            for s in ordered_symbols
-            if len(s) > 1
-            and not s.isdigit()
-            and s.lower() not in {"self", "cls", "this"}
+            s for s in ordered_symbols if len(s) > 1 and not s.isdigit() and s.lower() not in {"self", "cls", "this"}
         ]
 
-        logger.debug(
-            f"Extracted {len(filtered_symbols)} symbols from {len(chunks)} chunks"
-        )
+        logger.debug(f"Extracted {len(filtered_symbols)} symbols from {len(chunks)} chunks")
         return filtered_symbols
 
     async def search_by_symbols(
@@ -569,9 +508,7 @@ class UnifiedSearch:
                 results: list[dict[str, Any]] = []
                 offset = 0
                 # Use config value if available, fall back to 100 (spec default)
-                scan_page_size = (
-                    self._config.regex_scan_page_size if self._config else 100
-                )
+                scan_page_size = self._config.regex_scan_page_size if self._config else 100
                 # Track all seen chunk IDs (excluded + collected).
                 seen_chunk_ids = exclude_ids.copy()
                 # Safety limit to prevent infinite loops when exclusions are large
@@ -601,8 +538,7 @@ class UnifiedSearch:
                     pages_fetched += 1
 
                 logger.debug(
-                    f"Found {len(results)} undiscovered chunks for symbol '{symbol}' "
-                    f"(target: {target_per_symbol})"
+                    f"Found {len(results)} undiscovered chunks for symbol '{symbol}' (target: {target_per_symbol})"
                 )
                 return results
 
@@ -624,9 +560,7 @@ class UnifiedSearch:
         )
         return all_results
 
-    async def expand_chunk_windows(
-        self, chunks: list[dict], window_lines: int = 50
-    ) -> list[dict]:
+    async def expand_chunk_windows(self, chunks: list[dict], window_lines: int = 50) -> list[dict]:
         """Expand retrieved chunks with neighboring context using line ranges.
 
         For each file represented in chunks, finds all chunks within window_lines
@@ -656,9 +590,7 @@ class UnifiedSearch:
 
         # If all chunks are already expanded, return as-is
         if not to_expand:
-            logger.debug(
-                f"All {len(chunks)} chunks already expanded, skipping window expansion"
-            )
+            logger.debug(f"All {len(chunks)} chunks already expanded, skipping window expansion")
             return chunks
 
         # Group unexpanded chunks by file_id
@@ -678,9 +610,7 @@ class UnifiedSearch:
             max_line = max(c.get("end_line", 0) for c in file_chunks) + window_lines
 
             # Use the new get_chunks_in_range method
-            neighbors = await self._get_chunks_in_range(
-                file_id=file_id, start_line=max(1, min_line), end_line=max_line
-            )
+            neighbors = await self._get_chunks_in_range(file_id=file_id, start_line=max(1, min_line), end_line=max_line)
 
             # Deduplicate by chunk_id
             for neighbor in neighbors:
@@ -700,9 +630,7 @@ class UnifiedSearch:
         )
         return expanded_chunks
 
-    async def _get_chunks_in_range(
-        self, file_id: int, start_line: int, end_line: int
-    ) -> list[dict]:
+    async def _get_chunks_in_range(self, file_id: int, start_line: int, end_line: int) -> list[dict]:
         """Get chunks in a line range from database.
 
         Args:

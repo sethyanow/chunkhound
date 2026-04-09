@@ -31,9 +31,7 @@ class ChunkCacheService:
         """
         return normalize_content(code)
 
-    def diff_chunks(
-        self, new_chunks: list[Chunk], existing_chunks: list[Chunk]
-    ) -> ChunkDiff:
+    def diff_chunks(self, new_chunks: list[Chunk], existing_chunks: list[Chunk]) -> ChunkDiff:
         """Compare chunks by normalized content comparison to identify changes.
 
         Args:

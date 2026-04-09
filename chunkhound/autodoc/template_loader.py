@@ -19,19 +19,11 @@ def _validate_relative_path(relative_path: str) -> PurePosixPath:
 
 def load_text(relative_path: str) -> str:
     asset_path = _validate_relative_path(relative_path)
-    with (
-        importlib.resources.files(_ASSETS_PACKAGE)
-        .joinpath(*asset_path.parts)
-        .open("r", encoding="utf-8") as handle
-    ):
+    with importlib.resources.files(_ASSETS_PACKAGE).joinpath(*asset_path.parts).open("r", encoding="utf-8") as handle:
         return handle.read()
 
 
 def load_bytes(relative_path: str) -> bytes:
     asset_path = _validate_relative_path(relative_path)
-    with (
-        importlib.resources.files(_ASSETS_PACKAGE)
-        .joinpath(*asset_path.parts)
-        .open("rb") as handle
-    ):
+    with importlib.resources.files(_ASSETS_PACKAGE).joinpath(*asset_path.parts).open("rb") as handle:
         return handle.read()

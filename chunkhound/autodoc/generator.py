@@ -64,11 +64,7 @@ async def cleanup_topics(
     for topic, body in zip(topics, cleaned, strict=False):
         sources_block = extract_sources_block(topic.body_markdown)
         cleaned_body = strip_references_section(body)
-        flat_references = (
-            _select_flat_references_for_cleaned_body(cleaned_body, sources_block)
-            if sources_block
-            else []
-        )
+        flat_references = _select_flat_references_for_cleaned_body(cleaned_body, sources_block) if sources_block else []
         normalized_body = _apply_reference_normalization(body, sources_block)
         description = _extract_description(normalized_body)
         slug = _slugify_title(topic.title, topic.order)
@@ -97,14 +93,10 @@ async def _cleanup_topic_bodies(
     log_warning: Callable[[str], None] | None,
 ) -> list[str]:
     if config.mode != "llm":
-        raise ValueError(
-            f"Unsupported AutoDoc cleanup mode: {config.mode!r}. Expected: 'llm'."
-        )
+        raise ValueError(f"Unsupported AutoDoc cleanup mode: {config.mode!r}. Expected: 'llm'.")
 
     if llm_manager is None:
-        raise RuntimeError(
-            "AutoDoc cleanup requires an LLM provider, but none is configured."
-        )
+        raise RuntimeError("AutoDoc cleanup requires an LLM provider, but none is configured.")
 
     provider = llm_manager.get_synthesis_provider()
     return await _cleanup_with_llm(
@@ -167,9 +159,7 @@ async def _maybe_synthesize_global_ia(
         provider = llm_manager.get_synthesis_provider()
     except Exception as exc:  # noqa: BLE001
         if log_warning:
-            log_warning(
-                f"Global IA synthesis provider unavailable; skipping. Error: {exc}"
-            )
+            log_warning(f"Global IA synthesis provider unavailable; skipping. Error: {exc}")
         return None, None, None
 
     homepage_overview: str | None = None
@@ -183,9 +173,7 @@ async def _maybe_synthesize_global_ia(
         )
     except Exception as exc:  # noqa: BLE001
         if log_warning:
-            log_warning(
-                f"Homepage overview synthesis failed; skipping overview. Error: {exc}"
-            )
+            log_warning(f"Homepage overview synthesis failed; skipping overview. Error: {exc}")
 
     nav_groups: list[NavGroup] | None = None
     glossary_terms: list[GlossaryTerm] | None = None
@@ -199,9 +187,7 @@ async def _maybe_synthesize_global_ia(
         )
     except Exception as exc:  # noqa: BLE001
         if log_warning:
-            log_warning(
-                f"Global navigation/glossary synthesis failed; skipping. Error: {exc}"
-            )
+            log_warning(f"Global navigation/glossary synthesis failed; skipping. Error: {exc}")
 
     return nav_groups, glossary_terms, homepage_overview
 

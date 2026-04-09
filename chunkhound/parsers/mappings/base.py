@@ -130,9 +130,7 @@ class BaseMapping(ABC):
                 return child
         return None
 
-    def find_children_by_type(
-        self, node: TSNode | None, node_type: str
-    ) -> list[TSNode]:
+    def find_children_by_type(self, node: TSNode | None, node_type: str) -> list[TSNode]:
         """Find all child nodes of specified type.
 
         Args:
@@ -323,9 +321,7 @@ class BaseMapping(ABC):
 
         return cleaned.strip()
 
-    def get_expression_preview(
-        self, expr: str, max_length: int = 20, safe_chars: bool = True
-    ) -> str:
+    def get_expression_preview(self, expr: str, max_length: int = 20, safe_chars: bool = True) -> str:
         """Get truncated expression for chunk naming.
 
         This method provides a consistent way to generate safe, readable

@@ -32,9 +32,7 @@ def find_index_file(
     for pattern in pattern_list:
         candidates.extend(sorted(input_dir.glob(pattern)))
     if not candidates:
-        raise FileNotFoundError(
-            "No AutoDoc index file found (expected " + ", ".join(pattern_list) + ")."
-        )
+        raise FileNotFoundError("No AutoDoc index file found (expected " + ", ".join(pattern_list) + ").")
     if len(candidates) > 1 and log_warning:
         log_warning(
             "Multiple AutoDoc index files found; using first match: "

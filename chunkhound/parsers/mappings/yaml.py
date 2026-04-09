@@ -104,9 +104,7 @@ class YamlMapping(BaseMapping):
         # All cases handled above
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -177,9 +175,7 @@ class YamlMapping(BaseMapping):
         # All cases handled above
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -195,9 +191,7 @@ class YamlMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract YAML-specific metadata."""
 
         source = content.decode("utf-8")
@@ -267,9 +261,7 @@ class YamlMapping(BaseMapping):
                 elif block_node.type == "document":
                     # Analyze document structure
                     metadata["structure_type"] = "document"
-                    metadata["has_directives"] = self._has_yaml_directives(
-                        block_node, source
-                    )
+                    metadata["has_directives"] = self._has_yaml_directives(block_node, source)
 
         elif concept == UniversalConcept.IMPORT:
             if "key" in captures and "value" in captures:
@@ -283,11 +275,7 @@ class YamlMapping(BaseMapping):
                 metadata["import_target"] = value_text
 
                 # Determine if it's a file path or module reference
-                if (
-                    "/" in value_text
-                    or "\\" in value_text
-                    or value_text.endswith((".yaml", ".yml"))
-                ):
+                if "/" in value_text or "\\" in value_text or value_text.endswith((".yaml", ".yml")):
                     metadata["target_type"] = "file"
                 else:
                     metadata["target_type"] = "reference"
@@ -305,10 +293,7 @@ class YamlMapping(BaseMapping):
 
                 if clean_text:
                     upper_text = clean_text.upper()
-                    if any(
-                        prefix in upper_text
-                        for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]
-                    ):
+                    if any(prefix in upper_text for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]):
                         comment_type = "annotation"
                     elif clean_text.startswith("---") or clean_text.startswith("..."):
                         comment_type = "document_marker"
@@ -328,11 +313,7 @@ class YamlMapping(BaseMapping):
                     metadata["max_depth"] = depth
                 elif structure_node.type == "stream":
                     doc_count = len(
-                        [
-                            child
-                            for child in self.walk_tree(structure_node)
-                            if child and child.type == "document"
-                        ]
+                        [child for child in self.walk_tree(structure_node) if child and child.type == "document"]
                     )
                     metadata["document_count"] = doc_count
 
@@ -396,9 +377,7 @@ class YamlMapping(BaseMapping):
 
         return max_depth
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Data formats don't have imports."""
         return []
 

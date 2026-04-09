@@ -107,10 +107,7 @@ class SynthesisEngine:
             "chunks_count": len(chunks),
         }
 
-        logger.info(
-            f"Synthesis input: {len(files)} files, {len(chunks)} chunks, "
-            f"{total_tokens:,} tokens"
-        )
+        logger.info(f"Synthesis input: {len(files)} files, {len(chunks)} chunks, {total_tokens:,} tokens")
 
         return chunks, files, selection_info
 
@@ -153,9 +150,7 @@ class SynthesisEngine:
         # Filter chunks to only include those from budgeted files
         # This ensures consistency between reference map, citations, and footer
         original_chunk_count = len(chunks)
-        budgeted_chunks = self._parent._citation_manager.filter_chunks_to_files(
-            chunks, files
-        )
+        budgeted_chunks = self._parent._citation_manager.filter_chunks_to_files(chunks, files)
 
         logger.info(
             f"Starting single-pass synthesis with {len(files)} files, "
@@ -196,9 +191,7 @@ class SynthesisEngine:
             if file_path in chunks_by_file:
                 file_chunks = chunks_by_file[file_path]
                 # Sort chunks by start_line for logical ordering
-                sorted_chunks = sorted(
-                    file_chunks, key=lambda c: c.get("start_line", 0)
-                )
+                sorted_chunks = sorted(file_chunks, key=lambda c: c.get("start_line", 0))
 
                 # Build content with line markers for each chunk
                 chunk_sections = []
@@ -208,35 +201,25 @@ class SynthesisEngine:
                     chunk_code = chunk.get("content", "")
 
                     # Add line marker before chunk code
-                    chunk_sections.append(
-                        f"# Lines {start_line}-{end_line}\n{chunk_code}"
-                    )
+                    chunk_sections.append(f"# Lines {start_line}-{end_line}\n{chunk_code}")
 
                 file_content = "\n\n".join(chunk_sections)
             else:
                 # No chunks for this file, use full content from budget
                 file_content = content
 
-            code_sections.append(
-                f"### {file_path}\n{'=' * 80}\n{file_content}\n{'=' * 80}"
-            )
+            code_sections.append(f"### {file_path}\n{'=' * 80}\n{file_content}\n{'=' * 80}")
 
         code_context = "\n\n".join(code_sections)
 
         # Build file reference map for numbered citations
-        file_reference_map = self._parent._citation_manager.build_file_reference_map(
-            budgeted_chunks, files
-        )
-        reference_table = self._parent._citation_manager.format_reference_table(
-            file_reference_map
-        )
+        file_reference_map = self._parent._citation_manager.build_file_reference_map(budgeted_chunks, files)
+        reference_table = self._parent._citation_manager.format_reference_table(file_reference_map)
 
         # Build constants context section
         constants_section = ""
         if constants_context:
-            constants_section = (
-                f"\n\n{constants_context}\n\n{CONSTANTS_INSTRUCTION_FULL}"
-            )
+            constants_section = f"\n\n{constants_context}\n\n{CONSTANTS_INSTRUCTION_FULL}"
 
         # Build facts context section
         facts_section = ""
@@ -247,7 +230,7 @@ class SynthesisEngine:
         output_guidance = build_output_guidance(TARGET_OUTPUT_TOKENS)
 
         # Build comprehensive synthesis prompt (adapted from Code Expert methodology)
-        system = prompts.SYNTHESIS_SYSTEM_BUILDER(output_guidance)
+        system = prompts.synthesis_system_builder(output_guidance)
 
         # Combine root_query with constants and facts context
         query_with_context = root_query + constants_section + facts_section
@@ -275,10 +258,7 @@ class SynthesisEngine:
 
         # Validate synthesis response
         answer_length = len(answer.strip()) if answer else 0
-        logger.info(
-            f"LLM synthesis response: length={answer_length}, "
-            f"finish_reason={response.finish_reason}"
-        )
+        logger.info(f"LLM synthesis response: length={answer_length}, finish_reason={response.finish_reason}")
 
         if answer_length < MIN_SYNTHESIS_LENGTH:
             logger.error(
@@ -293,19 +273,13 @@ class SynthesisEngine:
 
         # Append sources footer with file and chunk information
         try:
-            footer = self._parent._citation_manager.build_sources_footer(
-                budgeted_chunks, files, file_reference_map
-            )
+            footer = self._parent._citation_manager.build_sources_footer(budgeted_chunks, files, file_reference_map)
             if footer:
                 answer = f"{answer}\n\n{footer}"
         except Exception as e:
-            logger.warning(
-                f"Failed to generate sources footer: {e}. Continuing without footer."
-            )
+            logger.warning(f"Failed to generate sources footer: {e}. Continuing without footer.")
 
-        logger.info(
-            f"Single-pass synthesis complete: {llm.estimate_tokens(answer):,} tokens generated"
-        )
+        logger.info(f"Single-pass synthesis complete: {llm.estimate_tokens(answer):,} tokens generated")
 
         return answer
 
@@ -339,9 +313,7 @@ class SynthesisEngine:
         # Filter chunks to only those in this cluster's files
         # This ensures consistency between reference map, citations, and cluster content
         original_chunk_count = len(chunks)
-        cluster_chunks = self._parent._citation_manager.filter_chunks_to_files(
-            chunks, cluster.files_content
-        )
+        cluster_chunks = self._parent._citation_manager.filter_chunks_to_files(chunks, cluster.files_content)
 
         logger.debug(
             f"Synthesizing cluster {cluster.cluster_id} "
@@ -363,42 +335,30 @@ class SynthesisEngine:
         for file_path, content in cluster.files_content.items():
             if file_path in chunks_by_file:
                 file_chunks = chunks_by_file[file_path]
-                sorted_chunks = sorted(
-                    file_chunks, key=lambda c: c.get("start_line", 0)
-                )
+                sorted_chunks = sorted(file_chunks, key=lambda c: c.get("start_line", 0))
                 chunk_sections = []
                 for chunk in sorted_chunks:
                     start_line = chunk.get("start_line", "?")
                     end_line = chunk.get("end_line", "?")
                     chunk_code = chunk.get("content", "")
-                    chunk_sections.append(
-                        f"# Lines {start_line}-{end_line}\n{chunk_code}"
-                    )
+                    chunk_sections.append(f"# Lines {start_line}-{end_line}\n{chunk_code}")
                 file_content = "\n\n".join(chunk_sections)
             else:
                 file_content = content
 
-            code_sections.append(
-                f"### {file_path}\n{'=' * 80}\n{file_content}\n{'=' * 80}"
-            )
+            code_sections.append(f"### {file_path}\n{'=' * 80}\n{file_content}\n{'=' * 80}")
 
         code_context = "\n\n".join(code_sections)
 
         # Build file reference map for numbered citations (cluster-specific)
         cluster_files = cluster.files_content
-        file_reference_map = self._parent._citation_manager.build_file_reference_map(
-            cluster_chunks, cluster_files
-        )
-        reference_table = self._parent._citation_manager.format_reference_table(
-            file_reference_map
-        )
+        file_reference_map = self._parent._citation_manager.build_file_reference_map(cluster_chunks, cluster_files)
+        reference_table = self._parent._citation_manager.format_reference_table(file_reference_map)
 
         # Build cluster-specific synthesis prompt
         # Proportional output budget: each cluster gets output proportional to its input share
         # This ensures larger clusters (more code) get more output tokens
-        cluster_proportion = (
-            cluster.total_tokens / total_input_tokens if total_input_tokens > 0 else 1.0
-        )
+        cluster_proportion = cluster.total_tokens / total_input_tokens if total_input_tokens > 0 else 1.0
         cluster_output_tokens = max(5000, int(total_input_tokens * cluster_proportion))
         # Cap cluster target to half of TARGET_OUTPUT_TOKENS (clusters combine in reduce)
         cluster_target = min(cluster_output_tokens, TARGET_OUTPUT_TOKENS // 2)
@@ -406,9 +366,7 @@ class SynthesisEngine:
         # Build constants section if available
         constants_section = ""
         if constants_context:
-            constants_section = (
-                f"\n{constants_context}\n\n{CONSTANTS_INSTRUCTION_SHORT}"
-            )
+            constants_section = f"\n{constants_context}\n\n{CONSTANTS_INSTRUCTION_SHORT}"
 
         # Build facts section if available
         facts_section = ""
@@ -511,18 +469,14 @@ Provide a comprehensive analysis focusing on the query."""
         # Filter chunks to only include those from synthesized files
         # This ensures consistency between reference map, citations, and footer
         original_chunk_count = len(all_chunks)
-        budgeted_chunks = self._parent._citation_manager.filter_chunks_to_files(
-            all_chunks, all_files
-        )
+        budgeted_chunks = self._parent._citation_manager.filter_chunks_to_files(all_chunks, all_files)
 
         llm = self._llm_manager.get_synthesis_provider()
         max_output_tokens = synthesis_budgets["output_tokens"]
 
         # Calculate actual input size from cluster summaries
         # This helps inform the LLM about the scope of integration work
-        total_input_tokens = sum(
-            llm.estimate_tokens(result["summary"]) for result in cluster_results
-        )
+        total_input_tokens = sum(llm.estimate_tokens(result["summary"]) for result in cluster_results)
 
         logger.info(
             f"Reducing {len(cluster_results)} cluster summaries into final answer "
@@ -531,12 +485,8 @@ Provide a comprehensive analysis focusing on the query."""
         )
 
         # Build global file reference map for all clusters
-        file_reference_map = self._parent._citation_manager.build_file_reference_map(
-            budgeted_chunks, all_files
-        )
-        reference_table = self._parent._citation_manager.format_reference_table(
-            file_reference_map
-        )
+        file_reference_map = self._parent._citation_manager.build_file_reference_map(budgeted_chunks, all_files)
+        reference_table = self._parent._citation_manager.format_reference_table(file_reference_map)
 
         # Remap cluster-local citations to global reference numbers
         logger.info("Remapping cluster-local citations to global references")
@@ -558,18 +508,14 @@ Provide a comprehensive analysis focusing on the query."""
                 remaining = len(file_paths) - 5
                 files += f", ... (+{remaining} more)"
 
-            cluster_summaries.append(
-                f"## Cluster {i} Analysis\n**Files**: {files}\n\n{summary}"
-            )
+            cluster_summaries.append(f"## Cluster {i} Analysis\n**Files**: {files}\n\n{summary}")
 
         combined_summaries = "\n\n" + "=" * 80 + "\n\n" + "\n\n".join(cluster_summaries)
 
         # Build constants section if available
         constants_section = ""
         if constants_context:
-            constants_section = (
-                f"\n\n{constants_context}\n\n{CONSTANTS_INSTRUCTION_FULL}"
-            )
+            constants_section = f"\n\n{constants_context}\n\n{CONSTANTS_INSTRUCTION_FULL}"
 
         # Build facts section if available
         facts_section = ""
@@ -628,43 +574,29 @@ Provide a complete, integrated analysis that addresses the original query."""
         answer_length = len(answer.strip()) if answer else 0
 
         if answer_length < MIN_SYNTHESIS_LENGTH:
-            logger.error(
-                f"Reduce synthesis returned suspiciously short answer: {answer_length} chars"
-            )
+            logger.error(f"Reduce synthesis returned suspiciously short answer: {answer_length} chars")
             raise RuntimeError(
                 f"LLM reduce synthesis failed: generated only {answer_length} characters "
                 f"(minimum: {MIN_SYNTHESIS_LENGTH}). finish_reason={response.finish_reason}."
             )
 
         # Validate citation references are valid
-        invalid_citations = self._parent._citation_manager.validate_citation_references(
-            answer, file_reference_map
-        )
+        invalid_citations = self._parent._citation_manager.validate_citation_references(answer, file_reference_map)
         if invalid_citations:
             logger.warning(
                 f"Found {len(invalid_citations)} invalid citation references after reduce: "
                 f"{invalid_citations[:10]}"
-                + (
-                    f" ... and {len(invalid_citations) - 10} more"
-                    if len(invalid_citations) > 10
-                    else ""
-                )
+                + (f" ... and {len(invalid_citations) - 10} more" if len(invalid_citations) > 10 else "")
             )
 
         # Append sources footer (aggregate all sources from all clusters)
         try:
-            footer = self._parent._citation_manager.build_sources_footer(
-                budgeted_chunks, all_files, file_reference_map
-            )
+            footer = self._parent._citation_manager.build_sources_footer(budgeted_chunks, all_files, file_reference_map)
             if footer:
                 answer = f"{answer}\n\n{footer}"
         except Exception as e:
-            logger.warning(
-                f"Failed to generate sources footer: {e}. Continuing without footer."
-            )
+            logger.warning(f"Failed to generate sources footer: {e}. Continuing without footer.")
 
-        logger.info(
-            f"Reduce synthesis complete: {llm.estimate_tokens(answer):,} tokens generated"
-        )
+        logger.info(f"Reduce synthesis complete: {llm.estimate_tokens(answer):,} tokens generated")
 
         return answer

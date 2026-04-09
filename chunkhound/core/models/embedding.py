@@ -279,11 +279,7 @@ class Embedding:
         Returns:
             True if embeddings can be compared
         """
-        return (
-            self.provider == other.provider
-            and self.model == other.model
-            and self.dims == other.dims
-        )
+        return self.provider == other.provider and self.model == other.model and self.dims == other.dims
 
     def __str__(self) -> str:
         """Return string representation of the embedding."""
@@ -326,9 +322,7 @@ class EmbeddingResult:
         """Validate embedding result attributes."""
         # Embeddings validation
         if not self.embeddings:
-            raise ValidationError(
-                "embeddings", self.embeddings, "Embeddings list cannot be empty"
-            )
+            raise ValidationError("embeddings", self.embeddings, "Embeddings list cannot be empty")
 
         # Provider validation
         if not self.provider or not self.provider.strip():
@@ -345,9 +339,7 @@ class EmbeddingResult:
         # Validate each embedding vector
         for i, embedding in enumerate(self.embeddings):
             if not embedding:
-                raise ValidationError(
-                    f"embeddings[{i}]", embedding, "Embedding vector cannot be empty"
-                )
+                raise ValidationError(f"embeddings[{i}]", embedding, "Embedding vector cannot be empty")
 
             if len(embedding) != self.dims:
                 raise ValidationError(
@@ -358,9 +350,7 @@ class EmbeddingResult:
 
         # Token count validation
         if self.total_tokens is not None and self.total_tokens < 0:
-            raise ValidationError(
-                "total_tokens", self.total_tokens, "Token count cannot be negative"
-            )
+            raise ValidationError("total_tokens", self.total_tokens, "Token count cannot be negative")
 
     @property
     def count(self) -> int:

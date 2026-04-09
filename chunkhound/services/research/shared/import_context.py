@@ -82,9 +82,7 @@ class ImportContextService:
 
             # Extract imports using existing concept extraction
             # Uses language-specific tree-sitter queries
-            import_chunks = parser.extractor.extract_concept(
-                tree.root_node, content_bytes, UniversalConcept.IMPORT
-            )
+            import_chunks = parser.extractor.extract_concept(tree.root_node, content_bytes, UniversalConcept.IMPORT)
 
             # Extract content from chunks
             import_lines = [chunk.content for chunk in import_chunks]

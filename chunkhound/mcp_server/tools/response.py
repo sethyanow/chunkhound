@@ -53,9 +53,7 @@ def estimate_tokens(text: str) -> int:
     return len(text) // 3
 
 
-def limit_response_size(
-    response_data: SearchResponse, max_tokens: int = MAX_RESPONSE_TOKENS
-) -> SearchResponse:
+def limit_response_size(response_data: SearchResponse, max_tokens: int = MAX_RESPONSE_TOKENS) -> SearchResponse:
     """Limit response size to fit within token limits by reducing results."""
     if not response_data.get("results"):
         return response_data
@@ -79,13 +77,11 @@ def limit_response_size(
             actual_count = len(limited_results)
             updated_pagination = response_data["pagination"].copy()
             updated_pagination["page_size"] = actual_count
-            updated_pagination["has_more"] = updated_pagination.get(
-                "has_more", False
-            ) or actual_count < len(response_data["results"])
+            updated_pagination["has_more"] = updated_pagination.get("has_more", False) or actual_count < len(
+                response_data["results"]
+            )
             if actual_count < len(response_data["results"]):
-                updated_pagination["next_offset"] = (
-                    updated_pagination.get("offset", 0) + actual_count
-                )
+                updated_pagination["next_offset"] = updated_pagination.get("offset", 0) + actual_count
 
             return {"results": limited_results, "pagination": updated_pagination}
 

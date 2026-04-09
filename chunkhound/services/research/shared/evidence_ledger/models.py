@@ -69,9 +69,7 @@ class FactEntry:
     cluster_id: int  # Which cluster extracted this
 
     @staticmethod
-    def generate_id(
-        statement: str, file_path: str, start_line: int, end_line: int
-    ) -> str:
+    def generate_id(statement: str, file_path: str, start_line: int, end_line: int) -> str:
         """Generate deterministic fact ID from content and location.
 
         Args:

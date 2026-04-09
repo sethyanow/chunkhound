@@ -97,9 +97,7 @@ class Config(BaseModel):
         if target_dir is None:
             from chunkhound.utils.project_detection import find_project_root
 
-            target_dir = find_project_root(
-                None if is_map else (getattr(args, "path", None) if args else None)
-            )
+            target_dir = find_project_root(None if is_map else (getattr(args, "path", None) if args else None))
 
         # 2. Load config file if found
         if config_file and config_file.exists():
@@ -120,8 +118,7 @@ class Config(BaseModel):
                         pass
             except json.JSONDecodeError as e:
                 raise ValueError(
-                    f"Invalid JSON in config file {config_file}: {e}. "
-                    "Please check the file format and try again."
+                    f"Invalid JSON in config file {config_file}: {e}. Please check the file format and try again."
                 )
 
         # 3. Check for local .chunkhound.json in target directory
@@ -286,9 +283,7 @@ class Config(BaseModel):
 
             detected_root = find_project_root(None)
             # Fallback to current working directory if no project root found
-            resolved_target = (
-                detected_root.resolve() if detected_root else Path.cwd().resolve()
-            )
+            resolved_target = detected_root.resolve() if detected_root else Path.cwd().resolve()
             # Use object.__setattr__ to avoid Pydantic validation recursion
             object.__setattr__(self, "target_dir", resolved_target)
         else:
@@ -342,9 +337,7 @@ class Config(BaseModel):
         # Check for missing configuration
         missing_config = self.get_missing_config()
         if missing_config:
-            errors.extend(
-                f"Missing required configuration: {item}" for item in missing_config
-            )
+            errors.extend(f"Missing required configuration: {item}" for item in missing_config)
 
         # Validate embedding provider requirements for index command
         if command == "index":

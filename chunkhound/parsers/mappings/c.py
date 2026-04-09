@@ -215,9 +215,7 @@ class CMapping(BaseMapping):
         for child in self.walk_tree(node):
             if child and child.type == "parameter_list":
                 # Walk through parameter declarations
-                for param_node in self.find_children_by_type(
-                    child, "parameter_declaration"
-                ):
+                for param_node in self.find_children_by_type(child, "parameter_declaration"):
                     param_text = self.get_node_text(param_node, source).strip()
                     if param_text and param_text not in ("(", ")", ","):
                         parameters.append(param_text)
@@ -279,9 +277,7 @@ class CMapping(BaseMapping):
             if child and child.type == "identifier":
                 # Check if this is the variable name (not a type)
                 name = self.get_node_text(child, source).strip()
-                if (
-                    name and not name.isupper()
-                ):  # Avoid type names which are often uppercase
+                if name and not name.isupper():  # Avoid type names which are often uppercase
                     return name
 
         return self.get_fallback_name(node, "variable")
@@ -396,9 +392,7 @@ class CMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -453,9 +447,7 @@ class CMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -505,18 +497,14 @@ class CMapping(BaseMapping):
                 # For typedefs, extract underlying type
                 elif def_node.type == "type_definition":
                     metadata["kind"] = "typedef"
-                    underlying_type = self._extract_typedef_underlying_type(
-                        def_node, source
-                    )
+                    underlying_type = self._extract_typedef_underlying_type(def_node, source)
                     if underlying_type:
                         metadata["underlying_type"] = underlying_type
 
         elif concept == UniversalConcept.IMPORT:
             if "include_path" in captures:
                 path_node = captures["include_path"]
-                include_path = (
-                    self.get_node_text(path_node, source).strip().strip('"<>')
-                )
+                include_path = self.get_node_text(path_node, source).strip().strip('"<>')
                 metadata["include_path"] = include_path
 
                 # Determine if it's a system or local include
@@ -527,9 +515,7 @@ class CMapping(BaseMapping):
 
             elif "define_name" in captures:
                 define_node = captures["define_name"]
-                metadata["define_name"] = self.get_node_text(
-                    define_node, source
-                ).strip()
+                metadata["define_name"] = self.get_node_text(define_node, source).strip()
                 metadata["directive_type"] = "define"
 
         elif concept == UniversalConcept.COMMENT:
@@ -563,9 +549,7 @@ class CMapping(BaseMapping):
 
         return None
 
-    def _extract_typedef_underlying_type(
-        self, typedef_node: TSNode, source: str
-    ) -> str | None:
+    def _extract_typedef_underlying_type(self, typedef_node: TSNode, source: str) -> str | None:
         """Extract underlying type from a typedef definition."""
         if typedef_node is None:
             return None
@@ -696,9 +680,7 @@ class CMapping(BaseMapping):
                                     "true",
                                     "false",
                                 ):
-                                    value_text = self.get_node_text(
-                                        init_child, source
-                                    ).strip()
+                                    value_text = self.get_node_text(init_child, source).strip()
                                     break
 
                             # Truncate to 50 chars if longer
@@ -725,9 +707,7 @@ class CMapping(BaseMapping):
 
         return constants if constants else None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve C include to file path.
 
         Args:

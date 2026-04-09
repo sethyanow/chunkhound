@@ -171,9 +171,7 @@ class HaskellMapping(BaseMapping):
                 if patterns_text:
                     text = f"{text} {patterns_text}".strip()
         else:
-            param_field = node.child_by_field_name(
-                "type_params"
-            ) or node.child_by_field_name("patterns")
+            param_field = node.child_by_field_name("type_params") or node.child_by_field_name("patterns")
             if param_field is not None:
                 params_text = self.get_node_text(param_field, source).strip()
                 if params_text:
@@ -261,9 +259,7 @@ class HaskellMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:  # type: ignore[override]
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:  # type: ignore[override]
         """Extract name for a universal concept using Haskell semantics."""
         # Decode once
         source = content.decode("utf-8", errors="replace")
@@ -291,11 +287,7 @@ class HaskellMapping(BaseMapping):
                     return text
             # Fallback to function name from definition node
             def_node = captures.get("definition") or next(iter(captures.values()), None)
-            return (
-                self.extract_method_name(def_node, source)
-                if def_node
-                else "unnamed_block"
-            )
+            return self.extract_method_name(def_node, source) if def_node else "unnamed_block"
 
         elif concept == UniversalConcept.COMMENT:
             # Location-based comment name for consistency
@@ -322,9 +314,7 @@ class HaskellMapping(BaseMapping):
 
         return f"unnamed_{concept.value}"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:  # type: ignore[override]
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:  # type: ignore[override]
         """Extract raw content for the captured node."""
         source = content.decode("utf-8", errors="replace")
         node = captures.get("definition") or next(iter(captures.values()), None)
@@ -505,9 +495,7 @@ class HaskellMapping(BaseMapping):
 
         return False
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path for Haskell.
 
         Haskell module resolution is complex and typically handled by the build system.

@@ -93,9 +93,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         self._chunk_repository = DuckDBChunkRepository(self._connection_manager, self)
 
         # Initialize embedding repository with provider reference for transaction awareness
-        self._embedding_repository = DuckDBEmbeddingRepository(
-            self._connection_manager, self
-        )
+        self._embedding_repository = DuckDBEmbeddingRepository(self._connection_manager, self)
         self._embedding_repository.set_provider_instance(self)
 
         # Lightweight performance metrics for chunk writes (per-provider lifecycle)
@@ -129,9 +127,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         conn.execute("LOAD vss")
         conn.execute("SET hnsw_enable_experimental_persistence = true")
 
-        logger.debug(
-            f"Created new DuckDB connection in executor thread {threading.get_ident()}"
-        )
+        logger.debug(f"Created new DuckDB connection in executor thread {threading.get_ident()}")
         return conn
 
     def _get_schema_sql(self) -> list[str] | None:
@@ -225,9 +221,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         try:
             wal_age = time.time() - wal_file.stat().st_mtime
             if wal_age > 86400:  # 24 hours
-                logger.warning(
-                    f"Found stale WAL file (age: {wal_age / 3600:.1f}h), removing"
-                )
+                logger.warning(f"Found stale WAL file (age: {wal_age / 3600:.1f}h), removing")
                 wal_file.unlink(missing_ok=True)
                 return
         except OSError:
@@ -252,13 +246,9 @@ class DuckDBProvider(SerialDatabaseProvider):
             super().disconnect(skip_checkpoint)
         finally:
             # Disconnect connection manager for backward compatibility
-            self._connection_manager.disconnect(
-                skip_checkpoint=True
-            )  # Skip checkpoint since we did it in executor
+            self._connection_manager.disconnect(skip_checkpoint=True)  # Skip checkpoint since we did it in executor
 
-    def _executor_disconnect(
-        self, conn: Any, state: dict[str, Any], skip_checkpoint: bool
-    ) -> None:
+    def _executor_disconnect(self, conn: Any, state: dict[str, Any], skip_checkpoint: bool) -> None:
         """Executor method for disconnect - runs in DB thread."""
         try:
             if not skip_checkpoint and not self._connection_manager.is_memory_db:
@@ -293,9 +283,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Check if a table exists in the database - delegate to connection manager."""
         return self._execute_in_db_thread_sync("table_exists", table_name)
 
-    def _executor_table_exists(
-        self, conn: Any, state: dict[str, Any], table_name: str
-    ) -> bool:
+    def _executor_table_exists(self, conn: Any, state: dict[str, Any], table_name: str) -> bool:
         """Executor method for _table_exists - runs in DB thread."""
         result = conn.execute(
             "SELECT table_name FROM information_schema.tables WHERE table_name = ?",
@@ -311,9 +299,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Ensure embedding table exists for given dimensions - delegate to connection manager."""
         return self._execute_in_db_thread_sync("ensure_embedding_table_exists", dims)
 
-    def _executor_ensure_embedding_table_exists(
-        self, conn: Any, state: dict[str, Any], dims: int
-    ) -> str:
+    def _executor_ensure_embedding_table_exists(self, conn: Any, state: dict[str, Any], dims: int) -> str:
         """Executor method for _ensure_embedding_table_exists - runs in DB thread."""
         table_name = f"embeddings_{dims}"
 
@@ -345,19 +331,10 @@ class DuckDBProvider(SerialDatabaseProvider):
             """)
 
             # Create regular indexes for fast lookups
-            conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{dims}_chunk_id "
-                f"ON {table_name}(chunk_id)"
-            )
-            conn.execute(
-                f"CREATE INDEX IF NOT EXISTS idx_{dims}_provider_model "
-                f"ON {table_name}(provider, model)"
-            )
+            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{dims}_chunk_id ON {table_name}(chunk_id)")
+            conn.execute(f"CREATE INDEX IF NOT EXISTS idx_{dims}_provider_model ON {table_name}(provider, model)")
 
-            logger.info(
-                f"Created {table_name} with HNSW index {hnsw_index_name} "
-                "and regular indexes"
-            )
+            logger.info(f"Created {table_name} with HNSW index {hnsw_index_name} and regular indexes")
             return table_name
 
         except Exception as e:
@@ -368,9 +345,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Perform checkpoint if needed - delegate to connection manager."""
         self._execute_in_db_thread_sync("maybe_checkpoint", force)
 
-    def _executor_maybe_checkpoint(
-        self, conn: Any, state: dict[str, Any], force: bool
-    ) -> None:
+    def _executor_maybe_checkpoint(self, conn: Any, state: dict[str, Any], force: bool) -> None:
         """Executor method for _maybe_checkpoint - runs in DB thread."""
         if self._connection_manager.is_memory_db:
             return
@@ -383,17 +358,13 @@ class DuckDBProvider(SerialDatabaseProvider):
             return
 
         current_time = time.time()
-        time_since_checkpoint = current_time - state.get(
-            "last_checkpoint_time", current_time
-        )
+        time_since_checkpoint = current_time - state.get("last_checkpoint_time", current_time)
         operations_since_checkpoint = state.get("operations_since_checkpoint", 0)
 
         # Checkpoint if forced, operations threshold reached (default 100), or 5 minutes elapsed
         threshold = state.get("checkpoint_threshold", 100)
         should_checkpoint = (
-            force
-            or operations_since_checkpoint >= threshold
-            or time_since_checkpoint >= 300  # 5 minutes
+            force or operations_since_checkpoint >= threshold or time_since_checkpoint >= 300  # 5 minutes
         )
 
         if should_checkpoint:
@@ -495,13 +466,9 @@ class DuckDBProvider(SerialDatabaseProvider):
                     USING HNSW (embedding)
                     WITH (metric = 'cosine')
                 """)
-                logger.info(
-                    "HNSW index for 1536-dimensional embeddings created successfully"
-                )
+                logger.info("HNSW index for 1536-dimensional embeddings created successfully")
             except Exception as e:
-                logger.warning(
-                    f"Failed to create HNSW index for 1536-dimensional embeddings: {e}"
-                )
+                logger.warning(f"Failed to create HNSW index for 1536-dimensional embeddings: {e}")
 
             # Create index on chunk_id for efficient deletions
             conn.execute("""
@@ -560,9 +527,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 """)
                 logger.info("Schema version initialized to 2")
 
-            logger.info(
-                "DuckDB schema created successfully with multi-dimension support"
-            )
+            logger.info("DuckDB schema created successfully with multi-dimension support")
 
         except Exception as e:
             logger.error(f"Failed to create DuckDB schema: {e}")
@@ -580,9 +545,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             """).fetchall()
 
             if columns_info:
-                logger.info(
-                    "Migrating chunks table: removing unused 'size' and 'signature' columns"
-                )
+                logger.info("Migrating chunks table: removing unused 'size' and 'signature' columns")
 
                 # SQLite/DuckDB doesn't support DROP COLUMN directly, need to recreate table
                 # Wrap in transaction to prevent data loss on failure
@@ -643,9 +606,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     try:
                         conn.execute("ROLLBACK")
                     except Exception as rollback_error:
-                        logger.error(
-                            f"ROLLBACK failed during migration: {rollback_error}"
-                        )
+                        logger.error(f"ROLLBACK failed during migration: {rollback_error}")
                     state["transaction_active"] = False
                     raise
 
@@ -694,9 +655,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Get list of all embedding tables (dimension-specific) - delegate to connection manager."""
         return self._execute_in_db_thread_sync("get_all_embedding_tables")
 
-    def _executor_get_all_embedding_tables(
-        self, conn: Any, state: dict[str, Any]
-    ) -> list[str]:
+    def _executor_get_all_embedding_tables(self, conn: Any, state: dict[str, Any]) -> list[str]:
         """Executor method for _get_all_embedding_tables - runs in DB thread."""
         tables = conn.execute("""
             SELECT table_name FROM information_schema.tables
@@ -716,49 +675,27 @@ class DuckDBProvider(SerialDatabaseProvider):
         try:
             # File indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_files_path ON files(path)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_files_language ON files(language)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_files_language ON files(language)")
 
             # Chunk indexes
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_chunks_file_id ON chunks(file_id)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_chunks_type ON chunks(chunk_type)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_chunks_symbol ON chunks(symbol)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_file_id ON chunks(file_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_type ON chunks(chunk_type)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_chunks_symbol ON chunks(symbol)")
 
             # Embedding indexes are created per-table in _executor_ensure_embedding_table_exists()
 
             # Symbol indexes
             conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_fqn ON symbols(fqn)")
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbols_file_id ON symbols(file_id)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbols_file_path ON symbols(file_path)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_file_id ON symbols(file_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_file_path ON symbols(file_path)")
             conn.execute("CREATE INDEX IF NOT EXISTS idx_symbols_kind ON symbols(kind)")
 
             # Symbol edge indexes
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_from_symbol_id ON symbol_edges(from_symbol_id)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_to_symbol_id ON symbol_edges(to_symbol_id)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_edge_kind ON symbol_edges(edge_kind)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_from_fqn ON symbol_edges(from_fqn)"
-            )
-            conn.execute(
-                "CREATE INDEX IF NOT EXISTS idx_symbol_edges_to_fqn ON symbol_edges(to_fqn)"
-            )
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_edges_from_symbol_id ON symbol_edges(from_symbol_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_edges_to_symbol_id ON symbol_edges(to_symbol_id)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_edges_edge_kind ON symbol_edges(edge_kind)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_edges_from_fqn ON symbol_edges(from_fqn)")
+            conn.execute("CREATE INDEX IF NOT EXISTS idx_symbol_edges_to_fqn ON symbol_edges(to_fqn)")
 
             logger.info("DuckDB indexes created successfully")
 
@@ -766,17 +703,13 @@ class DuckDBProvider(SerialDatabaseProvider):
             logger.error(f"Failed to create DuckDB indexes: {e}")
             raise
 
-    def _executor_migrate_legacy_embeddings_table(
-        self, conn: Any, state: dict[str, Any]
-    ) -> None:
+    def _executor_migrate_legacy_embeddings_table(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for migrating legacy embeddings table - runs in DB thread."""
         # Check if legacy embeddings table exists
         if not self._executor_table_exists(conn, state, "embeddings"):
             return
 
-        logger.info(
-            "Found legacy embeddings table, migrating to dimension-specific tables..."
-        )
+        logger.info("Found legacy embeddings table, migrating to dimension-specific tables...")
 
         try:
             # Get all embeddings with their dimensions
@@ -800,9 +733,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Migrate each dimension group
             for dims, emb_list in by_dims.items():
-                table_name = self._executor_ensure_embedding_table_exists(
-                    conn, state, dims
-                )
+                table_name = self._executor_ensure_embedding_table_exists(conn, state, dims)
                 logger.info(f"Migrating {len(emb_list)} embeddings to {table_name}")
 
                 # Insert data into dimension-specific table
@@ -819,18 +750,13 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Drop legacy table
             conn.execute("DROP TABLE embeddings")
-            logger.info(
-                f"Successfully migrated embeddings to {len(by_dims)} "
-                "dimension-specific tables"
-            )
+            logger.info(f"Successfully migrated embeddings to {len(by_dims)} dimension-specific tables")
 
         except Exception as e:
             logger.error(f"Failed to migrate legacy embeddings table: {e}")
             raise
 
-    def create_vector_index(
-        self, provider: str, model: str, dims: int, metric: str = "cosine"
-    ) -> None:
+    def create_vector_index(self, provider: str, model: str, dims: int, metric: str = "cosine") -> None:
         """Create HNSW vector index for specific provider/model/dims combination.
 
         # INDEX_TYPE: HNSW (Hierarchical Navigable Small World)
@@ -840,9 +766,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         logger.info(f"Creating HNSW index for {provider}/{model} ({dims}D, {metric})")
 
         # Use synchronous executor for non-async method
-        self._execute_in_db_thread_sync(
-            "create_vector_index", provider, model, dims, metric
-        )
+        self._execute_in_db_thread_sync("create_vector_index", provider, model, dims, metric)
 
     def _executor_create_vector_index(
         self,
@@ -861,9 +785,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             # Ensure the table exists before creating the index
             self._executor_ensure_embedding_table_exists(conn, state, dims)
 
-            index_name = f"hnsw_{provider}_{model}_{dims}_{metric}".replace(
-                "-", "_"
-            ).replace(".", "_")
+            index_name = f"hnsw_{provider}_{model}_{dims}_{metric}".replace("-", "_").replace(".", "_")
 
             # Create HNSW index using VSS extension on the dimension-specific table
             conn.execute(f"""
@@ -878,13 +800,9 @@ class DuckDBProvider(SerialDatabaseProvider):
             logger.error(f"Failed to create HNSW index: {e}")
             raise
 
-    def drop_vector_index(
-        self, provider: str, model: str, dims: int, metric: str = "cosine"
-    ) -> str:
+    def drop_vector_index(self, provider: str, model: str, dims: int, metric: str = "cosine") -> str:
         """Drop HNSW vector index for specific provider/model/dims combination."""
-        return self._execute_in_db_thread_sync(
-            "drop_vector_index", provider, model, dims, metric
-        )
+        return self._execute_in_db_thread_sync("drop_vector_index", provider, model, dims, metric)
 
     def _executor_drop_vector_index(
         self,
@@ -902,9 +820,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         - Standard: idx_hnsw_{dims} (from initial table creation)
         """
         # Custom index name pattern (from create_vector_index)
-        custom_index_name = f"hnsw_{provider}_{model}_{dims}_{metric}".replace(
-            "-", "_"
-        ).replace(".", "_")
+        custom_index_name = f"hnsw_{provider}_{model}_{dims}_{metric}".replace("-", "_").replace(".", "_")
         # Standard index name pattern (from table creation)
         standard_index_name = f"idx_hnsw_{dims}"
 
@@ -929,9 +845,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Get list of existing HNSW vector indexes on all embedding tables."""
         return self._execute_in_db_thread_sync("get_existing_vector_indexes")
 
-    def _executor_get_existing_vector_indexes(
-        self, conn: Any, state: dict[str, Any]
-    ) -> list[dict[str, Any]]:
+    def _executor_get_existing_vector_indexes(self, conn: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
         """Executor method for get_existing_vector_indexes - runs in DB thread."""
         try:
             # Query DuckDB system tables for indexes on all embedding tables
@@ -979,9 +893,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                                 }
                             )
                         except ValueError:
-                            logger.warning(
-                                f"Could not parse dims from custom index name: {index_name}"
-                            )
+                            logger.warning(f"Could not parse dims from custom index name: {index_name}")
 
                 elif index_name.startswith("idx_hnsw_"):
                     # Parse standard index name: idx_hnsw_{dims}
@@ -999,9 +911,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                                 }
                             )
                     except ValueError:
-                        logger.warning(
-                            f"Could not parse dims from standard index: {index_name} on {table_name}"
-                        )
+                        logger.warning(f"Could not parse dims from standard index: {index_name} on {table_name}")
 
             return indexes
 
@@ -1042,9 +952,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Drop existing HNSW vector indexes to improve bulk performance
             if existing_indexes:
-                logger.info(
-                    f"Dropping {len(existing_indexes)} HNSW indexes for bulk operation"
-                )
+                logger.info(f"Dropping {len(existing_indexes)} HNSW indexes for bulk operation")
                 for index_info in existing_indexes:
                     try:
                         self._executor_drop_vector_index(
@@ -1057,18 +965,14 @@ class DuckDBProvider(SerialDatabaseProvider):
                         )
                         dropped_indexes.append(index_info)
                     except Exception as e:
-                        logger.warning(
-                            f"Could not drop index {index_info['index_name']}: {e}"
-                        )
+                        logger.warning(f"Could not drop index {index_info['index_name']}: {e}")
 
             # Execute the bulk operation
             result = operation_func(*args, **kwargs)
 
             # Recreate dropped indexes
             if dropped_indexes:
-                logger.info(
-                    f"Recreating {len(dropped_indexes)} HNSW indexes after bulk operation"
-                )
+                logger.info(f"Recreating {len(dropped_indexes)} HNSW indexes after bulk operation")
                 for index_info in dropped_indexes:
                     try:
                         self._executor_create_vector_index(
@@ -1080,9 +984,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                             index_info["metric"],
                         )
                     except Exception as e:
-                        logger.error(
-                            f"Failed to recreate index {index_info['index_name']}: {e}"
-                        )
+                        logger.error(f"Failed to recreate index {index_info['index_name']}: {e}")
                         # Continue with other indexes
 
             # Commit transaction
@@ -1118,9 +1020,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                             index_info["metric"],
                         )
                     except Exception as recreate_error:
-                        logger.error(
-                            f"Failed to recreate index {index_info['index_name']}: {recreate_error}"
-                        )
+                        logger.error(f"Failed to recreate index {index_info['index_name']}: {recreate_error}")
 
             logger.error(f"Bulk operation failed: {e}")
             raise
@@ -1129,15 +1029,11 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Insert file record and return file ID - delegate to file repository."""
         return self._execute_in_db_thread_sync("insert_file", file)
 
-    def _executor_insert_file(
-        self, conn: Any, state: dict[str, Any], file: File
-    ) -> int:
+    def _executor_insert_file(self, conn: Any, state: dict[str, Any], file: File) -> int:
         """Executor method for insert_file - runs in DB thread."""
         try:
             # First try to find existing file by path
-            existing = self._executor_get_file_by_path(
-                conn, state, str(file.path), False
-            )
+            existing = self._executor_get_file_by_path(conn, state, str(file.path), False)
             if existing and isinstance(existing, dict):
                 # File exists, update it
                 file_id = existing["id"]
@@ -1164,9 +1060,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 [
                     file.path,  # Store path as-is (now relative with forward slashes)
                     file.name if hasattr(file, "name") else Path(file.path).name,
-                    file.extension
-                    if hasattr(file, "extension")
-                    else Path(file.path).suffix,
+                    file.extension if hasattr(file, "extension") else Path(file.path).suffix,
                     file.size_bytes if hasattr(file, "size_bytes") else None,
                     file.mtime if hasattr(file, "mtime") else None,
                     getattr(file, "content_hash", None),
@@ -1180,17 +1074,13 @@ class DuckDBProvider(SerialDatabaseProvider):
         except Exception as e:
             # Handle duplicate key errors
             if "Duplicate key" in str(e) and "violates unique constraint" in str(e):
-                existing = self._executor_get_file_by_path(
-                    conn, state, str(file.path), False
-                )
+                existing = self._executor_get_file_by_path(conn, state, str(file.path), False)
                 if existing and isinstance(existing, dict) and "id" in existing:
                     logger.info(f"Returning existing file ID for {file.path}")
                     return existing["id"]
             raise
 
-    def get_file_by_path(
-        self, path: str, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    def get_file_by_path(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path - delegate to file repository."""
         return self._execute_in_db_thread_sync("get_file_by_path", path, as_model)
 
@@ -1242,9 +1132,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 mtime = 0.0
 
             try:
-                size_bytes = (
-                    int(file_dict["size"]) if file_dict["size"] is not None else 0
-                )
+                size_bytes = int(file_dict["size"]) if file_dict["size"] is not None else 0
             except Exception:
                 size_bytes = 0
 
@@ -1261,9 +1149,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         return file_dict
 
-    def get_file_by_id(
-        self, file_id: int, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    def get_file_by_id(self, file_id: int, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by ID - delegate to file repository."""
         return self._file_repository.get_file_by_id(file_id, as_model)
 
@@ -1276,9 +1162,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         **kwargs,
     ) -> None:
         """Update file record with new values - delegate to file repository."""
-        self._execute_in_db_thread_sync(
-            "update_file", file_id, size_bytes, mtime, content_hash
-        )
+        self._execute_in_db_thread_sync("update_file", file_id, size_bytes, mtime, content_hash)
 
     def _executor_update_file(
         self,
@@ -1319,9 +1203,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Delete a file and all its chunks/embeddings completely - delegate to file repository."""
         return self._execute_in_db_thread_sync("delete_file_completely", file_path)
 
-    def _executor_delete_file_completely(
-        self, conn: Any, state: dict[str, Any], file_path: str
-    ) -> bool:
+    def _executor_delete_file_completely(self, conn: Any, state: dict[str, Any], file_path: str) -> bool:
         """Executor method for delete_file_completely - runs in DB thread."""
         # Track operation for checkpoint management
         track_operation(state)
@@ -1330,9 +1212,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         # Normalize path to handle both absolute and relative paths
         base_dir = state.get("base_directory")
         normalized_path = normalize_path_for_lookup(file_path, base_dir)
-        result = conn.execute(
-            "SELECT id FROM files WHERE path = ?", [normalized_path]
-        ).fetchone()
+        result = conn.execute("SELECT id FROM files WHERE path = ?", [normalized_path]).fetchone()
 
         if not result:
             return False
@@ -1384,9 +1264,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """
         return self._execute_in_db_thread_sync("insert_chunks_batch", chunks)
 
-    def _executor_insert_chunks_batch(
-        self, conn: Any, state: dict[str, Any], chunks: list[Chunk]
-    ) -> list[int]:
+    def _executor_insert_chunks_batch(self, conn: Any, state: dict[str, Any], chunks: list[Chunk]) -> list[int]:
         """Executor method for insert_chunks_batch - runs in DB thread."""
         if not chunks:
             return []
@@ -1468,23 +1346,15 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         return chunk_ids
 
-    def get_chunk_by_id(
-        self, chunk_id: int, as_model: bool = False
-    ) -> dict[str, Any] | Chunk | None:
+    def get_chunk_by_id(self, chunk_id: int, as_model: bool = False) -> dict[str, Any] | Chunk | None:
         """Get chunk record by ID - delegate to chunk repository."""
         return self._chunk_repository.get_chunk_by_id(chunk_id, as_model)
 
-    def get_chunks_by_file_id(
-        self, file_id: int, as_model: bool = False
-    ) -> list[dict[str, Any] | Chunk]:
+    def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Get all chunks for a specific file - delegate to chunk repository."""
-        return self._execute_in_db_thread_sync(
-            "get_chunks_by_file_id", file_id, as_model
-        )
+        return self._execute_in_db_thread_sync("get_chunks_by_file_id", file_id, as_model)
 
-    def get_chunks_in_range(
-        self, file_id: int, start_line: int, end_line: int
-    ) -> list[dict]:
+    def get_chunks_in_range(self, file_id: int, start_line: int, end_line: int) -> list[dict]:
         """Get all chunks overlapping a line range - delegate to chunk repository."""
         return self._chunk_repository.get_chunks_in_range(file_id, start_line, end_line)
 
@@ -1532,9 +1402,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                     end_line=chunk_dict["end_line"],
                     start_byte=chunk_dict["start_byte"],
                     end_byte=chunk_dict["end_byte"],
-                    language=Language(chunk_dict["language"])
-                    if chunk_dict["language"]
-                    else Language.UNKNOWN,
+                    language=Language(chunk_dict["language"]) if chunk_dict["language"] else Language.UNKNOWN,
                     metadata=chunk_dict["metadata"],
                 )
                 chunks.append(chunk)
@@ -1547,18 +1415,14 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Delete all chunks for a file - delegate to chunk repository."""
         self._execute_in_db_thread_sync("delete_file_chunks", file_id)
 
-    def _executor_delete_file_chunks(
-        self, conn: Any, state: dict[str, Any], file_id: int
-    ) -> None:
+    def _executor_delete_file_chunks(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         """Executor method for delete_file_chunks - runs in DB thread."""
         # Track operation for checkpoint management
         track_operation(state)
 
         conn.execute("DELETE FROM chunks WHERE file_id = ?", [file_id])
 
-    def _executor_delete_chunk(
-        self, conn: Any, state: dict[str, Any], chunk_id: int
-    ) -> None:
+    def _executor_delete_chunk(self, conn: Any, state: dict[str, Any], chunk_id: int) -> None:
         """Executor method for delete_chunk - runs in DB thread."""
         # Track operation
         track_operation(state)
@@ -1577,9 +1441,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         # Then delete the chunk
         conn.execute("DELETE FROM chunks WHERE id = ?", [chunk_id])
 
-    def _executor_delete_chunks_batch(
-        self, conn: Any, state: dict[str, Any], chunk_ids: list[int]
-    ) -> None:
+    def _executor_delete_chunks_batch(self, conn: Any, state: dict[str, Any], chunk_ids: list[int]) -> None:
         """Executor method for delete_chunks_batch - runs in DB thread."""
         if not chunk_ids:
             return
@@ -1606,9 +1468,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Update chunk record with new values - delegate to chunk repository."""
         self._chunk_repository.update_chunk(chunk_id, **kwargs)
 
-    def _executor_insert_chunk_single(
-        self, conn: Any, state: dict[str, Any], chunk: Chunk
-    ) -> int:
+    def _executor_insert_chunk_single(self, conn: Any, state: dict[str, Any], chunk: Chunk) -> int:
         """Executor method for insert_chunk - runs in DB thread."""
         # Track operation for checkpoint management
         track_operation(state)
@@ -1636,9 +1496,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         return result[0] if result else 0
 
-    def _executor_get_chunk_by_id_query(
-        self, conn: Any, state: dict[str, Any], chunk_id: int
-    ) -> Any:
+    def _executor_get_chunk_by_id_query(self, conn: Any, state: dict[str, Any], chunk_id: int) -> Any:
         """Executor method for get_chunk_by_id query - runs in DB thread."""
         return conn.execute(
             """
@@ -1649,9 +1507,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             [chunk_id],
         ).fetchone()
 
-    def _executor_get_chunks_by_file_id_query(
-        self, conn: Any, state: dict[str, Any], file_id: int
-    ) -> list:
+    def _executor_get_chunks_by_file_id_query(self, conn: Any, state: dict[str, Any], file_id: int) -> list:
         """Executor method for get_chunks_by_file_id query - runs in DB thread."""
         return conn.execute(
             """
@@ -1689,9 +1545,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         track_operation(state)
         conn.execute(query, values)
 
-    def _executor_get_all_chunks_with_metadata_query(
-        self, conn: Any, state: dict[str, Any], query: str
-    ) -> list:
+    def _executor_get_all_chunks_with_metadata_query(self, conn: Any, state: dict[str, Any], query: str) -> list:
         """Executor method for get_all_chunks_with_metadata query - runs in DB thread."""
         return conn.execute(query).fetchall()
 
@@ -1756,9 +1610,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         Returns:
             Number of embeddings inserted
         """
-        return self._execute_in_db_thread_sync(
-            "insert_embeddings_batch", embeddings_data, batch_size
-        )
+        return self._execute_in_db_thread_sync("insert_embeddings_batch", embeddings_data, batch_size)
 
     def _executor_insert_embeddings_batch(
         self,
@@ -1830,21 +1682,13 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         return total_inserted
 
-    def get_embedding_by_chunk_id(
-        self, chunk_id: int, provider: str, model: str
-    ) -> Embedding | None:
+    def get_embedding_by_chunk_id(self, chunk_id: int, provider: str, model: str) -> Embedding | None:
         """Get embedding for specific chunk, provider, and model - delegate to embedding repository."""
-        return self._embedding_repository.get_embedding_by_chunk_id(
-            chunk_id, provider, model
-        )
+        return self._embedding_repository.get_embedding_by_chunk_id(chunk_id, provider, model)
 
-    def get_existing_embeddings(
-        self, chunk_ids: list[int], provider: str, model: str
-    ) -> set[int]:
-        """Get set of chunk IDs that already have embeddings for given provider/model - delegate to embedding repository."""
-        return self._execute_in_db_thread_sync(
-            "get_existing_embeddings", chunk_ids, provider, model
-        )
+    def get_existing_embeddings(self, chunk_ids: list[int], provider: str, model: str) -> set[int]:
+        """Get chunk IDs that already have embeddings for given provider/model."""
+        return self._execute_in_db_thread_sync("get_existing_embeddings", chunk_ids, provider, model)
 
     def _executor_get_existing_embeddings(
         self,
@@ -1896,9 +1740,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """
         return self._execute_in_db_thread_sync("get_scope_stats", scope_prefix)
 
-    def _executor_get_scope_stats(
-        self, conn: Any, state: dict[str, Any], scope_prefix: str | None
-    ) -> tuple[int, int]:
+    def _executor_get_scope_stats(self, conn: Any, state: dict[str, Any], scope_prefix: str | None) -> tuple[int, int]:
         """Executor method for get_scope_stats - runs in DB thread."""
         try:
             if scope_prefix:
@@ -1933,9 +1775,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Return file paths under an optional scope prefix."""
         return self._execute_in_db_thread_sync("get_scope_file_paths", scope_prefix)
 
-    def _executor_get_scope_file_paths(
-        self, conn: Any, state: dict[str, Any], scope_prefix: str | None
-    ) -> list[str]:
+    def _executor_get_scope_file_paths(self, conn: Any, state: dict[str, Any], scope_prefix: str | None) -> list[str]:
         """Executor method for get_scope_file_paths - runs in DB thread."""
         try:
             if scope_prefix:
@@ -1962,9 +1802,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             logger.debug(f"Failed to get scope file paths: {exc}")
             return []
 
-    def _executor_get_all_chunks_with_metadata(
-        self, conn: Any, state: dict[str, Any]
-    ) -> list[dict[str, Any]]:
+    def _executor_get_all_chunks_with_metadata(self, conn: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
         """Executor method for get_all_chunks_with_metadata - runs in DB thread."""
         query = """
             SELECT
@@ -2006,9 +1844,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         return chunks_with_metadata
 
-    def _validate_and_normalize_path_filter(
-        self, path_filter: str | None
-    ) -> str | None:
+    def _validate_and_normalize_path_filter(self, path_filter: str | None) -> str | None:
         """Validate and normalize path filter for security and consistency.
 
         Args:
@@ -2042,11 +1878,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         normalized = normalized.lstrip("/")
 
         # Ensure trailing slash for directory patterns
-        if (
-            normalized
-            and not normalized.endswith("/")
-            and "." not in normalized.split("/")[-1]
-        ):
+        if normalized and not normalized.endswith("/") and "." not in normalized.split("/")[-1]:
             normalized += "/"
 
         return normalized
@@ -2104,9 +1936,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Check if table exists for these dimensions
             if not self._executor_table_exists(conn, state, table_name):
-                logger.warning(
-                    f"No embeddings table found for {query_dims} dimensions ({table_name})"
-                )
+                logger.warning(f"No embeddings table found for {query_dims} dimensions ({table_name})")
                 return [], {
                     "offset": offset,
                     "page_size": page_size,
@@ -2200,9 +2030,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 "offset": offset,
                 "page_size": page_size,
                 "has_more": offset + page_size < total_count,
-                "next_offset": offset + page_size
-                if offset + page_size < total_count
-                else None,
+                "next_offset": offset + page_size if offset + page_size < total_count else None,
                 "total": total_count,
             }
 
@@ -2226,13 +2054,9 @@ class DuckDBProvider(SerialDatabaseProvider):
         fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform regex search on code content."""
-        return self._execute_in_db_thread_sync(
-            "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
-        )
+        return self._execute_in_db_thread_sync("search_regex", pattern, page_size, offset, path_filter, fuzzy_path)
 
-    def search_chunks_regex(
-        self, pattern: str, file_path: str | None = None
-    ) -> list[dict[str, Any]]:
+    def search_chunks_regex(self, pattern: str, file_path: str | None = None) -> list[dict[str, Any]]:
         """Backward compatibility wrapper for legacy search_chunks_regex calls."""
         results, _ = self.search_regex(
             pattern=pattern,
@@ -2297,9 +2121,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 ORDER BY f.path, c.start_line
                 LIMIT ? OFFSET ?
             """
-            results = conn.execute(
-                results_query, params + [page_size, offset]
-            ).fetchall()
+            results = conn.execute(results_query, params + [page_size, offset]).fetchall()
 
             result_list = [
                 {
@@ -2320,9 +2142,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 "offset": offset,
                 "page_size": page_size,
                 "has_more": offset + page_size < total_count,
-                "next_offset": offset + page_size
-                if offset + page_size < total_count
-                else None,
+                "next_offset": offset + page_size if offset + page_size < total_count else None,
                 "total": total_count,
             }
 
@@ -2416,7 +2236,10 @@ class DuckDBProvider(SerialDatabaseProvider):
                         [chunk_id],
                     ).fetchall()
                     # if all_for_chunk:
-                    #     logger.debug(f"Table {table} has chunk_id={chunk_id} but with different provider/model: {all_for_chunk}")
+                    #     logger.debug(
+                    #         f"Table {table} has chunk_id={chunk_id} but with"
+                    #         f" different provider/model: {all_for_chunk}"
+                    #     )
 
             if not target_embedding or dims is None:
                 # Show what providers/models are actually available for this chunk
@@ -2432,20 +2255,14 @@ class DuckDBProvider(SerialDatabaseProvider):
                     ).fetchall()
                     all_providers_models.extend(results)
 
-                logger.warning(
-                    f"No embedding found for chunk_id={chunk_id}, provider='{provider}', model='{model}'"
-                )
-                logger.warning(
-                    f"Available provider/model combinations for this chunk: {all_providers_models}"
-                )
+                logger.warning(f"No embedding found for chunk_id={chunk_id}, provider='{provider}', model='{model}'")
+                logger.warning(f"Available provider/model combinations for this chunk: {all_providers_models}")
                 return []
 
             embedding_type = f"FLOAT[{dims}]"
 
             # Use the embedding to find similar chunks
-            threshold_condition = (
-                f"AND distance <= {threshold}" if threshold is not None else ""
-            )
+            threshold_condition = f"AND distance <= {threshold}" if threshold is not None else ""
 
             # Optional path scoping condition
             path_condition = ""
@@ -2554,9 +2371,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Check if table exists for these dimensions (reuse existing validation pattern)
             if not self._executor_table_exists(conn, state, table_name):
-                logger.warning(
-                    f"No embeddings table found for {query_dims} dimensions ({table_name})"
-                )
+                logger.warning(f"No embeddings table found for {query_dims} dimensions ({table_name})")
                 return []
 
             # Build path filter condition
@@ -2574,9 +2389,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 query_params.insert(-1, path_pattern)  # Insert before limit
 
             # Build threshold condition
-            threshold_condition = (
-                f"AND distance <= {threshold}" if threshold is not None else ""
-            )
+            threshold_condition = f"AND distance <= {threshold}" if threshold is not None else ""
 
             # Query for similar chunks using the provided embedding
             query = f"""
@@ -2646,8 +2459,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
             # Count total matches first
             count_row = conn.execute(
-                "SELECT COUNT(*) FROM chunks c JOIN files f ON c.file_id = f.id "
-                "WHERE c.code LIKE ? OR c.symbol LIKE ?",
+                "SELECT COUNT(*) FROM chunks c JOIN files f ON c.file_id = f.id WHERE c.code LIKE ? OR c.symbol LIKE ?",
                 [search_pattern, search_pattern],
             ).fetchone()
             total = count_row[0] if count_row else 0
@@ -2819,9 +2631,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                 "dimensions": 0,
             }
 
-    def execute_query(
-        self, query: str, params: list[Any] | None = None
-    ) -> list[dict[str, Any]]:
+    def execute_query(self, query: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         """Execute a SQL query and return results."""
         return self._execute_in_db_thread_sync("execute_query", query, params)
 
@@ -2854,9 +2664,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         conn.execute("BEGIN TRANSACTION")
         state["transaction_active"] = True
 
-    def _executor_commit_transaction(
-        self, conn: Any, state: dict[str, Any], force_checkpoint: bool
-    ) -> None:
+    def _executor_commit_transaction(self, conn: Any, state: dict[str, Any], force_checkpoint: bool) -> None:
         """Executor method for commit_transaction - runs in DB thread."""
         committed = False
         try:
@@ -2867,9 +2675,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             deferred = state.get("deferred_checkpoint", False)
             state["deferred_checkpoint"] = False
         if committed:
-            self._executor_maybe_checkpoint(
-                conn, state, force=force_checkpoint or deferred
-            )
+            self._executor_maybe_checkpoint(conn, state, force=force_checkpoint or deferred)
 
     def _executor_rollback_transaction(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for rollback_transaction - runs in DB thread."""
@@ -2919,9 +2725,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     # ── Symbol/Edge CRUD Protocol Methods ─────────────────────────
 
-    _SYMBOL_BATCH_SIZE = (
-        500  # 12 params/row × 500 = 6000 params (well under DuckDB limit)
-    )
+    _SYMBOL_BATCH_SIZE = 500  # 12 params/row × 500 = 6000 params (well under DuckDB limit)
     _EDGE_BATCH_SIZE = 500  # 9 params/row × 500 = 4500 params
 
     @staticmethod
@@ -2938,9 +2742,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             return
         self._execute_in_db_thread_sync("insert_symbols_batch", symbols)
 
-    def _executor_insert_symbols_batch(
-        self, conn: Any, state: dict[str, Any], symbols: list[SymbolRow]
-    ) -> None:
+    def _executor_insert_symbols_batch(self, conn: Any, state: dict[str, Any], symbols: list[SymbolRow]) -> None:
         if not symbols:
             return
         cols = (
@@ -2949,9 +2751,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         )
         for i in range(0, len(symbols), self._SYMBOL_BATCH_SIZE):
             batch = symbols[i : i + self._SYMBOL_BATCH_SIZE]
-            placeholders = ", ".join(
-                ["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch)
-            )
+            placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch))
             flat: list[Any] = []
             for s in batch:
                 flat.extend(
@@ -2976,18 +2776,14 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Delete all symbols for a given file_id."""
         self._execute_in_db_thread_sync("delete_symbols_by_file", file_id)
 
-    def _executor_delete_symbols_by_file(
-        self, conn: Any, state: dict[str, Any], file_id: int
-    ) -> None:
+    def _executor_delete_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         conn.execute("DELETE FROM symbols WHERE file_id = ?", [file_id])
 
     def delete_edges_by_file(self, file_id: int) -> None:
         """Delete all edges referencing symbols belonging to this file."""
         self._execute_in_db_thread_sync("delete_edges_by_file", file_id)
 
-    def _executor_delete_edges_by_file(
-        self, conn: Any, state: dict[str, Any], file_id: int
-    ) -> None:
+    def _executor_delete_edges_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         conn.execute(
             "DELETE FROM symbol_edges WHERE "
             "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
@@ -2999,21 +2795,13 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Return all symbols for a given file_id."""
         return self._execute_in_db_thread_sync("query_symbols_by_file", file_id)
 
-    def _executor_query_symbols_by_file(
-        self, conn: Any, state: dict[str, Any], file_id: int
-    ) -> list[dict[str, Any]]:
-        rows = conn.execute(
-            "SELECT * FROM symbols WHERE file_id = ?", [file_id]
-        ).fetchall()
+    def _executor_query_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> list[dict[str, Any]]:
+        rows = conn.execute("SELECT * FROM symbols WHERE file_id = ?", [file_id]).fetchall()
         return self._rows_to_dicts(conn, rows)
 
-    def query_symbols_by_range(
-        self, file_path: str, line: int
-    ) -> dict[str, Any] | None:
+    def query_symbols_by_range(self, file_path: str, line: int) -> dict[str, Any] | None:
         """Return the innermost symbol containing the given line."""
-        return self._execute_in_db_thread_sync(
-            "query_symbols_by_range", file_path, line
-        )
+        return self._execute_in_db_thread_sync("query_symbols_by_range", file_path, line)
 
     def _executor_query_symbols_by_range(
         self, conn: Any, state: dict[str, Any], file_path: str, line: int
@@ -3027,13 +2815,9 @@ class DuckDBProvider(SerialDatabaseProvider):
         dicts = self._rows_to_dicts(conn, rows)
         return dicts[0] if dicts else None
 
-    def query_symbols_by_range_overlap(
-        self, file_path: str, min_line: int, max_line: int
-    ) -> list[dict[str, Any]]:
+    def query_symbols_by_range_overlap(self, file_path: str, min_line: int, max_line: int) -> list[dict[str, Any]]:
         """Return all symbols whose range overlaps [min_line, max_line]."""
-        return self._execute_in_db_thread_sync(
-            "query_symbols_by_range_overlap", file_path, min_line, max_line
-        )
+        return self._execute_in_db_thread_sync("query_symbols_by_range_overlap", file_path, min_line, max_line)
 
     def _executor_query_symbols_by_range_overlap(
         self,
@@ -3044,8 +2828,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         max_line: int,
     ) -> list[dict[str, Any]]:
         rows = conn.execute(
-            "SELECT * FROM symbols "
-            "WHERE file_path = ? AND range_start <= ? AND range_end >= ?",
+            "SELECT * FROM symbols WHERE file_path = ? AND range_start <= ? AND range_end >= ?",
             [file_path, max_line, min_line],
         ).fetchall()
         return self._rows_to_dicts(conn, rows)
@@ -3054,23 +2837,15 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Return {fqn: symbol_id} mapping for all symbols in a file."""
         return self._execute_in_db_thread_sync("query_symbol_fqns_by_file", file_id)
 
-    def _executor_query_symbol_fqns_by_file(
-        self, conn: Any, state: dict[str, Any], file_id: int
-    ) -> dict[str, int]:
-        rows = conn.execute(
-            "SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]
-        ).fetchall()
+    def _executor_query_symbol_fqns_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> dict[str, int]:
+        rows = conn.execute("SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]).fetchall()
         return {row[1]: row[0] for row in rows}
 
     def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
         """Check whether a symbol with the given FQN and file_path exists."""
-        return self._execute_in_db_thread_sync(
-            "query_symbols_by_fqn_exists", fqn, file_path
-        )
+        return self._execute_in_db_thread_sync("query_symbols_by_fqn_exists", fqn, file_path)
 
-    def _executor_query_symbols_by_fqn_exists(
-        self, conn: Any, state: dict[str, Any], fqn: str, file_path: str
-    ) -> bool:
+    def _executor_query_symbols_by_fqn_exists(self, conn: Any, state: dict[str, Any], fqn: str, file_path: str) -> bool:
         rows = conn.execute(
             "SELECT 1 FROM symbols WHERE fqn = ? AND file_path = ? LIMIT 1",
             [fqn, file_path],
@@ -3083,15 +2858,10 @@ class DuckDBProvider(SerialDatabaseProvider):
             return
         self._execute_in_db_thread_sync("insert_edges_batch", edges)
 
-    def _executor_insert_edges_batch(
-        self, conn: Any, state: dict[str, Any], edges: list[EdgeRow]
-    ) -> None:
+    def _executor_insert_edges_batch(self, conn: Any, state: dict[str, Any], edges: list[EdgeRow]) -> None:
         if not edges:
             return
-        cols = (
-            "from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, "
-            "to_file, edge_kind, confidence, lsp_server"
-        )
+        cols = "from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, to_file, edge_kind, confidence, lsp_server"
         for i in range(0, len(edges), self._EDGE_BATCH_SIZE):
             batch = edges[i : i + self._EDGE_BATCH_SIZE]
             placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(batch))
@@ -3110,9 +2880,7 @@ class DuckDBProvider(SerialDatabaseProvider):
                         e["lsp_server"],
                     ]
                 )
-            conn.execute(
-                f"INSERT INTO symbol_edges ({cols}) VALUES {placeholders}", flat
-            )
+            conn.execute(f"INSERT INTO symbol_edges ({cols}) VALUES {placeholders}", flat)
 
     # ── Graph Query Protocol Methods ──────────────────────────────
 
@@ -3127,9 +2895,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Walk connected symbols from seed FQNs."""
         if not seed_fqns:
             return [], []
-        return self._execute_in_db_thread_sync(
-            "graph_walk", seed_fqns, depth, directed, edge_kind, limit
-        )
+        return self._execute_in_db_thread_sync("graph_walk", seed_fqns, depth, directed, edge_kind, limit)
 
     def _executor_graph_walk(
         self,
@@ -3146,9 +2912,7 @@ class DuckDBProvider(SerialDatabaseProvider):
 
         # Build edge subquery based on direction
         if directed:
-            edge_sql = (
-                "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges"
-            )
+            edge_sql = "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges"
         else:
             edge_sql = (
                 "SELECT from_fqn AS src, to_fqn AS dst, edge_kind FROM symbol_edges "
@@ -3221,9 +2985,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Find unreachable symbols within a scope prefix."""
         return self._execute_in_db_thread_sync("graph_reachability", scope)
 
-    def _executor_graph_reachability(
-        self, conn: Any, state: dict[str, Any], scope: str
-    ) -> list[dict[str, Any]]:
+    def _executor_graph_reachability(self, conn: Any, state: dict[str, Any], scope: str) -> list[dict[str, Any]]:
         pattern = escape_like_pattern(scope) + "%"
 
         # All symbols in scope
@@ -3331,17 +3093,13 @@ class DuckDBProvider(SerialDatabaseProvider):
             return []
         return self._execute_in_db_thread_sync("symbol_overlap", chunks)
 
-    def _executor_symbol_overlap(
-        self, conn: Any, state: dict[str, Any], chunks: list[dict[str, Any]]
-    ) -> list[str]:
+    def _executor_symbol_overlap(self, conn: Any, state: dict[str, Any], chunks: list[dict[str, Any]]) -> list[str]:
         if not chunks:
             return []
         conditions: list[str] = []
         params: list[Any] = []
         for chunk in chunks:
-            conditions.append(
-                "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-            )
+            conditions.append("(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)")
             params.extend([chunk["file_path"], chunk["end_line"], chunk["start_line"]])
 
         where = " OR ".join(conditions)
@@ -3355,9 +3113,7 @@ class DuckDBProvider(SerialDatabaseProvider):
             return []
         return self._execute_in_db_thread_sync("chunk_resolution", fqns)
 
-    def _executor_chunk_resolution(
-        self, conn: Any, state: dict[str, Any], fqns: list[str]
-    ) -> list[dict[str, Any]]:
+    def _executor_chunk_resolution(self, conn: Any, state: dict[str, Any], fqns: list[str]) -> list[dict[str, Any]]:
         if not fqns:
             return []
         ph = ", ".join(["?"] * len(fqns))
@@ -3378,9 +3134,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Return symbol and edge counts."""
         return self._execute_in_db_thread_sync("symbol_stats")
 
-    def _executor_symbol_stats(
-        self, conn: Any, state: dict[str, Any]
-    ) -> dict[str, Any]:
+    def _executor_symbol_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, Any]:
         sym_count = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
         edge_count = conn.execute("SELECT COUNT(*) FROM symbol_edges").fetchone()[0]
         return {"symbol_count": sym_count, "edge_count": edge_count}

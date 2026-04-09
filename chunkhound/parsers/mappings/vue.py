@@ -46,17 +46,11 @@ class VueMapping(TypeScriptMapping):
         self.language = Language.VUE  # Override to VUE
 
     # Section extraction patterns
-    SCRIPT_PATTERN = re.compile(
-        r"<script\s*([^>]*)>(.*?)</script>", re.DOTALL | re.IGNORECASE
-    )
+    SCRIPT_PATTERN = re.compile(r"<script\s*([^>]*)>(.*?)</script>", re.DOTALL | re.IGNORECASE)
 
-    TEMPLATE_PATTERN = re.compile(
-        r"<template\s*([^>]*)>(.*?)</template>", re.DOTALL | re.IGNORECASE
-    )
+    TEMPLATE_PATTERN = re.compile(r"<template\s*([^>]*)>(.*?)</template>", re.DOTALL | re.IGNORECASE)
 
-    STYLE_PATTERN = re.compile(
-        r"<style\s*([^>]*)>(.*?)</style>", re.DOTALL | re.IGNORECASE
-    )
+    STYLE_PATTERN = re.compile(r"<style\s*([^>]*)>(.*?)</style>", re.DOTALL | re.IGNORECASE)
 
     # Vue compiler macro patterns
     VUE_MACROS = [
@@ -156,9 +150,7 @@ class VueMapping(TypeScriptMapping):
 
         return " ".join(attrs)
 
-    def extract_sections_ts(
-        self, content: str
-    ) -> dict[str, list[tuple[str, str, int]]]:
+    def extract_sections_ts(self, content: str) -> dict[str, list[tuple[str, str, int]]]:
         """Extract sections using tree-sitter (Phase 2).
 
         Args:
@@ -196,9 +188,7 @@ class VueMapping(TypeScriptMapping):
                         start_tag = c
                         break
 
-                attrs = (
-                    self._extract_attributes(start_tag, content) if start_tag else ""
-                )
+                attrs = self._extract_attributes(start_tag, content) if start_tag else ""
 
                 # Find raw_text node
                 raw_text_node = None
@@ -208,9 +198,7 @@ class VueMapping(TypeScriptMapping):
                         break
 
                 if raw_text_node:
-                    script_content = content[
-                        raw_text_node.start_byte : raw_text_node.end_byte
-                    ]
+                    script_content = content[raw_text_node.start_byte : raw_text_node.end_byte]
                     start_line = raw_text_node.start_point[0] + 1
                     sections["script"].append((attrs, script_content, start_line))
 
@@ -224,9 +212,7 @@ class VueMapping(TypeScriptMapping):
                     elif c.type == "end_tag":
                         end_tag = c
 
-                attrs = (
-                    self._extract_attributes(start_tag, content) if start_tag else ""
-                )
+                attrs = self._extract_attributes(start_tag, content) if start_tag else ""
 
                 # Template content is between start_tag and end_tag
                 if start_tag and end_tag:
@@ -245,9 +231,7 @@ class VueMapping(TypeScriptMapping):
                         start_tag = c
                         break
 
-                attrs = (
-                    self._extract_attributes(start_tag, content) if start_tag else ""
-                )
+                attrs = self._extract_attributes(start_tag, content) if start_tag else ""
 
                 # Find raw_text node
                 raw_text_node = None
@@ -257,17 +241,13 @@ class VueMapping(TypeScriptMapping):
                         break
 
                 if raw_text_node:
-                    style_content = content[
-                        raw_text_node.start_byte : raw_text_node.end_byte
-                    ]
+                    style_content = content[raw_text_node.start_byte : raw_text_node.end_byte]
                     start_line = raw_text_node.start_point[0] + 1
                     sections["style"].append((attrs, style_content, start_line))
 
         return sections
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve relative import path to absolute file path.
 
         Args:

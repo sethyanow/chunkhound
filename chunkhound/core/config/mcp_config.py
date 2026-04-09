@@ -17,14 +17,10 @@ class MCPConfig(BaseModel):
     """
 
     # Transport configuration - stdio only
-    transport: Literal["stdio"] = Field(
-        default="stdio", description="Transport type for MCP server (stdio only)"
-    )
+    transport: Literal["stdio"] = Field(default="stdio", description="Transport type for MCP server (stdio only)")
 
     # Internal settings
-    max_concurrent_requests: int = Field(
-        default=1, description="Max concurrent requests (stdio is sequential)"
-    )
+    max_concurrent_requests: int = Field(default=1, description="Max concurrent requests (stdio is sequential)")
 
     def is_stdio_transport(self) -> bool:
         """Check if using stdio transport (always True)."""

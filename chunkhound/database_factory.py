@@ -44,9 +44,7 @@ class DatabaseServices(NamedTuple):
     embedding_service: "EmbeddingService"
 
 
-def _db_root_path_for_config(
-    db_path: Path | str, *, provider: str | None
-) -> Path | str:
+def _db_root_path_for_config(db_path: Path | str, *, provider: str | None) -> Path | str:
     """Return the directory-style database path expected by DatabaseConfig.
 
     `DatabaseConfig.get_db_path()` derives provider-specific locations from the
@@ -109,18 +107,12 @@ def create_services(
             effective_config = dict(config)
             db_dict = dict(effective_config.get("database", {}))
             db_dict.setdefault("provider", "duckdb")
-            db_dict["path"] = _db_root_path_for_config(
-                db_path, provider=str(db_dict.get("provider") or "duckdb")
-            )
+            db_dict["path"] = _db_root_path_for_config(db_path, provider=str(db_dict.get("provider") or "duckdb"))
             effective_config["database"] = db_dict
         else:
             if hasattr(config, "database") and hasattr(config.database, "path"):
                 provider = getattr(config.database, "provider", None)
-                config.database.path = Path(
-                    _db_root_path_for_config(
-                        db_path, provider=str(provider or "duckdb")
-                    )
-                )
+                config.database.path = Path(_db_root_path_for_config(db_path, provider=str(provider or "duckdb")))
             effective_config = config
     except Exception:
         effective_config = config

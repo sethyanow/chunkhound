@@ -13,10 +13,7 @@ def create_main_parser() -> argparse.ArgumentParser:
     """
     parser = argparse.ArgumentParser(
         prog="chunkhound",
-        description=(
-            "Codebase intelligence for AI coding agents"
-            "—index, search, and research your code"
-        ),
+        description=("Codebase intelligence for AI coding agents—index, search, and research your code"),
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:

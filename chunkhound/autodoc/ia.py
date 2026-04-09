@@ -13,16 +13,11 @@ from chunkhound.autodoc.models import DocsitePage, GlossaryTerm, NavGroup
 from chunkhound.core.audience import normalize_audience
 from chunkhound.interfaces.llm_provider import LLMProvider
 
-_SITE_IA_INPUT_LINE = (
-    "Input: a list of pages (title, slug, description, headings, overview snippet)."
-)
+_SITE_IA_INPUT_LINE = "Input: a list of pages (title, slug, description, headings, overview snippet)."
 _SITE_IA_TECH_PREFER_LINE = (
-    "Prefer architecture- and implementation-oriented groups/terms when supported "
-    "by the provided headings/snippets."
+    "Prefer architecture- and implementation-oriented groups/terms when supported by the provided headings/snippets."
 )
-_SITE_IA_TECH_STYLE_LINE = (
-    "Use precise technical language; keep it concrete and grounded in the input."
-)
+_SITE_IA_TECH_STYLE_LINE = "Use precise technical language; keep it concrete and grounded in the input."
 _SITE_IA_END_USER_PREFER_LINE = (
     "Prefer user goals: setup, configuration, usage, and integration workflows "
     "when supported by the provided headings/snippets."
@@ -32,38 +27,22 @@ _SITE_IA_END_USER_CODE_IDS_LINE = (
     "short and avoid jargon unless the input uses it prominently."
 )
 _SITE_IA_END_USER_DEEMPHASIZE_LINE = (
-    "De-emphasize deep internal implementation details unless central in the "
-    "provided snippets/headings."
+    "De-emphasize deep internal implementation details unless central in the provided snippets/headings."
 )
-_SITE_IA_NAV_INTRO_LINE = (
-    "1) A navigation structure that groups pages where it helps discoverability."
-)
+_SITE_IA_NAV_INTRO_LINE = "1) A navigation structure that groups pages where it helps discoverability."
 _SITE_IA_NAV_GROUP_COUNT_LINE = (
-    "   - Use as many or as few groups as fits the content (for a small site, "
-    "a single group is fine)."
+    "   - Use as many or as few groups as fits the content (for a small site, a single group is fine)."
 )
-_SITE_IA_GLOSSARY_DEF_LINE = (
-    "   - definition (1–2 sentences, only supported by provided snippets/headings)"
-)
+_SITE_IA_GLOSSARY_DEF_LINE = "   - definition (1–2 sentences, only supported by provided snippets/headings)"
 
-_HOMEPAGE_INPUT_LINE = (
-    "Input: a list of pages (title, slug, description, headings, overview snippet)."
-)
-_HOMEPAGE_GOAL_TECH_LINE = (
-    "Goal: briefly explain what the project does and the major system boundaries "
-    "and flows."
-)
-_HOMEPAGE_GOAL_TECH_PREF_LINE = (
-    "Prefer concrete technical terms present in the input (commands, modules, "
-    "components)."
-)
+_HOMEPAGE_INPUT_LINE = "Input: a list of pages (title, slug, description, headings, overview snippet)."
+_HOMEPAGE_GOAL_TECH_LINE = "Goal: briefly explain what the project does and the major system boundaries and flows."
+_HOMEPAGE_GOAL_TECH_PREF_LINE = "Prefer concrete technical terms present in the input (commands, modules, components)."
 _HOMEPAGE_GOAL_END_USER_LINE = (
-    "Goal: briefly explain what the project is for and the main ways a user "
-    "will interact with it."
+    "Goal: briefly explain what the project is for and the main ways a user will interact with it."
 )
 _HOMEPAGE_NO_INVENT_LINE = (
-    "Do NOT invent installation steps, commands, or configuration keys that "
-    "are not supported by the input."
+    "Do NOT invent installation steps, commands, or configuration keys that are not supported by the input."
 )
 
 
@@ -221,12 +200,8 @@ def _normalize_homepage_overview(text: str) -> str:
     if not cleaned:
         return ""
     cleaned = _strip_first_heading(cleaned)
-    cleaned = re.sub(
-        r"^\s*##\s+Overview\s*$", "", cleaned, flags=re.IGNORECASE | re.MULTILINE
-    ).strip()
-    cleaned = re.sub(
-        r"^\s*##\s+Topics\s*$", "", cleaned, flags=re.IGNORECASE | re.MULTILINE
-    ).strip()
+    cleaned = re.sub(r"^\s*##\s+Overview\s*$", "", cleaned, flags=re.IGNORECASE | re.MULTILINE).strip()
+    cleaned = re.sub(r"^\s*##\s+Topics\s*$", "", cleaned, flags=re.IGNORECASE | re.MULTILINE).strip()
     return cleaned.strip()
 
 
@@ -366,9 +341,7 @@ def _validate_nav_groups(
             continue
         output.append(NavGroup(title=title.strip() or "Group", slugs=cleaned_slugs))
 
-    missing = [
-        slug for slug in ordered_slugs if slug in valid_slugs and slug not in seen
-    ]
+    missing = [slug for slug in ordered_slugs if slug in valid_slugs and slug not in seen]
     if missing:
         if output:
             output.append(NavGroup(title="More", slugs=missing))
@@ -384,9 +357,7 @@ def _validate_glossary_terms(
 ) -> list[GlossaryTerm]:
     if not isinstance(glossary, list):
         if log_warning:
-            log_warning(
-                "Global IA output missing 'glossary' list; skipping glossary.md."
-            )
+            log_warning("Global IA output missing 'glossary' list; skipping glossary.md.")
         return []
     output: list[GlossaryTerm] = []
     for entry in glossary:
@@ -395,15 +366,9 @@ def _validate_glossary_terms(
         term = entry.get("term")
         definition = entry.get("definition")
         pages = entry.get("pages")
-        if (
-            not isinstance(term, str)
-            or not isinstance(definition, str)
-            or not isinstance(pages, list)
-        ):
+        if not isinstance(term, str) or not isinstance(definition, str) or not isinstance(pages, list):
             continue
-        cleaned_pages = [
-            slug for slug in pages if isinstance(slug, str) and slug in valid_slugs
-        ]
+        cleaned_pages = [slug for slug in pages if isinstance(slug, str) and slug in valid_slugs]
         output.append(
             GlossaryTerm(
                 term=term.strip(),

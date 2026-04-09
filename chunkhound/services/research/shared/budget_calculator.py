@@ -131,9 +131,7 @@ class BudgetCalculator:
             "total_tokens": total_tokens,
         }
 
-    def get_adaptive_token_budgets(
-        self, depth: int, max_depth: int, is_leaf: bool
-    ) -> dict[str, int]:
+    def get_adaptive_token_budgets(self, depth: int, max_depth: int, is_leaf: bool) -> dict[str, int]:
         """Calculate adaptive token budgets based on node depth and tree position.
 
         Strategy (LLM×MapReduce Pyramid):
@@ -157,9 +155,7 @@ class BudgetCalculator:
             return {
                 "file_content_tokens": MAX_FILE_CONTENT_TOKENS,
                 "llm_input_tokens": MAX_LLM_INPUT_TOKENS,
-                "answer_tokens": MAX_LEAF_ANSWER_TOKENS
-                if is_leaf
-                else MAX_SYNTHESIS_TOKENS,
+                "answer_tokens": MAX_LEAF_ANSWER_TOKENS if is_leaf else MAX_SYNTHESIS_TOKENS,
             }
 
         # Normalize depth: 0.0 at root, 1.0 at max_depth
@@ -171,15 +167,11 @@ class BudgetCalculator:
         # File content budget: Scales with depth (10k → 50k tokens)
         # Root needs LESS raw code (synthesizing), leaves need MORE (analyzing)
         file_content_tokens = int(
-            FILE_CONTENT_TOKENS_MIN
-            + (FILE_CONTENT_TOKENS_MAX - FILE_CONTENT_TOKENS_MIN) * depth_ratio
+            FILE_CONTENT_TOKENS_MIN + (FILE_CONTENT_TOKENS_MAX - FILE_CONTENT_TOKENS_MIN) * depth_ratio
         )
 
         # LLM total input budget (query + context + code): 15k → 60k tokens
-        llm_input_tokens = int(
-            LLM_INPUT_TOKENS_MIN
-            + (LLM_INPUT_TOKENS_MAX - LLM_INPUT_TOKENS_MIN) * depth_ratio
-        )
+        llm_input_tokens = int(LLM_INPUT_TOKENS_MIN + (LLM_INPUT_TOKENS_MAX - LLM_INPUT_TOKENS_MIN) * depth_ratio)
 
         # OUTPUT BUDGETS (what LLM generates)
         # ====================================
@@ -187,23 +179,17 @@ class BudgetCalculator:
         if is_leaf:
             # LEAVES: Dense, focused detail (10-12k tokens)
             # Scale slightly with depth to handle variable max_depth (3-7)
-            answer_tokens = int(
-                LEAF_ANSWER_TOKENS_BASE + LEAF_ANSWER_TOKENS_BONUS * depth_ratio
-            )
+            answer_tokens = int(LEAF_ANSWER_TOKENS_BASE + LEAF_ANSWER_TOKENS_BONUS * depth_ratio)
         else:
             # INTERNAL NODES: Compress as we go UP the tree
             # Root (depth 0) gets concise output (5k)
             # Deeper internal nodes get more budget before compressing
-            answer_tokens = int(
-                INTERNAL_ROOT_TARGET
-                + (INTERNAL_MAX_TOKENS - INTERNAL_ROOT_TARGET) * depth_ratio
-            )
+            answer_tokens = int(INTERNAL_ROOT_TARGET + (INTERNAL_MAX_TOKENS - INTERNAL_ROOT_TARGET) * depth_ratio)
 
         # Follow-up question generation budget: Scales with depth (3k → 8k)
         # Deeper nodes have more context to analyze, need more output tokens
         followup_output_tokens = int(
-            FOLLOWUP_OUTPUT_TOKENS_MIN
-            + (FOLLOWUP_OUTPUT_TOKENS_MAX - FOLLOWUP_OUTPUT_TOKENS_MIN) * depth_ratio
+            FOLLOWUP_OUTPUT_TOKENS_MIN + (FOLLOWUP_OUTPUT_TOKENS_MAX - FOLLOWUP_OUTPUT_TOKENS_MIN) * depth_ratio
         )
 
         logger.debug(

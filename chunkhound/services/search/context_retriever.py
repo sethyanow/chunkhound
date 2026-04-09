@@ -23,9 +23,7 @@ class ContextRetriever:
         """
         self._db = database_provider
 
-    def get_chunk_context(
-        self, chunk_id: ChunkId, context_lines: int = 5
-    ) -> dict[str, Any]:
+    def get_chunk_context(self, chunk_id: ChunkId, context_lines: int = 5) -> dict[str, Any]:
         """Get additional context around a specific chunk.
 
         Args:

@@ -58,9 +58,7 @@ class SetupError(Exception):
 class QueryCompilationError(Exception):
     """Error raised when tree-sitter query compilation fails."""
 
-    def __init__(
-        self, concept: UniversalConcept, language: str, query: str, error: str
-    ) -> None:
+    def __init__(self, concept: UniversalConcept, language: str, query: str, error: str) -> None:
         self.concept = concept
         self.language = language
         self.query = query
@@ -69,9 +67,7 @@ class QueryCompilationError(Exception):
 
     def __str__(self) -> str:
         return (
-            f"Query compilation failed for {self.concept} in {self.language}:\n"
-            f"Query: {self.query}\n"
-            f"Error: {self.error}"
+            f"Query compilation failed for {self.concept} in {self.language}:\nQuery: {self.query}\nError: {self.error}"
         )
 
 

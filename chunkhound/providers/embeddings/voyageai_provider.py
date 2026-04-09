@@ -153,9 +153,7 @@ class VoyageAIEmbeddingProvider:
                 and to RECOMMENDED_CONCURRENCY for the official VoyageAI API.
         """
         if not VOYAGEAI_AVAILABLE:
-            raise ImportError(
-                "VoyageAI not available - install with: uv pip install voyageai"
-            )
+            raise ImportError("VoyageAI not available - install with: uv pip install voyageai")
 
         self._model = model
         self._rerank_model = rerank_model
@@ -207,8 +205,7 @@ class VoyageAIEmbeddingProvider:
 
         # Model dimension mapping - built from configuration
         self._dimensions_map = {
-            model_name: config["default_dimension"]
-            for model_name, config in VOYAGE_MODEL_CONFIG.items()
+            model_name: config["default_dimension"] for model_name, config in VOYAGE_MODEL_CONFIG.items()
         }
 
         # Usage tracking
@@ -236,9 +233,7 @@ class VoyageAIEmbeddingProvider:
     @property
     def dims(self) -> int:
         """Embedding dimensions."""
-        return get_dimensions_for_model(
-            self._model, self._dimensions_map, default_dims=1024
-        )
+        return get_dimensions_for_model(self._model, self._dimensions_map, default_dims=1024)
 
     @property
     def distance(self) -> str:
@@ -337,13 +332,9 @@ class VoyageAIEmbeddingProvider:
 
                 # HTTP 408 (upstream request timeout) from Azure ML / proxies:
                 # treat as transient and retry with a longer initial backoff
-                is_upstream_timeout = "408" in error_str or (
-                    "upstream request timeout" in error_str.lower()
-                )
+                is_upstream_timeout = "408" in error_str or ("upstream request timeout" in error_str.lower())
 
-                if (
-                    is_network_error or is_upstream_timeout
-                ) and attempt < self._retry_attempts - 1:
+                if (is_network_error or is_upstream_timeout) and attempt < self._retry_attempts - 1:
                     # Longer backoff for upstream timeouts — endpoint needs time to recover
                     base_delay = 10.0 if is_upstream_timeout else self._retry_delay
                     delay = base_delay * (2**attempt)
@@ -357,28 +348,20 @@ class VoyageAIEmbeddingProvider:
                 else:
                     # Non-retryable error or last attempt - log and raise
                     if is_network_error or is_upstream_timeout:
-                        logger.error(
-                            f"VoyageAI embedding failed after {self._retry_attempts} attempts: {e}"
-                        )
+                        logger.error(f"VoyageAI embedding failed after {self._retry_attempts} attempts: {e}")
                     else:
-                        logger.error(
-                            f"VoyageAI embedding failed with non-retryable error: {e}"
-                        )
+                        logger.error(f"VoyageAI embedding failed with non-retryable error: {e}")
                     raise RuntimeError(f"Embedding generation failed: {e}") from e
 
         # Should never reach here, but provide clear error if we do
-        raise RuntimeError(
-            f"Embedding generation failed after {self._retry_attempts} attempts"
-        )
+        raise RuntimeError(f"Embedding generation failed after {self._retry_attempts} attempts")
 
     async def embed_single(self, text: str) -> list[float]:
         """Generate embedding for a single text."""
         embeddings = await self.embed([text])
         return embeddings[0]
 
-    async def embed_batch(
-        self, texts: list[str], batch_size: int | None = None
-    ) -> list[list[float]]:
+    async def embed_batch(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
         """Generate embeddings in batches respecting both count and token limits."""
         if not texts:
             return []
@@ -394,8 +377,7 @@ class VoyageAIEmbeddingProvider:
             text_tokens = self.estimate_tokens(text)
 
             if current_batch and (
-                len(current_batch) >= effective_batch_size
-                or current_tokens + text_tokens > max_tokens_per_batch
+                len(current_batch) >= effective_batch_size or current_tokens + text_tokens > max_tokens_per_batch
             ):
                 all_embeddings.extend(await self.embed(current_batch))
                 current_batch = []
@@ -431,9 +413,7 @@ class VoyageAIEmbeddingProvider:
 
     def is_available(self) -> bool:
         """Check if the provider is available and properly configured."""
-        return VOYAGEAI_AVAILABLE and (
-            self._api_key is not None or self._base_url is not None
-        )
+        return VOYAGEAI_AVAILABLE and (self._api_key is not None or self._base_url is not None)
 
     async def health_check(self) -> dict[str, Any]:
         """Perform health check and return status information."""
@@ -486,9 +466,7 @@ class VoyageAIEmbeddingProvider:
 
     def get_usage_stats(self) -> dict[str, Any]:
         """Get usage statistics."""
-        return get_usage_stats_dict(
-            self._requests_made, self._tokens_used, self._embeddings_generated
-        )
+        return get_usage_stats_dict(self._requests_made, self._tokens_used, self._embeddings_generated)
 
     def reset_usage_stats(self) -> None:
         """Reset usage statistics."""
@@ -573,9 +551,7 @@ class VoyageAIEmbeddingProvider:
             return self._rerank_url is not None
         return True
 
-    async def rerank(
-        self, query: str, documents: list[str], top_k: int | None = None
-    ) -> list[RerankResult]:
+    async def rerank(self, query: str, documents: list[str], top_k: int | None = None) -> list[RerankResult]:
         """Rerank documents by relevance to query.
 
         Dispatches to HTTP-based reranking when rerank_url is configured,
@@ -589,15 +565,11 @@ class VoyageAIEmbeddingProvider:
 
         return await self._rerank_via_sdk(query, documents, top_k)
 
-    async def _rerank_via_sdk(
-        self, query: str, documents: list[str], top_k: int | None
-    ) -> list[RerankResult]:
+    async def _rerank_via_sdk(self, query: str, documents: list[str], top_k: int | None) -> list[RerankResult]:
         """Rerank using the VoyageAI SDK (official API)."""
         for attempt in range(self._retry_attempts):
             try:
-                logger.debug(
-                    f"VoyageAI reranking {len(documents)} documents with model {self._rerank_model}"
-                )
+                logger.debug(f"VoyageAI reranking {len(documents)} documents with model {self._rerank_model}")
 
                 result = await asyncio.to_thread(
                     self._client.rerank,
@@ -610,23 +582,17 @@ class VoyageAIEmbeddingProvider:
                 self._requests_made += 1
 
                 if not hasattr(result, "results") or not result.results:
-                    logger.warning(
-                        f"VoyageAI rerank returned no results for query: {query[:100]}"
-                    )
+                    logger.warning(f"VoyageAI rerank returned no results for query: {query[:100]}")
                     return []
 
                 rerank_results = []
                 for item in result.results:
                     if hasattr(item, "index") and hasattr(item, "relevance_score"):
-                        rerank_results.append(
-                            RerankResult(index=item.index, score=item.relevance_score)
-                        )
+                        rerank_results.append(RerankResult(index=item.index, score=item.relevance_score))
                     else:
                         logger.warning(f"Skipping invalid rerank result: {item}")
 
-                logger.debug(
-                    f"VoyageAI reranked {len(documents)} documents, got {len(rerank_results)} results"
-                )
+                logger.debug(f"VoyageAI reranked {len(documents)} documents, got {len(rerank_results)} results")
                 return rerank_results
 
             except AttributeError as e:
@@ -655,20 +621,14 @@ class VoyageAIEmbeddingProvider:
                     continue
                 else:
                     if is_network_error:
-                        logger.error(
-                            f"VoyageAI reranking failed after {self._retry_attempts} attempts: {e}"
-                        )
+                        logger.error(f"VoyageAI reranking failed after {self._retry_attempts} attempts: {e}")
                     else:
-                        logger.error(
-                            f"VoyageAI reranking failed with non-retryable error: {e}"
-                        )
+                        logger.error(f"VoyageAI reranking failed with non-retryable error: {e}")
                     raise RuntimeError(f"Reranking failed: {e}") from e
 
         raise RuntimeError(f"Reranking failed after {self._retry_attempts} attempts")
 
-    async def _rerank_via_http(
-        self, query: str, documents: list[str], top_k: int | None
-    ) -> list[RerankResult]:
+    async def _rerank_via_http(self, query: str, documents: list[str], top_k: int | None) -> list[RerankResult]:
         """Rerank using a separate HTTP reranker service (TEI or Cohere format).
 
         Handles batching when document count exceeds rerank_batch_size.
@@ -694,27 +654,18 @@ class VoyageAIEmbeddingProvider:
             all_results = all_results[:top_k]
         return all_results
 
-    async def _rerank_http_batch(
-        self, query: str, documents: list[str], top_k: int | None
-    ) -> list[RerankResult]:
+    async def _rerank_http_batch(self, query: str, documents: list[str], top_k: int | None) -> list[RerankResult]:
         """Send one batch to the HTTP reranker and return parsed results."""
         payload = self._build_rerank_payload(query, documents, top_k)
 
-        logger.debug(
-            f"HTTP reranking {len(documents)} documents at {self._rerank_url} "
-            f"(format={self._rerank_format})"
-        )
+        logger.debug(f"HTTP reranking {len(documents)} documents at {self._rerank_url} (format={self._rerank_format})")
 
-        async with httpx.AsyncClient(
-            timeout=self._timeout, verify=self._ssl_verify
-        ) as client:
+        async with httpx.AsyncClient(timeout=self._timeout, verify=self._ssl_verify) as client:
             headers = {"Content-Type": "application/json"}
             if self._api_key:
                 headers["Authorization"] = f"Bearer {self._api_key}"
 
-            response = await client.post(
-                self._rerank_url, json=payload, headers=headers
-            )
+            response = await client.post(self._rerank_url, json=payload, headers=headers)
             response.raise_for_status()
             data = response.json()
 
@@ -727,9 +678,7 @@ class VoyageAIEmbeddingProvider:
 
         return self._parse_rerank_response(data, len(documents))
 
-    def _build_rerank_payload(
-        self, query: str, documents: list[str], top_k: int | None
-    ) -> dict:
+    def _build_rerank_payload(self, query: str, documents: list[str], top_k: int | None) -> dict:
         """Build rerank request payload for TEI or Cohere format."""
         fmt = self._rerank_format
         if fmt == "tei":
@@ -753,32 +702,22 @@ class VoyageAIEmbeddingProvider:
                 return payload
             return {"query": query, "texts": documents}
 
-    def _parse_rerank_response(
-        self, data: dict, num_documents: int
-    ) -> list[RerankResult]:
+    def _parse_rerank_response(self, data: dict, num_documents: int) -> list[RerankResult]:
         """Parse reranker HTTP response (Cohere or TEI format) into RerankResult list."""
         if "results" not in data:
-            raise ValueError(
-                f"Invalid rerank response: missing 'results' field. Got: {list(data.keys())}"
-            )
+            raise ValueError(f"Invalid rerank response: missing 'results' field. Got: {list(data.keys())}")
 
         results = []
         for item in data["results"]:
             # Cohere: {"index": N, "relevance_score": F}
             # TEI:    {"index": N, "score": F}
             idx = item.get("index")
-            score = (
-                item.get("relevance_score")
-                if "relevance_score" in item
-                else item.get("score")
-            )
+            score = item.get("relevance_score") if "relevance_score" in item else item.get("score")
             if idx is None or score is None:
                 logger.warning(f"Skipping malformed rerank result: {item}")
                 continue
             if not (0 <= idx < num_documents):
-                logger.warning(
-                    f"Rerank index {idx} out of range ({num_documents} docs), skipping"
-                )
+                logger.warning(f"Rerank index {idx} out of range ({num_documents} docs), skipping")
                 continue
             results.append(RerankResult(index=idx, score=score))
 

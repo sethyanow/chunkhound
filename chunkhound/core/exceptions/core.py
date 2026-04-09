@@ -54,9 +54,7 @@ class ValidationError(ChunkHoundError):
     type, or business rule requirements.
     """
 
-    def __init__(
-        self, field: str, value: Any, reason: str, context: dict[str, Any] | None = None
-    ):
+    def __init__(self, field: str, value: Any, reason: str, context: dict[str, Any] | None = None):
         """Initialize validation error.
 
         Args:
@@ -247,9 +245,7 @@ class ConfigurationError(ChunkHoundError):
         if config_key:
             message = f"Configuration error for '{config_key}': {reason}"
         else:
-            message = (
-                f"Configuration error: {reason}" if reason else "Configuration error"
-            )
+            message = f"Configuration error: {reason}" if reason else "Configuration error"
 
         super().__init__(message, context)
         self.config_key = config_key

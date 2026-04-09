@@ -34,18 +34,14 @@ class IndexingConfig(BaseModel):
     """
 
     # Indexing behavior
-    force_reindex: bool = Field(
-        default=False, description="Force re-indexing of all files"
-    )
+    force_reindex: bool = Field(default=False, description="Force re-indexing of all files")
 
     # Internal settings - not exposed to users
     batch_size: int = Field(default=50, description="Internal batch size")
     db_batch_size: int = Field(default=100, description="Internal DB batch size")
     max_concurrent: int = Field(default=5, description="Internal concurrency")
     cleanup: bool = Field(default=True, description="Internal cleanup setting")
-    ignore_gitignore: bool = Field(
-        default=False, description="Internal gitignore setting"
-    )
+    ignore_gitignore: bool = Field(default=False, description="Internal gitignore setting")
     max_file_size_mb: int = Field(default=10, description="Internal file size limit")
     config_file_size_threshold_kb: int = Field(
         default=20,
@@ -65,10 +61,7 @@ class IndexingConfig(BaseModel):
     )
     per_file_timeout_min_size_kb: int = Field(
         default=128,
-        description=(
-            "Only apply timeout to files at or above this size (KB) to avoid "
-            "overhead on small files"
-        ),
+        description=("Only apply timeout to files at or above this size (KB) to avoid overhead on small files"),
     )
     mtime_epsilon_seconds: float = Field(
         default=0.01,
@@ -219,9 +212,7 @@ class IndexingConfig(BaseModel):
     # Backend for .gitignore evaluation when repo-aware engine is used
     # - "python": use pathspec-based evaluator (default)
     # - "libgit2": use libgit2/pygit2 for native ignore decisions (optional)
-    gitignore_backend: str = Field(
-        default="python", description="Backend for gitignore evaluation: python|libgit2"
-    )
+    gitignore_backend: str = Field(default="python", description="Backend for gitignore evaluation: python|libgit2")
 
     # Discovery backend controls how files are enumerated before parsing.
     # - "python" (default): use ChunkHound's optimized os.walk-based traversal
@@ -251,7 +242,8 @@ class IndexingConfig(BaseModel):
     )
 
     @field_validator("include", "exclude")
-    def validate_patterns(self, v: list[str]) -> list[str]:
+    @classmethod
+    def validate_patterns(cls, v: list[str]) -> list[str]:
         """Validate glob patterns."""
         if not isinstance(v, list):
             raise ValueError("Patterns must be a list")
@@ -302,8 +294,7 @@ class IndexingConfig(BaseModel):
             type=int,
             default=None,
             help=(
-                "Maximum concurrent parser workers (processes). "
-                "Overrides auto-detected concurrency and internal caps."
+                "Maximum concurrent parser workers (processes). Overrides auto-detected concurrency and internal caps."
             ),
         )
 
@@ -311,36 +302,26 @@ class IndexingConfig(BaseModel):
             "--file-timeout",
             type=float,
             default=None,
-            help=(
-                "Maximum seconds to spend on any single file before skipping it "
-                "(default: 0, disabled)"
-            ),
+            help=("Maximum seconds to spend on any single file before skipping it (default: 0, disabled)"),
         )
         parser.add_argument(
             "--file-timeout-min-size-kb",
             type=int,
             default=None,
-            help=(
-                "Only apply the per-file timeout to files >= this size (KB). "
-                "Default: 128"
-            ),
+            help=("Only apply the per-file timeout to files >= this size (KB). Default: 128"),
         )
         parser.add_argument(
             "--mtime-epsilon-seconds",
             type=float,
             default=None,
-            help=(
-                "Tolerance for mtime comparisons when skipping unchanged files. "
-                "Default: 0.01"
-            ),
+            help=("Tolerance for mtime comparisons when skipping unchanged files. Default: 0.01"),
         )
         parser.add_argument(
             "--config-file-size-threshold-kb",
             type=int,
             default=None,
             help=(
-                "Structured config (JSON/YAML/TOML) larger than this KB are skipped. "
-                "Set to 0 to disable. Default: 20"
+                "Structured config (JSON/YAML/TOML) larger than this KB are skipped. Set to 0 to disable. Default: 20"
             ),
         )
         parser.add_argument(
@@ -372,17 +353,13 @@ class IndexingConfig(BaseModel):
             config["exclude"] = exclude.split(",")
 
         # Per-file timeout (seconds)
-        if per_file_timeout := os.getenv(
-            "CHUNKHOUND_INDEXING__PER_FILE_TIMEOUT_SECONDS"
-        ):
+        if per_file_timeout := os.getenv("CHUNKHOUND_INDEXING__PER_FILE_TIMEOUT_SECONDS"):
             try:
                 config["per_file_timeout_seconds"] = float(per_file_timeout)
             except ValueError:
                 # Ignore invalid env values and keep default
                 pass
-        if per_file_timeout_min := os.getenv(
-            "CHUNKHOUND_INDEXING__PER_FILE_TIMEOUT_MIN_SIZE_KB"
-        ):
+        if per_file_timeout_min := os.getenv("CHUNKHOUND_INDEXING__PER_FILE_TIMEOUT_MIN_SIZE_KB"):
             try:
                 config["per_file_timeout_min_size_kb"] = int(per_file_timeout_min)
             except ValueError:
@@ -527,33 +504,20 @@ class IndexingConfig(BaseModel):
             except (TypeError, ValueError):
                 # Ignore invalid values; validation not strict here
                 pass
-        if (
-            hasattr(args, "file_timeout_min_size_kb")
-            and args.file_timeout_min_size_kb is not None
-        ):
+        if hasattr(args, "file_timeout_min_size_kb") and args.file_timeout_min_size_kb is not None:
             try:
-                overrides["per_file_timeout_min_size_kb"] = int(
-                    args.file_timeout_min_size_kb
-                )
+                overrides["per_file_timeout_min_size_kb"] = int(args.file_timeout_min_size_kb)
             except (TypeError, ValueError):
                 pass
-        if (
-            hasattr(args, "mtime_epsilon_seconds")
-            and args.mtime_epsilon_seconds is not None
-        ):
+        if hasattr(args, "mtime_epsilon_seconds") and args.mtime_epsilon_seconds is not None:
             try:
                 overrides["mtime_epsilon_seconds"] = float(args.mtime_epsilon_seconds)
             except (TypeError, ValueError):
                 pass
         # Structured config file size threshold override via CLI
-        if (
-            hasattr(args, "config_file_size_threshold_kb")
-            and args.config_file_size_threshold_kb is not None
-        ):
+        if hasattr(args, "config_file_size_threshold_kb") and args.config_file_size_threshold_kb is not None:
             try:
-                overrides["config_file_size_threshold_kb"] = int(
-                    args.config_file_size_threshold_kb
-                )
+                overrides["config_file_size_threshold_kb"] = int(args.config_file_size_threshold_kb)
             except (TypeError, ValueError):
                 pass
 

@@ -40,9 +40,7 @@ class SearchService(BaseService):
 
         # Initialize search strategies
         if embedding_provider:
-            self._single_hop_strategy = SingleHopStrategy(
-                database_provider, embedding_provider
-            )
+            self._single_hop_strategy = SingleHopStrategy(database_provider, embedding_provider)
             self._multi_hop_strategy = MultiHopStrategy(
                 database_provider,
                 embedding_provider,
@@ -92,9 +90,7 @@ class SearchService(BaseService):
         """
         try:
             if not self._embedding_provider:
-                raise ValueError(
-                    "Embedding provider not configured for semantic search"
-                )
+                raise ValueError("Embedding provider not configured for semantic search")
 
             # Type narrowing for mypy
             embedding_provider = self._embedding_provider
@@ -115,18 +111,15 @@ class SearchService(BaseService):
             else:
                 # Auto-select based on provider capabilities
                 use_multi_hop = (
-                    hasattr(embedding_provider, "supports_reranking")
-                    and embedding_provider.supports_reranking()
+                    hasattr(embedding_provider, "supports_reranking") and embedding_provider.supports_reranking()
                 )
 
             if use_multi_hop:
                 # Ensure provider actually supports reranking for multi-hop
-                if not (
-                    hasattr(embedding_provider, "supports_reranking")
-                    and embedding_provider.supports_reranking()
-                ):
+                if not (hasattr(embedding_provider, "supports_reranking") and embedding_provider.supports_reranking()):
                     logger.warning(
-                        "Multi-hop strategy requested but provider doesn't support reranking, falling back to single-hop"
+                        "Multi-hop strategy requested but provider doesn't"
+                        " support reranking, falling back to single-hop"
                     )
                     use_multi_hop = False
 
@@ -207,9 +200,7 @@ class SearchService(BaseService):
                 enhanced_result = self._result_enhancer.enhance_search_result(result)
                 enhanced_results.append(enhanced_result)
 
-            logger.info(
-                f"Regex search completed: {len(enhanced_results)} results found"
-            )
+            logger.info(f"Regex search completed: {len(enhanced_results)} results found")
             return enhanced_results, pagination
 
         except Exception as e:
@@ -258,9 +249,7 @@ class SearchService(BaseService):
                 enhanced_result = self._result_enhancer.enhance_search_result(result)
                 enhanced_results.append(enhanced_result)
 
-            logger.info(
-                f"Async regex search completed: {len(enhanced_results)} results found"
-            )
+            logger.info(f"Async regex search completed: {len(enhanced_results)} results found")
             return enhanced_results, pagination
 
         except Exception as e:
@@ -290,9 +279,7 @@ class SearchService(BaseService):
             Tuple of (results, pagination_metadata)
         """
         try:
-            logger.debug(
-                f"Performing hybrid search: query='{query}', pattern='{regex_pattern}'"
-            )
+            logger.debug(f"Performing hybrid search: query='{query}', pattern='{regex_pattern}'")
 
             # Perform searches concurrently
             tasks = []
@@ -312,12 +299,8 @@ class SearchService(BaseService):
             # Regex search
             if regex_pattern:
 
-                async def get_regex_results() -> tuple[
-                    list[dict[str, Any]], dict[str, Any]
-                ]:
-                    return self.search_regex(
-                        regex_pattern, page_size=page_size * 2, offset=offset
-                    )
+                async def get_regex_results() -> tuple[list[dict[str, Any]], dict[str, Any]]:
+                    return self.search_regex(regex_pattern, page_size=page_size * 2, offset=offset)
 
                 tasks.append(("regex", asyncio.create_task(get_regex_results())))
 
@@ -342,24 +325,18 @@ class SearchService(BaseService):
                 "offset": offset,
                 "page_size": page_size,
                 "has_more": len(combined_results) == page_size,
-                "next_offset": offset + page_size
-                if len(combined_results) == page_size
-                else None,
+                "next_offset": offset + page_size if len(combined_results) == page_size else None,
                 "total": None,  # Cannot estimate for hybrid search
             }
 
-            logger.info(
-                f"Hybrid search completed: {len(combined_results)} results found"
-            )
+            logger.info(f"Hybrid search completed: {len(combined_results)} results found")
             return combined_results, combined_pagination
 
         except Exception as e:
             logger.error(f"Hybrid search failed: {e}")
             raise
 
-    def get_chunk_context(
-        self, chunk_id: ChunkId, context_lines: int = 5
-    ) -> dict[str, Any]:
+    def get_chunk_context(self, chunk_id: ChunkId, context_lines: int = 5) -> dict[str, Any]:
         """Get additional context around a specific chunk.
 
         Args:

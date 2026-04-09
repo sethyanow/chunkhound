@@ -76,9 +76,7 @@ def get_global_excludes_file() -> Path | None:
     return None
 
 
-def run_git(
-    args: Sequence[str], cwd: Path | None, timeout_s: float | None = None
-) -> subprocess.CompletedProcess:
+def run_git(args: Sequence[str], cwd: Path | None, timeout_s: float | None = None) -> subprocess.CompletedProcess:
     cmd = ["git", *list(args)]
     env = _build_git_env()
     try:

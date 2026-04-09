@@ -106,9 +106,7 @@ def _detect_objc_vs_matlab(file_path: Path) -> Language:
     """
     try:
         with open(file_path, "rb") as f:
-            header = f.read(CONTENT_DETECTION_READ_BYTES).decode(
-                "utf-8", errors="ignore"
-            )
+            header = f.read(CONTENT_DETECTION_READ_BYTES).decode("utf-8", errors="ignore")
 
         # Objective-C markers (highly distinctive)
         # These directives are unique to Objective-C and never appear in MATLAB
@@ -128,8 +126,5 @@ def _detect_objc_vs_matlab(file_path: Path) -> Language:
 
     except (OSError, UnicodeDecodeError) as e:
         # If file can't be read, default to MATLAB (backward compatibility)
-        logger.debug(
-            f"Failed to read {file_path.name} for language detection "
-            f"({e}), defaulting to MATLAB"
-        )
+        logger.debug(f"Failed to read {file_path.name} for language detection ({e}), defaulting to MATLAB")
         return Language.MATLAB

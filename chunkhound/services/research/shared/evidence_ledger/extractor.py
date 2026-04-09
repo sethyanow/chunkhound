@@ -132,9 +132,7 @@ class FactExtractor:
 
         code_context = self._format_code_context(cluster_content)
         system = FACT_EXTRACTION_SYSTEM.format(max_facts=max_facts)
-        prompt = FACT_EXTRACTION_USER.format(
-            root_query=root_query, code_context=code_context
-        )
+        prompt = FACT_EXTRACTION_USER.format(root_query=root_query, code_context=code_context)
 
         try:
             response = await self._llm.complete(
@@ -166,13 +164,9 @@ class FactExtractor:
                 end_line = int(item.get("end_line", start_line))
                 category = item.get("category", "general").strip()
                 confidence = _parse_confidence(item.get("confidence", "uncertain"))
-                entities = tuple(
-                    e.strip() for e in item.get("entities", []) if e.strip()
-                )
+                entities = tuple(e.strip() for e in item.get("entities", []) if e.strip())
 
-                fact_id = FactEntry.generate_id(
-                    statement, file_path, start_line, end_line
-                )
+                fact_id = FactEntry.generate_id(statement, file_path, start_line, end_line)
 
                 fact = FactEntry(
                     fact_id=fact_id,
@@ -192,10 +186,7 @@ class FactExtractor:
                 logger.debug(f"Skipping malformed fact entry: {e}")
                 continue
 
-        logger.info(
-            f"Extracted {ledger.facts_count} facts from cluster {cluster_id} "
-            f"({len(cluster_content)} files)"
-        )
+        logger.info(f"Extracted {ledger.facts_count} facts from cluster {cluster_id} ({len(cluster_content)} files)")
 
         return ledger
 
@@ -220,18 +211,11 @@ class FactExtractor:
 
         semaphore = asyncio.Semaphore(max_concurrency)
 
-        async def extract_with_limit(
-            cluster_id: int, content: dict[str, str], max_facts: int
-        ) -> EvidenceLedger:
+        async def extract_with_limit(cluster_id: int, content: dict[str, str], max_facts: int) -> EvidenceLedger:
             async with semaphore:
-                return await self.extract_from_cluster(
-                    cluster_id, content, root_query, max_facts
-                )
+                return await self.extract_from_cluster(cluster_id, content, root_query, max_facts)
 
-        tasks = [
-            extract_with_limit(cid, content, max_facts)
-            for cid, content, max_facts in clusters
-        ]
+        tasks = [extract_with_limit(cid, content, max_facts) for cid, content, max_facts in clusters]
         ledgers = await asyncio.gather(*tasks)
 
         # Merge all ledgers

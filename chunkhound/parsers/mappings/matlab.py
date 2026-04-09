@@ -281,9 +281,7 @@ class MatlabMapping(BaseMapping):
             return superclasses
 
         # Extract identifiers from superclass list
-        for identifier_node in self.find_children_by_type(
-            superclass_node, "identifier"
-        ):
+        for identifier_node in self.find_children_by_type(superclass_node, "identifier"):
             superclass_name = self.get_node_text(identifier_node, source).strip()
             if superclass_name and superclass_name not in ("&", ","):
                 superclasses.append(superclass_name)
@@ -457,9 +455,7 @@ class MatlabMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for MATLAB nodes.
 
         Handles properties blocks and top-level assignments for constant extraction.
@@ -512,9 +508,7 @@ class MatlabMapping(BaseMapping):
 
         return self.get_fallback_name(def_node, "definition")
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for MATLAB nodes.
 
         Filters out non-UPPER_CASE assignments to avoid creating unnecessary chunks.
@@ -589,9 +583,7 @@ class MatlabMapping(BaseMapping):
                 return False
 
             # Check if body only contains 'end'
-            body_lines = [
-                line.strip() for line in lines[1:-1]
-            ]  # Skip first and last line
+            body_lines = [line.strip() for line in lines[1:-1]]  # Skip first and last line
             if all(not line or line.startswith("%") for line in body_lines):
                 return False
 
@@ -645,9 +637,7 @@ class MatlabMapping(BaseMapping):
 
             # Extract value from assignment
             assignment_text = self.get_node_text(def_node, source).strip()
-            value_match = re.search(
-                rf"^{re.escape(var_name)}\s*=\s*(.+)", assignment_text
-            )
+            value_match = re.search(rf"^{re.escape(var_name)}\s*=\s*(.+)", assignment_text)
             if value_match:
                 value = value_match.group(1).strip().rstrip(";")
                 # Truncate long values
@@ -680,9 +670,7 @@ class MatlabMapping(BaseMapping):
 
                 # Extract value if present
                 prop_text = self.get_node_text(property_def, source).strip()
-                value_match = re.search(
-                    rf"{re.escape(prop_name)}\s*=\s*(.+?)(?:\s*;|\s*$)", prop_text
-                )
+                value_match = re.search(rf"{re.escape(prop_name)}\s*=\s*(.+?)(?:\s*;|\s*$)", prop_text)
 
                 if value_match:
                     value = value_match.group(1).strip()
@@ -717,9 +705,7 @@ class MatlabMapping(BaseMapping):
                 assignment_text = self.get_node_text(assignment_node, source).strip()
 
                 # Pattern: CONSTANT_NAME = value
-                value_match = re.search(
-                    rf"^{re.escape(var_name)}\s*=\s*(.+)", assignment_text
-                )
+                value_match = re.search(rf"^{re.escape(var_name)}\s*=\s*(.+)", assignment_text)
                 if value_match:
                     value = value_match.group(1).strip().rstrip(";")
                     # Truncate long values

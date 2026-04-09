@@ -67,9 +67,7 @@ class LSPClient:
         if self._state != ServerState.NOT_STARTED:
             raise LSPError(f"Cannot start client in state {self._state.value}")
         if self._config.command is None:
-            raise LSPError(
-                f"No server command configured for {self._config.language_id}"
-            )
+            raise LSPError(f"No server command configured for {self._config.language_id}")
 
         self._state = ServerState.INITIALIZING
         workspace_path = Path(workspace_root).resolve()
@@ -89,18 +87,14 @@ class LSPClient:
                 "code": "spawn_failed",
                 "detail": f"Command not found: {self._config.command}",
             }
-            raise LSPTransportError(
-                f"Server binary not found: {self._config.command}"
-            ) from None
+            raise LSPTransportError(f"Server binary not found: {self._config.command}") from None
         except PermissionError:
             self._state = ServerState.DEGRADED
             self._degraded_reason = {
                 "code": "spawn_failed",
                 "detail": f"Permission denied: {self._config.command}",
             }
-            raise LSPTransportError(
-                f"Permission denied for server binary: {self._config.command}"
-            ) from None
+            raise LSPTransportError(f"Permission denied for server binary: {self._config.command}") from None
 
         # Send initialize request
         init_params: dict[str, Any] = {
@@ -127,9 +121,7 @@ class LSPClient:
 
         try:
             timeout = self._config.request_timeout
-            result = await self._transport.send_request(
-                "initialize", init_params, timeout=timeout
-            )
+            result = await self._transport.send_request("initialize", init_params, timeout=timeout)
         except Exception:
             self._state = ServerState.DEGRADED
             self._degraded_reason = {
@@ -232,9 +224,7 @@ class LSPClient:
         self._require_capability(capability, method)
         transport = self._require_transport()
         try:
-            return await transport.send_request(
-                method, params, timeout=self._config.request_timeout
-            )
+            return await transport.send_request(method, params, timeout=self._config.request_timeout)
         except LSPTransportError:
             self._state = ServerState.DEGRADED
             self._degraded_reason = {
@@ -298,9 +288,7 @@ class LSPClient:
             return None
         return self._parse_hover(result)
 
-    async def incoming_calls(
-        self, uri: str, line: int, char: int
-    ) -> list[CallHierarchyItem]:
+    async def incoming_calls(self, uri: str, line: int, char: int) -> list[CallHierarchyItem]:
         # Two-step: prepareCallHierarchy → callHierarchy/incomingCalls
         items = await self._prepare_call_hierarchy(uri, line, char)
         if not items:
@@ -310,13 +298,9 @@ class LSPClient:
             LSPCapability.CALL_HIERARCHY,
             {"item": items[0]},
         )
-        return [
-            self._parse_call_hierarchy_item(call["from"]) for call in (result or [])
-        ]
+        return [self._parse_call_hierarchy_item(call["from"]) for call in (result or [])]
 
-    async def outgoing_calls(
-        self, uri: str, line: int, char: int
-    ) -> list[CallHierarchyItem]:
+    async def outgoing_calls(self, uri: str, line: int, char: int) -> list[CallHierarchyItem]:
         # Two-step: prepareCallHierarchy → callHierarchy/outgoingCalls
         items = await self._prepare_call_hierarchy(uri, line, char)
         if not items:
@@ -328,9 +312,7 @@ class LSPClient:
         )
         return [self._parse_call_hierarchy_item(call["to"]) for call in (result or [])]
 
-    async def _prepare_call_hierarchy(
-        self, uri: str, line: int, char: int
-    ) -> list[dict[str, Any]]:
+    async def _prepare_call_hierarchy(self, uri: str, line: int, char: int) -> list[dict[str, Any]]:
         """First step of call hierarchy protocol."""
         result = await self._send_operation(
             "textDocument/prepareCallHierarchy",
@@ -339,9 +321,7 @@ class LSPClient:
         )
         return result or []
 
-    async def go_to_implementation(
-        self, uri: str, line: int, char: int
-    ) -> list[Location]:
+    async def go_to_implementation(self, uri: str, line: int, char: int) -> list[Location]:
         # Not all servers advertise implementationProvider (e.g. pyright for Python).
         # If not supported, return empty list instead of raising.
         if LSPCapability.IMPLEMENTATION not in self._capabilities:
@@ -372,9 +352,7 @@ class LSPClient:
         cached = self._diagnostics.get(uri, [])
         return [self._parse_diagnostic(d) for d in cached]
 
-    async def notify_did_open(
-        self, uri: str, text: str, language_id: str = "python"
-    ) -> None:
+    async def notify_did_open(self, uri: str, text: str, language_id: str = "python") -> None:
         """Send textDocument/didOpen so the server starts analyzing the file."""
         transport = self._require_transport()
         await transport.send_notification(
@@ -655,6 +633,4 @@ class LSPClientPool:
             try:
                 await client.stop()
             except Exception:
-                logger.warning(
-                    "Error stopping LSP client %s", client._config.language_id
-                )
+                logger.warning("Error stopping LSP client %s", client._config.language_id)

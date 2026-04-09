@@ -152,9 +152,7 @@ class PerfAnalyzer:
             stderr=result.stderr,
         )
 
-    def _detect_outliers(
-        self, batches: list[BatchTiming], mean: float, std: float
-    ) -> list[OutlierBatch]:
+    def _detect_outliers(self, batches: list[BatchTiming], mean: float, std: float) -> list[OutlierBatch]:
         """Detect outlier batches using z-score analysis."""
         if std == 0:
             return []
@@ -178,9 +176,7 @@ class PerfAnalyzer:
 
         return outliers
 
-    def _generate_warnings(
-        self, regression: RegressionResult | None, outliers: list[OutlierBatch]
-    ) -> list[str]:
+    def _generate_warnings(self, regression: RegressionResult | None, outliers: list[OutlierBatch]) -> list[str]:
         """Generate human-readable warnings based on analysis results."""
         warnings: list[str] = []
 
@@ -201,10 +197,7 @@ class PerfAnalyzer:
     def _build_summary_only(self, batches: list[BatchTiming]) -> PerformanceDiagnostics:
         """Build diagnostics when insufficient batches for regression."""
         if not batches:
-            msg = (
-                f"Insufficient data: 0 batches collected "
-                f"(minimum {self.min_batches} required for regression)"
-            )
+            msg = f"Insufficient data: 0 batches collected (minimum {self.min_batches} required for regression)"
             return PerformanceDiagnostics(
                 total_batches=0,
                 total_chunks=0,
@@ -227,8 +220,7 @@ class PerfAnalyzer:
         throughput = total_chunks / total_duration if total_duration > 0 else 0.0
 
         msg = (
-            f"Insufficient data: {len(batches)} batches collected "
-            f"(minimum {self.min_batches} required for regression)"
+            f"Insufficient data: {len(batches)} batches collected (minimum {self.min_batches} required for regression)"
         )
         return PerformanceDiagnostics(
             total_batches=len(batches),

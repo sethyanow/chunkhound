@@ -5,7 +5,10 @@ Matches queries about what a module imports and what depends on it.
 
 # Matches: "what does X import", "what imports X", "dependencies of",
 # "depends on", "import graph", "module dependencies"
-PATTERN = r"(?:what\s+(?:does\s+.+?\s+)?imports?|what\s+imports|dependencies\s+of|depends\s+on|import\s+graph|module\s+dependenc)"
+PATTERN = (
+    r"(?:what\s+(?:does\s+.+?\s+)?imports?|what\s+imports"
+    r"|dependencies\s+of|depends\s+on|import\s+graph|module\s+dependenc)"
+)
 
 PROMPT_AUGMENTATION = """\
 The symbol dependency graph can trace import dependencies:

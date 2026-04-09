@@ -111,8 +111,7 @@ def _load_bench_files(
             # Fallback for non-UTF-8 files: decode bytes with replacement
             raw = path.read_bytes()
             logger.warning(
-                f"Non-UTF-8 file encountered in bench '{bench_id}': {key} "
-                "- decoding with replacement characters."
+                f"Non-UTF-8 file encountered in bench '{bench_id}': {key} - decoding with replacement characters."
             )
             content = raw.decode("utf-8", errors="ignore")
         label = _derive_label(rel)
@@ -124,10 +123,7 @@ def _load_bench_files(
     if not files:
         raise RuntimeError(f"No files found under bench source directory: {root}")
 
-    logger.info(
-        f"Loaded {len(files)} files from bench '{bench_id}' "
-        f"with {len(set(true_labels))} topics"
-    )
+    logger.info(f"Loaded {len(files)} files from bench '{bench_id}' with {len(set(true_labels))} topics")
 
     return files, file_keys, true_labels
 
@@ -237,9 +233,7 @@ async def _cluster_and_evaluate(
     # External clustering metrics
     ari = float(adjusted_rand_score(true_labels, pred_labels))
     nmi = float(normalized_mutual_info_score(true_labels, pred_labels))
-    homogeneity, completeness, v_measure = homogeneity_completeness_v_measure(
-        true_labels, pred_labels
-    )
+    homogeneity, completeness, v_measure = homogeneity_completeness_v_measure(true_labels, pred_labels)
 
     # Purity computation
     index_by_path = {path: idx for idx, path in enumerate(file_keys)}
@@ -269,12 +263,8 @@ async def _cluster_and_evaluate(
     total_tokens = metadata.get("total_tokens", sum(cluster_token_counts))
     num_clusters = metadata.get("num_clusters", len(cluster_groups))
 
-    max_tokens_per_cluster_obs = (
-        max(cluster_token_counts) if cluster_token_counts else 0
-    )
-    mean_tokens_per_cluster = (
-        statistics.mean(cluster_token_counts) if cluster_token_counts else 0.0
-    )
+    max_tokens_per_cluster_obs = max(cluster_token_counts) if cluster_token_counts else 0
+    mean_tokens_per_cluster = statistics.mean(cluster_token_counts) if cluster_token_counts else 0.0
 
     max_cluster_size = max(cluster_sizes) if cluster_sizes else 0
     mean_cluster_size = statistics.mean(cluster_sizes) if cluster_sizes else 0.0
@@ -296,9 +286,7 @@ async def _cluster_and_evaluate(
         "clusters": {
             "num_clusters": num_clusters,
             "total_tokens": total_tokens,
-            "avg_tokens_per_cluster": metadata.get(
-                "avg_tokens_per_cluster", int(mean_tokens_per_cluster)
-            ),
+            "avg_tokens_per_cluster": metadata.get("avg_tokens_per_cluster", int(mean_tokens_per_cluster)),
             "max_tokens_per_cluster": max_tokens_per_cluster_obs,
             "mean_tokens_per_cluster": mean_tokens_per_cluster,
             "max_cluster_size": max_cluster_size,

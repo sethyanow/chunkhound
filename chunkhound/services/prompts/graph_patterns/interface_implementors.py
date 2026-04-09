@@ -5,7 +5,10 @@ Matches queries about what implements an interface and polymorphic usage.
 
 # Matches: "what implements", "implementations of", "implementors",
 # "polymorphic", "concrete classes", "subclasses of", "inherits from"
-PATTERN = r"(?:what\s+implements|implementations?\s+of|implementors?|polymorphic|concrete\s+class|subclass(?:es)?\s+of|inherits?\s+from)"
+PATTERN = (
+    r"(?:what\s+implements|implementations?\s+of|implementors?"
+    r"|polymorphic|concrete\s+class|subclass(?:es)?\s+of|inherits?\s+from)"
+)
 
 PROMPT_AUGMENTATION = """\
 The symbol dependency graph can trace implementation relationships:

@@ -39,10 +39,8 @@ def _audience_cleanup_system_guidance(audience: str) -> str:
         return "\n".join(
             [
                 "Audience: technical (software engineers).",
-                "- Prefer precise terminology and concrete implementation details "
-                "present in the input.",
-                "- When helpful, call out key modules/classes/functions and their "
-                "responsibilities.",
+                "- Prefer precise terminology and concrete implementation details present in the input.",
+                "- When helpful, call out key modules/classes/functions and their responsibilities.",
                 "- Avoid “product docs” tone; keep the writing crisp and technical.",
             ]
         )
@@ -52,10 +50,8 @@ def _audience_cleanup_system_guidance(audience: str) -> str:
                 "Audience: end-user (less technical).",
                 "- Prefer plain-language descriptions of how to set up, configure, "
                 "and use the project when the input contains that information.",
-                "- Keep code identifiers, but explain them in plain language and "
-                "focus on user goals and workflows.",
-                "- De-emphasize internal implementation details unless they are "
-                "central in the input.",
+                "- Keep code identifiers, but explain them in plain language and focus on user goals and workflows.",
+                "- De-emphasize internal implementation details unless they are central in the input.",
             ]
         )
     return ""
@@ -116,9 +112,7 @@ async def _cleanup_with_llm(
         except Exception as exc:  # noqa: BLE001
             if log_warning:
                 log_warning(
-                    "LLM cleanup batch failed or returned unexpected results; "
-                    "retrying with batch_size=1. "
-                    f"Error: {exc}"
+                    f"LLM cleanup batch failed or returned unexpected results; retrying with batch_size=1. Error: {exc}"
                 )
 
         if batch_outputs is None:
@@ -134,15 +128,10 @@ async def _cleanup_with_llm(
                         operation=f"cleanup retry for topic {topic.title!r}",
                     )
                     if len(outputs) != 1:
-                        raise ValueError(
-                            "LLM cleanup retry returned unexpected response count: "
-                            f"{len(outputs)}"
-                        )
+                        raise ValueError(f"LLM cleanup retry returned unexpected response count: {len(outputs)}")
                     single_outputs.append(outputs[0])
                 except Exception as exc:  # noqa: BLE001
-                    raise RuntimeError(
-                        f"AutoDoc cleanup failed for topic {topic.title!r}: {exc}"
-                    ) from exc
+                    raise RuntimeError(f"AutoDoc cleanup failed for topic {topic.title!r}: {exc}") from exc
             batch_outputs = single_outputs
 
         for idx, response in zip(
@@ -160,11 +149,7 @@ async def _cleanup_with_llm(
 
 def _build_cleanup_prompt(title: str, body: str, *, audience: str = "balanced") -> str:
     normalized = normalize_audience(audience)
-    template_file = (
-        _CLEANUP_USER_PROMPT_FILE_END_USER
-        if normalized == "end-user"
-        else _CLEANUP_USER_PROMPT_FILE
-    )
+    template_file = _CLEANUP_USER_PROMPT_FILE_END_USER if normalized == "end-user" else _CLEANUP_USER_PROMPT_FILE
     template = _read_prompt_file(template_file)
     hydrated = (
         template.replace("<<TITLE>>", title)
@@ -176,27 +161,17 @@ def _build_cleanup_prompt(title: str, body: str, *, audience: str = "balanced") 
 
 
 def _read_prompt_file(filename: str) -> str:
-    resource_path = (
-        importlib.resources.files(_PROMPTS_PACKAGE)
-        .joinpath("prompts")
-        .joinpath(filename)
-    )
+    resource_path = importlib.resources.files(_PROMPTS_PACKAGE).joinpath("prompts").joinpath(filename)
     try:
         with resource_path.open("r", encoding="utf-8") as handle:
             content = handle.read().strip()
     except FileNotFoundError as exc:
-        raise FileNotFoundError(
-            f"AutoDoc prompt file missing: {_PROMPTS_PACKAGE}:prompts/{filename}"
-        ) from exc
+        raise FileNotFoundError(f"AutoDoc prompt file missing: {_PROMPTS_PACKAGE}:prompts/{filename}") from exc
     except OSError as exc:
-        raise OSError(
-            f"AutoDoc prompt file unreadable: {_PROMPTS_PACKAGE}:prompts/{filename}"
-        ) from exc
+        raise OSError(f"AutoDoc prompt file unreadable: {_PROMPTS_PACKAGE}:prompts/{filename}") from exc
 
     if not content:
-        raise ValueError(
-            f"AutoDoc prompt file empty: {_PROMPTS_PACKAGE}:prompts/{filename}"
-        )
+        raise ValueError(f"AutoDoc prompt file empty: {_PROMPTS_PACKAGE}:prompts/{filename}")
     return content
 
 
@@ -260,20 +235,14 @@ async def _batch_complete_with_backoff(
                 max_completion_tokens=max_completion_tokens,
             )
             if len(responses) != len(prompts):
-                raise ValueError(
-                    "LLM cleanup batch response count mismatch: "
-                    f"{len(responses)} != {len(prompts)}"
-                )
+                raise ValueError(f"LLM cleanup batch response count mismatch: {len(responses)} != {len(prompts)}")
             outputs = [resp.content.strip() for resp in responses]
             if any(not out for out in outputs):
                 raise ValueError("LLM cleanup returned empty output.")
             return outputs
         except Exception as exc:  # noqa: BLE001
             last_exc = exc
-            if (
-                not _is_transient_llm_error(exc)
-                or attempt >= _CLEANUP_RETRY_MAX_ATTEMPTS - 1
-            ):
+            if not _is_transient_llm_error(exc) or attempt >= _CLEANUP_RETRY_MAX_ATTEMPTS - 1:
                 raise
             base = _CLEANUP_RETRY_BASE_DELAY_SECONDS * (2**attempt)
             delay = min(_CLEANUP_RETRY_MAX_DELAY_SECONDS, base)
@@ -288,6 +257,4 @@ async def _batch_complete_with_backoff(
             if sleep_seconds > 0:
                 await asyncio.sleep(sleep_seconds)
             continue
-    raise RuntimeError(
-        f"LLM operation failed after {_CLEANUP_RETRY_MAX_ATTEMPTS} attempts: {last_exc}"
-    )
+    raise RuntimeError(f"LLM operation failed after {_CLEANUP_RETRY_MAX_ATTEMPTS} attempts: {last_exc}")

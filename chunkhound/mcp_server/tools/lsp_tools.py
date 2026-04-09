@@ -34,44 +34,32 @@ from .registry import register_tool
 DispatchHandler = Callable[..., Coroutine[Any, Any, dict[str, Any]]]
 
 
-async def _handle_definition(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_definition(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     locations = await client.go_to_definition(file_uri, line, character)
     return {"results": [location_to_dict(loc) for loc in locations]}
 
 
-async def _handle_references(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_references(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     locations = await client.find_references(file_uri, line, character)
     return {"results": [location_to_dict(loc) for loc in locations]}
 
 
-async def _handle_implementations(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_implementations(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     locations = await client.go_to_implementation(file_uri, line, character)
     return {"results": [location_to_dict(loc) for loc in locations]}
 
 
-async def _handle_callers(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_callers(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     items = await client.incoming_calls(file_uri, line, character)
     return {"results": [call_item_to_dict(item) for item in items]}
 
 
-async def _handle_callees(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_callees(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     items = await client.outgoing_calls(file_uri, line, character)
     return {"results": [call_item_to_dict(item) for item in items]}
 
 
-async def _handle_hover(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_hover(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     hover_result = await client.hover(file_uri, line, character)
     if hover_result is None:
         return {"contents": None, "range": None}
@@ -88,9 +76,7 @@ async def _handle_hover(
     }
 
 
-async def _handle_diagnostics(
-    client: Any, file_uri: str, line: int, character: int
-) -> dict[str, Any]:
+async def _handle_diagnostics(client: Any, file_uri: str, line: int, character: int) -> dict[str, Any]:
     # diagnostics only uses file_uri; line/character ignored
     diagnostics = await client.get_diagnostics(file_uri)
     return {"results": [diagnostic_to_dict(d) for d in diagnostics]}
@@ -171,9 +157,7 @@ async def lsp_impl(
 
     # Determine workspace root
     workspace_root = str(
-        config.target_dir
-        if config and hasattr(config, "target_dir") and config.target_dir
-        else Path(".").resolve()
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir else Path(".").resolve()
     )
 
     # Handle file:// URI input
@@ -334,9 +318,7 @@ async def symbol_context_impl(
 
     # Determine workspace root
     workspace_root = str(
-        config.target_dir
-        if config and hasattr(config, "target_dir") and config.target_dir
-        else Path(".").resolve()
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir else Path(".").resolve()
     )
 
     # Construct file URI for LSP calls
@@ -401,9 +383,7 @@ async def symbol_context_impl(
         try:
             from .graph import _graph_walk
 
-            graph_neighborhood = _graph_walk(
-                services, fqn_rows[0]["fqn"], depth=1, edge_kind=None, limit=20
-            )
+            graph_neighborhood = _graph_walk(services, fqn_rows[0]["fqn"], depth=1, edge_kind=None, limit=20)
         except Exception:
             graph_neighborhood = None
 

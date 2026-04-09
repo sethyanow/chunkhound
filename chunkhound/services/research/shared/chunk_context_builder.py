@@ -191,9 +191,7 @@ class ChunkContextBuilder:
                 first_chunk = file_chunks[0]
                 content = get_chunk_text(first_chunk)
                 try:
-                    imports = self._import_context_service.get_file_imports(
-                        file_path, content
-                    )
+                    imports = self._import_context_service.get_file_imports(file_path, content)
                     if imports:
                         file_imports[file_path] = imports
                 except Exception as e:
@@ -210,9 +208,7 @@ class ChunkContextBuilder:
             # Build chunk entry
             imports_header = ""
             if file_path in file_imports:
-                imports_header = (
-                    "# Imports:\n" + "\n".join(file_imports[file_path]) + "\n\n"
-                )
+                imports_header = "# Imports:\n" + "\n".join(file_imports[file_path]) + "\n\n"
 
             entry = f"File: {file_path}\n{imports_header}{code}\n"
             entry_tokens = self._estimate_tokens(entry)
@@ -232,9 +228,7 @@ class ChunkContextBuilder:
             current_tokens += entry_tokens
 
         result = "\n".join(code_lines)
-        logger.debug(
-            f"Built code context: {len(chunks)} chunks, ~{current_tokens} tokens"
-        )
+        logger.debug(f"Built code context: {len(chunks)} chunks, ~{current_tokens} tokens")
         return result
 
     def build_file_grouped_context(
@@ -275,9 +269,7 @@ class ChunkContextBuilder:
                 first_chunk = file_chunks[0]
                 content = get_chunk_text(first_chunk)
                 try:
-                    imports = self._import_context_service.get_file_imports(
-                        file_path, content
-                    )
+                    imports = self._import_context_service.get_file_imports(file_path, content)
                     if imports:
                         imports_header = "# Imports:\n" + "\n".join(imports) + "\n\n"
                 except Exception as e:
@@ -299,9 +291,7 @@ class ChunkContextBuilder:
                     remaining = max_tokens - current_tokens
                     if remaining > 10:
                         max_chars = remaining * 4
-                        file_content_parts.append(
-                            code[:max_chars] + "\n... (truncated)"
-                        )
+                        file_content_parts.append(code[:max_chars] + "\n... (truncated)")
                     break
 
                 file_content_parts.append(code)

@@ -170,9 +170,7 @@ class PluggableResearchService:
 
         # Calculate synthesis budgets (output-only, input determined by elbow detection)
         synthesis_budgets = self._calculate_synthesis_budgets()
-        logger.info(
-            f"Synthesis output budget: {synthesis_budgets['output_tokens']:,} tokens"
-        )
+        logger.info(f"Synthesis output budget: {synthesis_budgets['output_tokens']:,} tokens")
 
         # Emit configuration info
         await self._emit_event(
@@ -237,9 +235,7 @@ class PluggableResearchService:
         )
 
         # Aggregate chunks into synthesis format
-        await self._emit_event(
-            "synthesis_start", "Aggregating findings from exploration"
-        )
+        await self._emit_event("synthesis_start", "Aggregating findings from exploration")
 
         aggregated = self._aggregate_all_findings(expanded_chunks, file_contents)
 
@@ -257,9 +253,7 @@ class PluggableResearchService:
 
         # Early return: no context found (avoid scary synthesis error when empty)
         if not aggregated.get("chunks") and not aggregated.get("files"):
-            logger.info(
-                "No chunks or files aggregated; skipping synthesis and returning guidance"
-            )
+            logger.info("No chunks or files aggregated; skipping synthesis and returning guidance")
             await self._emit_event(
                 "synthesis_skip",
                 "No code context found; skipping synthesis",
@@ -357,8 +351,7 @@ class PluggableResearchService:
             # Map step: Synthesize each cluster in parallel
             await self._emit_event(
                 "synthesis_map",
-                f"Synthesizing {cluster_metadata['num_clusters']} clusters in parallel "
-                f"(concurrency={max_concurrency})",
+                f"Synthesizing {cluster_metadata['num_clusters']} clusters in parallel (concurrency={max_concurrency})",
             )
 
             semaphore = asyncio.Semaphore(max_concurrency)
@@ -370,9 +363,7 @@ class PluggableResearchService:
                 async with semaphore:
                     # Get cluster-specific facts context
                     cluster_files = set(cluster.file_paths)
-                    cluster_facts_context = (
-                        evidence_ledger.get_facts_map_prompt_context(cluster_files)
-                    )
+                    cluster_facts_context = evidence_ledger.get_facts_map_prompt_context(cluster_files)
                     return await self._synthesis_engine._map_synthesis_on_cluster(
                         cluster,
                         query,
@@ -386,9 +377,7 @@ class PluggableResearchService:
             map_tasks = [map_with_semaphore(cluster) for cluster in cluster_groups]
             cluster_results = await asyncio.gather(*map_tasks)
 
-            logger.info(
-                f"Map step complete: {len(cluster_results)} cluster summaries generated"
-            )
+            logger.info(f"Map step complete: {len(cluster_results)} cluster summaries generated")
 
             # Reduce step: Combine cluster summaries
             await self._emit_event(
@@ -415,9 +404,7 @@ class PluggableResearchService:
         # Validate output quality (conciseness, actionability)
         llm = self._llm_manager.get_utility_provider()
         target_tokens = llm.estimate_tokens(answer)
-        answer, quality_warnings = self._quality_validator.validate_output_quality(
-            answer, target_tokens
-        )
+        answer, quality_warnings = self._quality_validator.validate_output_quality(answer, target_tokens)
         if quality_warnings:
             logger.warning("Quality issues detected:\n" + "\n".join(quality_warnings))
 
@@ -471,19 +458,13 @@ class PluggableResearchService:
 
         # For child nodes: prioritize current query, add minimal parent context
         # Take last 1-2 ancestors (not more to avoid redundancy)
-        parent_context = (
-            context.ancestors[-2:]
-            if len(context.ancestors) >= 2
-            else context.ancestors[-1:]
-        )
+        parent_context = context.ancestors[-2:] if len(context.ancestors) >= 2 else context.ancestors[-1:]
         context_str = " → ".join(parent_context)
 
         # Current query FIRST (position bias optimization), then context
         return f"{query} | Context: {context_str}"
 
-    async def _expand_query_with_llm(
-        self, query: str, context: ResearchContext
-    ) -> list[str]:
+    async def _expand_query_with_llm(self, query: str, context: ResearchContext) -> list[str]:
         """Expand query into multiple diverse semantic search queries.
 
         Uses LLM to generate different perspectives on the same question,
@@ -506,7 +487,9 @@ class PluggableResearchService:
                 "queries": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": f"Array of exactly {num_queries} expanded search queries (semantically complete sentences)",
+                    "description": (
+                        f"Array of exactly {num_queries} expanded search queries (semantically complete sentences)"
+                    ),
                 }
             },
             "required": ["queries"],
@@ -530,9 +513,7 @@ class PluggableResearchService:
             num_queries=num_queries,
         )
 
-        logger.debug(
-            f"Query expansion budget: {QUERY_EXPANSION_TOKENS:,} tokens (model: {llm.model})"
-        )
+        logger.debug(f"Query expansion budget: {QUERY_EXPANSION_TOKENS:,} tokens (model: {llm.model})")
 
         try:
             result = await llm.complete_structured(
@@ -547,7 +528,8 @@ class PluggableResearchService:
             # Validation: expect exactly num_queries from LLM
             if not expanded or len(expanded) < num_queries:
                 logger.warning(
-                    f"LLM returned {len(expanded) if expanded else 0} queries, expected {num_queries}, using original query only"
+                    f"LLM returned {len(expanded) if expanded else 0} queries,"
+                    f" expected {num_queries}, using original query only"
                 )
                 return [query]
 
@@ -558,9 +540,7 @@ class PluggableResearchService:
             # Original query goes first for position bias in embedding models
             final_queries = [query] + expanded[:num_queries]
 
-            logger.debug(
-                f"Expanded query into {len(final_queries)} variations: {final_queries}"
-            )
+            logger.debug(f"Expanded query into {len(final_queries)} variations: {final_queries}")
             return final_queries
 
         except Exception as e:
@@ -590,9 +570,7 @@ class PluggableResearchService:
         # Step 1: Query expansion (v1-specific - handled before delegation)
         expanded_queries = None
         if self._query_expansion_enabled:
-            await self._emit_event(
-                "query_expand", "Expanding query", node_id=node_id, depth=depth
-            )
+            await self._emit_event("query_expand", "Expanding query", node_id=node_id, depth=depth)
             expanded_queries = await self._expand_query_with_llm(query, context)
             await self._emit_event(
                 "query_expand_complete",
@@ -639,13 +617,7 @@ class PluggableResearchService:
             or (0, 0) if inputs are invalid.
         """
         # Validate 1-indexed inputs
-        if (
-            start_line < 1
-            or end_line < 1
-            or start_line > end_line
-            or start_line > len(lines)
-            or end_line > len(lines)
-        ):
+        if start_line < 1 or end_line < 1 or start_line > end_line or start_line > len(lines) or end_line > len(lines):
             return (0, 0)
 
         if not ENABLE_SMART_BOUNDARIES:
@@ -665,9 +637,7 @@ class PluggableResearchService:
             padding = 3  # A few lines for docstrings/decorators/comments
             start_idx = max(1, start_line - padding)
             end_idx = min(len(lines), end_line + padding)
-            logger.debug(
-                f"Using complete {chunk_kind} boundaries: {file_path}:{start_idx}-{end_idx}"
-            )
+            logger.debug(f"Using complete {chunk_kind} boundaries: {file_path}:{start_idx}-{end_idx}")
             return start_idx, end_idx
 
         # For non-complete chunks, expand to natural boundaries
@@ -741,9 +711,7 @@ class PluggableResearchService:
         if is_python:
             # Find end by detecting dedentation back to original level
             if expanded_start < len(lines):
-                start_indent = len(lines[expanded_start]) - len(
-                    lines[expanded_start].lstrip()
-                )
+                start_indent = len(lines[expanded_start]) - len(lines[expanded_start].lstrip())
                 for i in range(end_idx + 1, min(len(lines), end_idx + 200)):
                     line = lines[i]
                     if line.strip():  # Non-empty line
@@ -825,9 +793,7 @@ class PluggableResearchService:
         for file_path, file_chunks in files_to_chunks.items():
             # Check if we've hit the overall token limit
             if total_tokens >= budget_limit:
-                logger.debug(
-                    f"Reached token limit ({budget_limit:,}), stopping file reading"
-                )
+                logger.debug(f"Reached token limit ({budget_limit:,}), stopping file reading")
                 break
 
             try:
@@ -874,17 +840,14 @@ class PluggableResearchService:
                         end_line = chunk.get("end_line", 1)
 
                         # Use smart boundary detection to expand to complete functions/classes
-                        expanded_start, expanded_end = (
-                            self._expand_to_natural_boundaries(
-                                lines, start_line, end_line, chunk, file_path
-                            )
+                        expanded_start, expanded_end = self._expand_to_natural_boundaries(
+                            lines, start_line, end_line, chunk, file_path
                         )
 
                         # Skip chunks with invalid boundary expansion
                         if expanded_start == 0 and expanded_end == 0:
                             logger.warning(
-                                f"Skipping chunk with invalid boundaries: "
-                                f"{file_path}:{start_line}-{end_line}"
+                                f"Skipping chunk with invalid boundaries: {file_path}:{start_line}-{end_line}"
                             )
                             continue
 
@@ -911,9 +874,7 @@ class PluggableResearchService:
                         remaining_tokens = budget_limit - total_tokens
                         if remaining_tokens > 500:
                             chars_to_include = remaining_tokens * 4
-                            file_contents[file_path] = combined_chunks[
-                                :chars_to_include
-                            ]
+                            file_contents[file_path] = combined_chunks[:chars_to_include]
                             total_tokens = budget_limit
                         break
 
@@ -991,22 +952,16 @@ class PluggableResearchService:
             logger.debug(f"Could not re-read file for expansion: {file_path}: {e}")
             return (start_line, end_line)
 
-        expanded_start, expanded_end = self._expand_to_natural_boundaries(
-            lines, start_line, end_line, chunk, file_path
-        )
+        expanded_start, expanded_end = self._expand_to_natural_boundaries(lines, start_line, end_line, chunk, file_path)
 
         # Fallback to original range if expansion fails
         if expanded_start == 0 and expanded_end == 0:
-            logger.warning(
-                f"Boundary expansion failed for {file_path}, using original range"
-            )
+            logger.warning(f"Boundary expansion failed for {file_path}, using original range")
             return (start_line, end_line)
 
         return (expanded_start, expanded_end)
 
-    def _aggregate_all_findings(
-        self, chunks: list[dict[str, Any]], file_contents: dict[str, str]
-    ) -> dict[str, Any]:
+    def _aggregate_all_findings(self, chunks: list[dict[str, Any]], file_contents: dict[str, str]) -> dict[str, Any]:
         """Aggregate chunks from exploration into synthesis format.
 
         Deduplicates chunks by chunk_id and passes through pre-read file contents.
@@ -1021,9 +976,7 @@ class PluggableResearchService:
                 - files: Pre-read file contents
                 - stats: Statistics about aggregation
         """
-        logger.info(
-            f"Aggregating {len(chunks)} chunks and {len(file_contents)} files from exploration"
-        )
+        logger.info(f"Aggregating {len(chunks)} chunks and {len(file_contents)} files from exploration")
 
         # Deduplicate chunks by chunk_id
         chunks_map: dict[int | str, dict[str, Any]] = {}
@@ -1038,15 +991,10 @@ class PluggableResearchService:
             "unique_chunks": len(unique_chunks),
             "unique_files": len(file_contents),
             "total_chunks_input": len(chunks),
-            "deduplication_ratio_chunks": (
-                f"{len(chunks) / len(unique_chunks):.2f}x" if unique_chunks else "N/A"
-            ),
+            "deduplication_ratio_chunks": (f"{len(chunks) / len(unique_chunks):.2f}x" if unique_chunks else "N/A"),
         }
 
-        logger.info(
-            f"Aggregation complete: {stats['unique_chunks']} unique chunks from "
-            f"{stats['unique_files']} files"
-        )
+        logger.info(f"Aggregation complete: {stats['unique_chunks']} unique chunks from {stats['unique_files']} files")
 
         return {
             "chunks": unique_chunks,
@@ -1063,9 +1011,7 @@ class PluggableResearchService:
         Returns:
             Dictionary with output_tokens (fixed at 30k for LLM output limit)
         """
-        logger.debug(
-            f"Synthesis budget: output={OUTPUT_TOKENS_WITH_REASONING:,} tokens (fixed)"
-        )
+        logger.debug(f"Synthesis budget: output={OUTPUT_TOKENS_WITH_REASONING:,} tokens (fixed)")
 
         return {
             "output_tokens": OUTPUT_TOKENS_WITH_REASONING,

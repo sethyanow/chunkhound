@@ -149,9 +149,7 @@ class ZigMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -164,10 +162,7 @@ class ZigMapping(BaseMapping):
                 name = self.get_node_text(name_node, source).strip()
 
                 # For test declarations with string names, strip quotes
-                if (
-                    "definition" in captures
-                    and captures["definition"].type == "test_declaration"
-                ):
+                if "definition" in captures and captures["definition"].type == "test_declaration":
                     if name_node.type == "string":
                         name = name.strip('"')
 
@@ -212,9 +207,7 @@ class ZigMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -230,9 +223,7 @@ class ZigMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract Zig-specific metadata."""
 
         source = content.decode("utf-8")
@@ -290,9 +281,7 @@ class ZigMapping(BaseMapping):
                 # Extract import path from string literal in call
                 for child in self.walk_tree(call_node):
                     if child and child.type == "string_literal":
-                        import_path = (
-                            self.get_node_text(child, source).strip().strip('"')
-                        )
+                        import_path = self.get_node_text(child, source).strip().strip('"')
                         metadata["import_path"] = import_path
                         break
 
@@ -322,10 +311,7 @@ class ZigMapping(BaseMapping):
         """Check if a declaration has pub visibility."""
         # For function_declaration and variable_declaration, pub is a direct child
         for child in node.children:
-            if (
-                child.type == "pub"
-                or self.get_node_text(child, source).strip() == "pub"
-            ):
+            if child.type == "pub" or self.get_node_text(child, source).strip() == "pub":
                 return True
         return False
 
@@ -336,10 +322,7 @@ class ZigMapping(BaseMapping):
         max_children_to_check = min(3, len(node.children)) if node.children else 0
         for i in range(max_children_to_check):
             child = node.children[i]
-            if child and (
-                child.type == "const"
-                or self.get_node_text(child, source).strip() == "const"
-            ):
+            if child and (child.type == "const" or self.get_node_text(child, source).strip() == "const"):
                 return True
         return False
 
@@ -408,9 +391,7 @@ class ZigMapping(BaseMapping):
 
         return [{"name": name, "value": value}]
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path from Zig @import() builtin.
 
         Args:

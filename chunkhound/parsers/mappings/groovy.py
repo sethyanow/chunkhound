@@ -305,12 +305,8 @@ class GroovyMapping(BaseMapping):
             # Look for modifiers node which contains annotations
             modifiers_node = self.find_child_by_type(node, "modifiers")
             if modifiers_node:
-                annotation_nodes = self.find_children_by_type(
-                    modifiers_node, "annotation"
-                )
-                annotation_nodes.extend(
-                    self.find_children_by_type(modifiers_node, "marker_annotation")
-                )
+                annotation_nodes = self.find_children_by_type(modifiers_node, "annotation")
+                annotation_nodes.extend(self.find_children_by_type(modifiers_node, "marker_annotation"))
 
                 for ann_node in annotation_nodes:
                     annotation_text = self.get_node_text(ann_node, source).strip()
@@ -319,9 +315,7 @@ class GroovyMapping(BaseMapping):
 
             # Also check direct children for annotations (fallback)
             annotation_nodes = self.find_children_by_type(node, "annotation")
-            annotation_nodes.extend(
-                self.find_children_by_type(node, "marker_annotation")
-            )
+            annotation_nodes.extend(self.find_children_by_type(node, "marker_annotation"))
 
             for ann_node in annotation_nodes:
                 annotation_text = self.get_node_text(ann_node, source).strip()
@@ -561,9 +555,7 @@ class GroovyMapping(BaseMapping):
             field_nodes = self.find_nodes_by_type(node, "field_declaration")
             for field_node in field_nodes:
                 # Extract variable names from the field declaration
-                var_nodes = self.find_children_by_type(
-                    field_node, "variable_declarator"
-                )
+                var_nodes = self.find_children_by_type(field_node, "variable_declarator")
                 for var_node in var_nodes:
                     name_node = self.find_child_by_type(var_node, "identifier")
                     if name_node:
@@ -649,9 +641,7 @@ class GroovyMapping(BaseMapping):
                 type_node = child
                 break
 
-        const_type = (
-            self.get_node_text(type_node, source).strip() if type_node else None
-        )
+        const_type = self.get_node_text(type_node, source).strip() if type_node else None
 
         # Extract variable declarators
         constants = []
@@ -781,9 +771,7 @@ class GroovyMapping(BaseMapping):
             # BLOCK concept not supported for Groovy
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -804,9 +792,7 @@ class GroovyMapping(BaseMapping):
                     if var_name_node:
                         return self.get_node_text(var_name_node, source).strip()
                 line = def_node.start_point[0] + 1
-                prefix = (
-                    "field" if def_node.type == "field_declaration" else "local_var"
-                )
+                prefix = "field" if def_node.type == "field_declaration" else "local_var"
                 return f"{prefix}_line_{line}"
 
             # For closures, extract assigned variable name
@@ -856,9 +842,7 @@ class GroovyMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept."""
         source = content.decode("utf-8")
 

@@ -126,9 +126,7 @@ class GapDetectionService:
                 "chunks_added": 0,
             }
 
-        logger.info(
-            f"Phase 2: Gap detection starting with {len(covered_chunks)} covered chunks"
-        )
+        logger.info(f"Phase 2: Gap detection starting with {len(covered_chunks)} covered chunks")
 
         # Step 2.1: Cluster chunks with k-means
         cluster_groups = await self._cluster_chunks_kmeans(covered_chunks)
@@ -139,9 +137,7 @@ class GapDetectionService:
         logger.info(f"Step 2.2: Created {len(shards)} shards from clusters")
 
         # Step 2.3: Detect gaps in parallel
-        raw_gaps = await self._detect_gaps_parallel(
-            root_query, shards, constants_context
-        )
+        raw_gaps = await self._detect_gaps_parallel(root_query, shards, constants_context)
         logger.info(f"Step 2.3: Detected {len(raw_gaps)} raw gap candidates")
 
         if not raw_gaps:
@@ -158,14 +154,10 @@ class GapDetectionService:
         # Step 2.4b: Cluster gap queries by similarity
         cluster_labels = self._cluster_gap_queries(gap_embeddings)
         num_clusters = len(set(cluster_labels))
-        logger.info(
-            f"Step 2.4: Clustered {len(raw_gaps)} gaps into {num_clusters} groups"
-        )
+        logger.info(f"Step 2.4: Clustered {len(raw_gaps)} gaps into {num_clusters} groups")
 
         # Step 2.5: Unify gap clusters
-        unified_gaps = await self._unify_gap_clusters(
-            root_query, raw_gaps, cluster_labels
-        )
+        unified_gaps = await self._unify_gap_clusters(root_query, raw_gaps, cluster_labels)
         logger.info(f"Step 2.5: Unified to {len(unified_gaps)} gap queries")
 
         # Step 2.6: Select gaps by elbow detection
@@ -182,23 +174,17 @@ class GapDetectionService:
             }
 
         # Step 2.7: Fill gaps in parallel (INDEPENDENT - no shared mutable state)
-        gap_results = await self._fill_gaps_parallel(
-            root_query, selected_gaps, phase1_threshold, path_filter
-        )
+        gap_results = await self._fill_gaps_parallel(root_query, selected_gaps, phase1_threshold, path_filter)
 
         # Step 2.8: Global deduplication (SYNC POINT)
         unified_gap_chunks = self._global_dedup(gap_results)
         total_before_dedup = sum(len(r) for r in gap_results)
-        logger.info(
-            f"Step 2.8: Global dedup: {total_before_dedup} → "
-            f"{len(unified_gap_chunks)} unique chunks"
-        )
+        logger.info(f"Step 2.8: Global dedup: {total_before_dedup} → {len(unified_gap_chunks)} unique chunks")
 
         # Step 2.9: Merge coverage + gap chunks
         all_chunks = self._merge_coverage(covered_chunks, unified_gap_chunks)
         logger.info(
-            f"Step 2.9: Final merge: {len(covered_chunks)} + "
-            f"{len(unified_gap_chunks)} → {len(all_chunks)} total"
+            f"Step 2.9: Final merge: {len(covered_chunks)} + {len(unified_gap_chunks)} → {len(all_chunks)} total"
         )
 
         # Step 2.10: Import resolution (if enabled)
@@ -253,16 +239,11 @@ class GapDetectionService:
 
         # Calculate total tokens to determine cluster count
         llm = self._llm_manager.get_utility_provider()
-        total_tokens = sum(
-            llm.estimate_tokens(get_chunk_text(chunk)) for chunk in chunks
-        )
+        total_tokens = sum(llm.estimate_tokens(get_chunk_text(chunk)) for chunk in chunks)
 
         # Skip clustering if content fits in single cluster budget
         if total_tokens <= GAP_CLUSTER_TOKEN_BUDGET:
-            logger.debug(
-                f"K-means: {len(chunks)} chunks ({total_tokens:,} tokens) "
-                f"fits in single cluster, skipping"
-            )
+            logger.debug(f"K-means: {len(chunks)} chunks ({total_tokens:,} tokens) fits in single cluster, skipping")
             return [chunks]
 
         # Generate embeddings for chunk content
@@ -294,10 +275,7 @@ class GapDetectionService:
             cluster_map.setdefault(cluster_id, []).append(chunk)
 
         cluster_groups = list(cluster_map.values())
-        logger.debug(
-            f"K-means: {len(chunks)} chunks → {len(cluster_groups)} clusters "
-            f"(target: {num_clusters})"
-        )
+        logger.debug(f"K-means: {len(chunks)} chunks → {len(cluster_groups)} clusters (target: {num_clusters})")
 
         return cluster_groups
 
@@ -398,15 +376,11 @@ class GapDetectionService:
         )
         shard_budget = self._config.shard_budget
 
-        async def detect_gaps_in_shard(
-            shard_idx: int, shard: list[dict]
-        ) -> list[GapCandidate]:
+        async def detect_gaps_in_shard(shard_idx: int, shard: list[dict]) -> list[GapCandidate]:
             """Detect gaps in a single shard."""
             async with semaphore:
                 # Build code context with imports using shared builder
-                code_context = builder.build_code_context_with_imports(
-                    shard, max_tokens=shard_budget
-                )
+                code_context = builder.build_code_context_with_imports(shard, max_tokens=shard_budget)
 
                 # Build constants section if available
                 # Note: Gap detection uses inline instruction in prompt, not separate section
@@ -447,9 +421,7 @@ Output JSON with gaps array."""
                         for g in gaps
                     ]
 
-                    logger.debug(
-                        f"Shard {shard_idx}: Detected {len(gap_candidates)} gaps"
-                    )
+                    logger.debug(f"Shard {shard_idx}: Detected {len(gap_candidates)} gaps")
                     return gap_candidates
 
                 except Exception as e:
@@ -567,9 +539,7 @@ Output JSON with gaps array."""
                 continue
 
             # Multiple gaps - unify with LLM
-            gap_list = "\n".join(
-                f"- {g.query} (confidence: {g.confidence:.2f})" for g in cluster_gaps
-            )
+            gap_list = "\n".join(f"- {g.query} (confidence: {g.confidence:.2f})" for g in cluster_gaps)
 
             prompt = f"""RESEARCH QUERY: {root_query}
 
@@ -606,10 +576,7 @@ Output a single unified query that captures the essential information need."""
                     )
                 )
 
-                logger.debug(
-                    f"Unified {vote_count} gaps (score: {score:.2f}): "
-                    f"{unified_query[:60]}..."
-                )
+                logger.debug(f"Unified {vote_count} gaps (score: {score:.2f}): {unified_query[:60]}...")
 
             except Exception as e:
                 logger.warning(f"Gap unification failed for cluster {cluster_id}: {e}")
@@ -682,8 +649,7 @@ Output a single unified query that captures the essential information need."""
             # Guard: If top score is near-zero, no confidence to select beyond min_gaps
             if sorted_gaps[0].score < 1e-9:
                 logger.debug(
-                    f"Gap selection: {len(sorted_gaps)} candidates → "
-                    f"{len(selected)} selected (near-zero top score)"
+                    f"Gap selection: {len(sorted_gaps)} candidates → {len(selected)} selected (near-zero top score)"
                 )
                 return selected
 
@@ -693,8 +659,7 @@ Output a single unified query that captures the essential information need."""
                     break
                 selected.append(sorted_gaps[i])
             logger.debug(
-                f"Gap selection: {len(sorted_gaps)} candidates → "
-                f"{len(selected)} selected (fallback 50% heuristic)"
+                f"Gap selection: {len(sorted_gaps)} candidates → {len(selected)} selected (fallback 50% heuristic)"
             )
             return selected
 
@@ -725,10 +690,7 @@ Output a single unified query that captures the essential information need."""
             return selected
 
         # Fallback: take max_gaps
-        logger.debug(
-            f"Gap selection: {len(sorted_gaps)} candidates → "
-            f"{max_gaps} selected (fallback to max_gaps)"
-        )
+        logger.debug(f"Gap selection: {len(sorted_gaps)} candidates → {max_gaps} selected (fallback to max_gaps)")
         return sorted_gaps[:max_gaps]
 
     def _find_elbow_kneedle(self, sorted_gaps: list[UnifiedGap]) -> int | None:
@@ -778,9 +740,7 @@ Output a single unified query that captures the essential information need."""
 
         async def fill_single_gap(gap: UnifiedGap) -> list[dict]:
             """Fill a single gap independently."""
-            return await self._fill_single_gap(
-                root_query, gap, phase1_threshold, path_filter
-            )
+            return await self._fill_single_gap(root_query, gap, phase1_threshold, path_filter)
 
         # Run all gap fills in parallel
         tasks = [fill_single_gap(gap) for gap in selected_gaps]
@@ -790,16 +750,11 @@ Output a single unified query that captures the essential information need."""
         gap_results: list[list[dict]] = []
         for i, result in enumerate(results):
             if isinstance(result, Exception):
-                logger.warning(
-                    f"Gap fill failed for '{selected_gaps[i].query[:60]}...': {result}"
-                )
+                logger.warning(f"Gap fill failed for '{selected_gaps[i].query[:60]}...': {result}")
                 gap_results.append([])
             elif isinstance(result, list):
                 gap_results.append(result)
-                logger.debug(
-                    f"Gap fill complete: '{selected_gaps[i].query[:60]}...' → "
-                    f"{len(result)} chunks"
-                )
+                logger.debug(f"Gap fill complete: '{selected_gaps[i].query[:60]}...' → {len(result)} chunks")
 
         return gap_results
 
@@ -852,9 +807,7 @@ Output a single unified query that captures the essential information need."""
         effective_threshold = max(phase1_threshold, gap_threshold)
 
         # Filter chunks by threshold
-        filtered_chunks = [
-            c for c in chunks if c.get("rerank_score", 0.0) >= effective_threshold
-        ]
+        filtered_chunks = [c for c in chunks if c.get("rerank_score", 0.0) >= effective_threshold]
 
         logger.debug(
             f"Gap '{gap.query[:60]}...': {len(chunks)} → {len(filtered_chunks)} chunks "
@@ -877,9 +830,7 @@ Output a single unified query that captures the essential information need."""
         """
         return deduplicate_chunks(gap_results, log_prefix="Gap dedup")
 
-    def _merge_coverage(
-        self, covered_chunks: list[dict], gap_chunks: list[dict]
-    ) -> list[dict]:
+    def _merge_coverage(self, covered_chunks: list[dict], gap_chunks: list[dict]) -> list[dict]:
         """Step 2.9: Merge coverage and gap chunks.
 
         Args:
@@ -889,6 +840,4 @@ Output a single unified query that captures the essential information need."""
         Returns:
             Merged and deduplicated chunks
         """
-        return merge_chunk_lists(
-            covered_chunks, gap_chunks, log_prefix="Gap coverage merge"
-        )
+        return merge_chunk_lists(covered_chunks, gap_chunks, log_prefix="Gap coverage merge")

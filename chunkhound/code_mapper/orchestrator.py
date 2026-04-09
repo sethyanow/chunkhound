@@ -147,11 +147,7 @@ class CodeMapperOrchestrator:
         )
 
         created_from_sha = _get_head_sha(scope_path)
-        if (
-            not overview_only
-            and created_from_sha == "NO_GIT_HEAD"
-            and scope_path != target_dir
-        ):
+        if not overview_only and created_from_sha == "NO_GIT_HEAD" and scope_path != target_dir:
             created_from_sha = _get_head_sha(target_dir)
 
         meta = AgentDocMetadata(

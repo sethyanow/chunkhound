@@ -72,8 +72,7 @@ def add_map_subparser(subparsers: Any) -> argparse.ArgumentParser:
         type=_parse_audience,
         default="balanced",
         help=(
-            "Controls the intended audience for generated map topics. "
-            "Accepted: 1|technical, 2|balanced, 3|end-user."
+            "Controls the intended audience for generated map topics. Accepted: 1|technical, 2|balanced, 3|end-user."
         ),
     )
 

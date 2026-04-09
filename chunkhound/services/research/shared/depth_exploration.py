@@ -116,15 +116,11 @@ class DepthExplorationService:
                 "chunks_added": 0,
             }
 
-        logger.info(
-            f"Phase 1.5: Depth exploration starting with {len(covered_chunks)} chunks"
-        )
+        logger.info(f"Phase 1.5: Depth exploration starting with {len(covered_chunks)} chunks")
 
         # Step 1: Group chunks by file and select top-K files
         file_to_chunks = self._group_chunks_by_file(covered_chunks)
-        top_files = self._select_top_files(
-            file_to_chunks, self._config.max_exploration_files
-        )
+        top_files = self._select_top_files(file_to_chunks, self._config.max_exploration_files)
         logger.info(f"Step 1.5.1: Selected {len(top_files)} top files for exploration")
 
         if not top_files:
@@ -139,9 +135,7 @@ class DepthExplorationService:
         (
             exploration_queries,
             generation_metrics,
-        ) = await self._generate_all_exploration_queries(
-            root_query, top_files, file_to_chunks, constants_context
-        )
+        ) = await self._generate_all_exploration_queries(root_query, top_files, file_to_chunks, constants_context)
         total_queries = sum(len(queries) for queries in exploration_queries.values())
         logger.info(
             f"Step 1.5.2: Generated {total_queries} exploration queries "
@@ -167,14 +161,11 @@ class DepthExplorationService:
         # Step 4: Global deduplication (SYNC POINT)
         unified_exploration_chunks = self._global_dedup(exploration_results)
         logger.info(
-            f"Step 1.5.4: Global dedup: {total_results} -> "
-            f"{len(unified_exploration_chunks)} unique exploration chunks"
+            f"Step 1.5.4: Global dedup: {total_results} -> {len(unified_exploration_chunks)} unique exploration chunks"
         )
 
         # Step 5: Merge with coverage chunks
-        expanded_chunks = self._merge_coverage(
-            covered_chunks, unified_exploration_chunks
-        )
+        expanded_chunks = self._merge_coverage(covered_chunks, unified_exploration_chunks)
         chunks_added = len(expanded_chunks) - len(covered_chunks)
         logger.info(
             f"Step 1.5.5: Final merge: {len(covered_chunks)} + "
@@ -282,9 +273,7 @@ class DepthExplorationService:
         async def generate_for_file(file_path: str) -> tuple[str, list[str]]:
             async with semaphore:
                 chunks = file_to_chunks.get(file_path, [])
-                queries = await self._generate_exploration_queries(
-                    root_query, chunks, file_path, constants_context
-                )
+                queries = await self._generate_exploration_queries(root_query, chunks, file_path, constants_context)
                 return file_path, queries
 
         # Run in parallel (bounded by semaphore)
@@ -398,9 +387,7 @@ Output JSON with queries array."""
             )
 
             queries: list[str] = result.get("queries", [])
-            logger.debug(
-                f"Generated {len(queries)} exploration queries for {file_path}"
-            )
+            logger.debug(f"Generated {len(queries)} exploration queries for {file_path}")
             return queries
 
         except Exception as e:
@@ -455,9 +442,7 @@ Output JSON with queries array."""
             effective_threshold = max(phase1_threshold, exploration_threshold)
 
             # Filter chunks by threshold
-            filtered = [
-                c for c in chunks if c.get("rerank_score", 0.0) >= effective_threshold
-            ]
+            filtered = [c for c in chunks if c.get("rerank_score", 0.0) >= effective_threshold]
 
             logger.debug(
                 f"Exploration query for {source_file}: {len(chunks)} -> "
@@ -498,9 +483,7 @@ Output JSON with queries array."""
         """
         return deduplicate_chunks(query_results, log_prefix="Exploration dedup")
 
-    def _merge_coverage(
-        self, covered_chunks: list[dict], exploration_chunks: list[dict]
-    ) -> list[dict]:
+    def _merge_coverage(self, covered_chunks: list[dict], exploration_chunks: list[dict]) -> list[dict]:
         """Merge coverage and exploration chunks.
 
         Args:
@@ -510,6 +493,4 @@ Output JSON with queries array."""
         Returns:
             Merged and deduplicated chunks
         """
-        return merge_chunk_lists(
-            covered_chunks, exploration_chunks, log_prefix="Exploration merge"
-        )
+        return merge_chunk_lists(covered_chunks, exploration_chunks, log_prefix="Exploration merge")

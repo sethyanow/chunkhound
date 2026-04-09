@@ -101,9 +101,7 @@ class EmbeddingProvider(Protocol):
         """
         ...
 
-    async def embed_batch(
-        self, texts: list[str], batch_size: int | None = None
-    ) -> list[list[float]]:
+    async def embed_batch(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
         """Generate embeddings in batches for optimal performance.
 
         Args:
@@ -259,9 +257,7 @@ class EmbeddingProvider(Protocol):
         """Return True if this provider supports reranking."""
         ...
 
-    async def rerank(
-        self, query: str, documents: list[str], top_k: int | None = None
-    ) -> list[RerankResult]:
+    async def rerank(self, query: str, documents: list[str], top_k: int | None = None) -> list[RerankResult]:
         """Rerank documents by relevance to query.
 
         Only called if supports_reranking() returns True.
@@ -346,9 +342,7 @@ class APIEmbeddingProvider(EmbeddingProvider, Protocol):
         """Return True if this provider supports reranking."""
         return False
 
-    async def rerank(
-        self, query: str, documents: list[str], top_k: int | None = None
-    ) -> list[RerankResult]:
+    async def rerank(self, query: str, documents: list[str], top_k: int | None = None) -> list[RerankResult]:
         """Rerank documents by relevance to query.
 
         Only called if supports_reranking() returns True.

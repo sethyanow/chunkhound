@@ -103,8 +103,6 @@ def merge_chunk_lists(
                 chunk_map[chunk_id] = chunk
 
     merged = list(chunk_map.values())
-    logger.debug(
-        f"{log_prefix}: {len(base_chunks)} + {len(new_chunks)} → {len(merged)} total"
-    )
+    logger.debug(f"{log_prefix}: {len(base_chunks)} + {len(new_chunks)} → {len(merged)} total")
 
     return merged

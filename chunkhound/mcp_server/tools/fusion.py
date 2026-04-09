@@ -121,18 +121,14 @@ def _map_lines_to_symbols(
 
         for row in rows:
             # Narrow: intersect symbol range with actual changed lines
-            sym_lines = [
-                ln for ln in lines if row["range_start"] <= ln <= row["range_end"]
-            ]
+            sym_lines = [ln for ln in lines if row["range_start"] <= ln <= row["range_end"]]
 
             # Exclude symbols with no overlapping lines
             if not sym_lines:
                 continue
 
             # Classify: range_start touched → signature_change
-            change_type = (
-                "signature_change" if row["range_start"] in line_set else "body_only"
-            )
+            change_type = "signature_change" if row["range_start"] in line_set else "body_only"
 
             result.append(
                 {
@@ -164,10 +160,7 @@ def _query_scope_symbols(
         fqn, kind, language, file_path, type_signature.
     """
     scope_sql, scope_params = scope_filter(scope)
-    sql = (
-        "SELECT name, fqn, kind, language, file_path, type_signature "
-        f"FROM symbols WHERE {scope_sql}"
-    )
+    sql = f"SELECT name, fqn, kind, language, file_path, type_signature FROM symbols WHERE {scope_sql}"
     rows = services.provider.execute_query(sql, scope_params)
 
     grouped: dict[str, list[dict[str, Any]]] = {}
@@ -415,10 +408,7 @@ def _collect_test_fqns(
     Returns:
         Dict mapping FQN → {name, file_path} for each test function.
     """
-    sql = (
-        "SELECT fqn, name, file_path FROM symbols "
-        "WHERE kind = 'Function' AND name LIKE 'test_%'"
-    )
+    sql = "SELECT fqn, name, file_path FROM symbols WHERE kind = 'Function' AND name LIKE 'test_%'"
     params: list[str] = []
 
     if test_scope:
@@ -428,9 +418,7 @@ def _collect_test_fqns(
 
     rows = services.provider.execute_query(sql, params)
 
-    return {
-        row["fqn"]: {"name": row["name"], "file_path": row["file_path"]} for row in rows
-    }
+    return {row["fqn"]: {"name": row["name"], "file_path": row["file_path"]} for row in rows}
 
 
 def _resolve_start_fqn(
@@ -617,9 +605,7 @@ async def impact_cascade_impl(
 
     # Resolve workspace root
     workspace_root = str(
-        config.target_dir
-        if config and hasattr(config, "target_dir") and config.target_dir
-        else Path(".").resolve()
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir else Path(".").resolve()
     )
 
     # Step 1: Resolve position to FQN
@@ -719,9 +705,7 @@ async def test_targeting_impl(
 
     # Resolve workspace root
     workspace_root = str(
-        config.target_dir
-        if config and hasattr(config, "target_dir") and config.target_dir
-        else Path(".").resolve()
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir else Path(".").resolve()
     )
 
     # Step 1: Resolve changed inputs to FQNs
@@ -880,9 +864,7 @@ async def semantic_diff_impl(
 
     # Resolve workspace root
     workspace_root = str(
-        config.target_dir
-        if config and hasattr(config, "target_dir") and config.target_dir
-        else Path(".").resolve()
+        config.target_dir if config and hasattr(config, "target_dir") and config.target_dir else Path(".").resolve()
     )
 
     # Step 1: Get changed lines from git diff
@@ -934,9 +916,7 @@ async def semantic_diff_impl(
     _annotate_type_signatures(services, affected_list)
 
     # Step 5: Build summary
-    sig_count = sum(
-        1 for s in changed_symbols if s["change_type"] == "signature_change"
-    )
+    sig_count = sum(1 for s in changed_symbols if s["change_type"] == "signature_change")
     body_count = sum(1 for s in changed_symbols if s["change_type"] == "body_only")
 
     return {

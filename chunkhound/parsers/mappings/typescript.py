@@ -643,10 +643,7 @@ class TypeScriptMapping(BaseMapping, JSFamilyExtraction):
                 return False
 
             # For functions, check if they're likely React components starting with uppercase
-            if (
-                node.type in ["function_declaration", "variable_declarator"]
-                and node_text
-            ):
+            if node.type in ["function_declaration", "variable_declarator"] and node_text:
                 # Extract function name to check if it's a component
                 if node.type == "function_declaration":
                     name_node = self.find_child_by_type(node, "identifier")
@@ -743,9 +740,7 @@ class TypeScriptMapping(BaseMapping, JSFamilyExtraction):
 
         return chunk
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve TypeScript import to file path.
 
         Args:

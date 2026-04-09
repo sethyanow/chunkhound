@@ -22,21 +22,15 @@ class LanguageMapping(Protocol):
         """Get tree-sitter query for universal concept in this language."""
         ...
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
         ...
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
         ...
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract language-specific metadata."""
         ...
 
@@ -89,9 +83,7 @@ class ConceptExtractor:
             query_template = self.mapping.get_query_for_concept(concept)
             if query_template:
                 try:
-                    self._compiled_queries[concept] = self.engine.compile_query(
-                        query_template
-                    )
+                    self._compiled_queries[concept] = self.engine.compile_query(query_template)
                 except Exception as e:
                     raise QueryCompilationError(
                         concept=concept,
@@ -100,9 +92,7 @@ class ConceptExtractor:
                         error=str(e),
                     )
 
-    def extract_concept(
-        self, ast_root: Node, content: bytes, concept: UniversalConcept
-    ) -> list[UniversalChunk]:
+    def extract_concept(self, ast_root: Node, content: bytes, concept: UniversalConcept) -> list[UniversalChunk]:
         """Extract all instances of a universal concept."""
         if concept not in self._compiled_queries:
             return []
@@ -115,18 +105,14 @@ class ConceptExtractor:
             # match is a tuple: (pattern_index, captures_dict)
             _, captures_dict = match
             # Flatten the captures dict (values are lists, take first element)
-            captures = {
-                name: nodes[0] for name, nodes in captures_dict.items() if nodes
-            }
+            captures = {name: nodes[0] for name, nodes in captures_dict.items() if nodes}
             chunk = self._build_universal_chunk(concept, captures, content)
             if chunk:  # Some extractions may return None
                 chunks.append(chunk)
 
         return chunks
 
-    def extract_all_concepts(
-        self, ast_root: Node, content: bytes
-    ) -> list[UniversalChunk]:
+    def extract_all_concepts(self, ast_root: Node, content: bytes) -> list[UniversalChunk]:
         """Extract all universal concepts from the AST."""
         all_chunks = []
         for concept in UniversalConcept:
@@ -155,11 +141,7 @@ class ConceptExtractor:
 
         # Get position from definition node
         def_node = (
-            captures.get("definition")
-            or captures.get("node")
-            or list(captures.values())[0]
-            if captures
-            else None
+            captures.get("definition") or captures.get("node") or list(captures.values())[0] if captures else None
         )
         if not def_node:
             return None

@@ -96,10 +96,7 @@ async def generate_docsite_with_optional_autorun(
                 config=config,
                 formatter=formatter,
                 output_dir=inputs.output_dir,
-                question=(
-                    "Generate the codemap first by running `chunkhound map`, "
-                    "then retry AutoDoc?"
-                ),
+                question=("Generate the codemap first by running `chunkhound map`, then retry AutoDoc?"),
                 decline_error=str(exc),
                 decline_exit_code=1,
             )

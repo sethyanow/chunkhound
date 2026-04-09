@@ -76,9 +76,7 @@ async def mcp_command(args: argparse.Namespace, config) -> None:
         await proxy.run()
 
 
-def _show_mcp_setup_instructions(
-    args: argparse.Namespace, force_display: bool = False
-) -> None:
+def _show_mcp_setup_instructions(args: argparse.Namespace, force_display: bool = False) -> None:
     """Show comprehensive MCP setup instructions for all MCP clients.
 
     Args:
@@ -108,9 +106,7 @@ def _show_mcp_setup_instructions(
     _safe_print("   Scope: This project only")
 
     if is_tool_installed:
-        claude_code_config = {
-            "mcpServers": {"ChunkHound": {"command": "chunkhound", "args": ["mcp"]}}
-        }
+        claude_code_config = {"mcpServers": {"ChunkHound": {"command": "chunkhound", "args": ["mcp"]}}}
     else:
         claude_code_config = {
             "mcpServers": {
@@ -227,9 +223,7 @@ def _show_mcp_setup_instructions(
         pyperclip.copy(json.dumps(claude_code_config, indent=2))
         _safe_print("\n✓ Claude Code config copied to clipboard!")
     except (ImportError, Exception):
-        _safe_print(
-            "\n• Install pyperclip to enable clipboard copy: pip install pyperclip"
-        )
+        _safe_print("\n• Install pyperclip to enable clipboard copy: pip install pyperclip")
 
     _safe_print("\n" + "=" * 70 + "\n")
 

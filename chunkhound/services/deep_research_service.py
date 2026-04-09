@@ -10,6 +10,17 @@ from typing import TYPE_CHECKING, Any
 
 from chunkhound.core.config.config import Config
 from chunkhound.services.research.factory import ResearchServiceFactory
+from chunkhound.services.research.shared.models import (
+    ENABLE_ADAPTIVE_BUDGETS,
+    FOLLOWUP_OUTPUT_TOKENS_MAX,
+    FOLLOWUP_OUTPUT_TOKENS_MIN,
+    MAX_FOLLOWUP_QUESTIONS,
+    MAX_SYMBOLS_TO_SEARCH,
+    NODE_SIMILARITY_THRESHOLD,
+    NUM_LLM_EXPANDED_QUERIES,
+    QUERY_EXPANSION_ENABLED,
+    RELEVANCE_THRESHOLD,
+)
 from chunkhound.services.research.v1.pluggable_research_service import (
     PluggableResearchService,
 )
@@ -43,16 +54,10 @@ async def run_deep_research(
         )
 
     if not embedding_manager or not embedding_manager.list_providers():
-        raise Exception(
-            "No embedding providers available. Code research requires reranking "
-            "support."
-        )
+        raise Exception("No embedding providers available. Code research requires reranking support.")
 
     embedding_provider = embedding_manager.get_provider()
-    if not (
-        hasattr(embedding_provider, "supports_reranking")
-        and embedding_provider.supports_reranking()
-    ):
+    if not (hasattr(embedding_provider, "supports_reranking") and embedding_provider.supports_reranking()):
         raise Exception(
             "Code research requires a provider with reranking support. "
             "Configure a rerank_model in your embedding configuration."
@@ -77,19 +82,6 @@ async def run_deep_research(
 
 # Backwards compatibility alias
 BFSResearchService = PluggableResearchService
-
-# Re-export constants for backwards compatibility (tests access these)
-from chunkhound.services.research.shared.models import (
-    ENABLE_ADAPTIVE_BUDGETS,
-    FOLLOWUP_OUTPUT_TOKENS_MAX,
-    FOLLOWUP_OUTPUT_TOKENS_MIN,
-    MAX_FOLLOWUP_QUESTIONS,
-    MAX_SYMBOLS_TO_SEARCH,
-    NODE_SIMILARITY_THRESHOLD,
-    NUM_LLM_EXPANDED_QUERIES,
-    QUERY_EXPANSION_ENABLED,
-    RELEVANCE_THRESHOLD,
-)
 
 # Backwards compatibility alias
 DeepResearchService = BFSResearchService

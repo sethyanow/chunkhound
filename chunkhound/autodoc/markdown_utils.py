@@ -112,9 +112,7 @@ def _ensure_overview_heading(text: str) -> str:
         break
     if first_content_idx is None:
         return text
-    new_lines = (
-        lines[:first_content_idx] + ["## Overview", ""] + lines[first_content_idx:]
-    )
+    new_lines = lines[:first_content_idx] + ["## Overview", ""] + lines[first_content_idx:]
     return "\n".join(new_lines).lstrip()
 
 

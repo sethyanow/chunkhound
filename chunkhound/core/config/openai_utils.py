@@ -42,6 +42,5 @@ def is_official_openai_endpoint(base_url: str | None) -> bool:
 
     # Check if URL starts with official OpenAI domain
     return base_url.startswith("https://api.openai.com") and (
-        base_url == "https://api.openai.com"
-        or base_url.startswith("https://api.openai.com/")
+        base_url == "https://api.openai.com" or base_url.startswith("https://api.openai.com/")
     )

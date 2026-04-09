@@ -386,9 +386,7 @@ class Language(Enum):
 
         # Extract all extensions (keys starting with '.')
         # Filter out filename patterns like "Makefile" which don't start with '.'
-        extensions = {
-            ext for ext in EXTENSION_TO_LANGUAGE.keys() if ext.startswith(".")
-        }
+        extensions = {ext for ext in EXTENSION_TO_LANGUAGE.keys() if ext.startswith(".")}
 
         return extensions
 
@@ -407,11 +405,7 @@ class Language(Enum):
 
         # Extract filename patterns (keys not starting with '.')
         # Normalize to lowercase for case-insensitive filesystem compatibility
-        patterns = {
-            key.lower()
-            for key in EXTENSION_TO_LANGUAGE.keys()
-            if not key.startswith(".")
-        }
+        patterns = {key.lower() for key in EXTENSION_TO_LANGUAGE.keys() if not key.startswith(".")}
         return patterns
 
     @classmethod

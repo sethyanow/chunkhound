@@ -105,9 +105,7 @@ def build_symbol_overlap_query(
     conditions: list[str] = []
     params: list[Any] = []
     for chunk in chunks:
-        conditions.append(
-            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-        )
+        conditions.append("(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)")
         params.extend([chunk["file_path"], chunk["end_line"], chunk["start_line"]])
 
     where_clause = " OR ".join(conditions)
@@ -227,9 +225,7 @@ def build_type_filter_query(
     conditions: list[str] = []
     params: list[Any] = []
     for r in results:
-        conditions.append(
-            "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-        )
+        conditions.append("(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)")
         params.extend([r["file_path"], r["end_line"], r["start_line"]])
 
     where_clause = " OR ".join(conditions)

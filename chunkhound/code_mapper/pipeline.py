@@ -78,9 +78,7 @@ def _coverage_summary_lines(
             f"({file_cov:.2f}% of indexed files in {scope_label_display})."
         )
     else:
-        lines.append(
-            f"- Referenced files: {referenced_files} (database totals unavailable)."
-        )
+        lines.append(f"- Referenced files: {referenced_files} (database totals unavailable).")
 
     if chunks_denominator and chunks_denominator > 0:
         chunk_cov = (referenced_chunks / chunks_denominator) * 100.0
@@ -90,9 +88,7 @@ def _coverage_summary_lines(
             f"({chunk_cov:.2f}% of indexed chunks in {scope_label_display})."
         )
     else:
-        lines.append(
-            f"- Referenced chunks: {referenced_chunks} (database totals unavailable)."
-        )
+        lines.append(f"- Referenced chunks: {referenced_chunks} (database totals unavailable).")
 
     return lines
 
@@ -114,12 +110,7 @@ def _operational_poi_budget(comprehensiveness: str) -> int:
 def _ensure_operational_quickstart(points: list[str], max_points: int) -> list[str]:
     normalized = [p.strip().lower() for p in points if p.strip()]
     for item in normalized:
-        if (
-            "quickstart" in item
-            or "getting started" in item
-            or "local run" in item
-            or "run locally" in item
-        ):
+        if "quickstart" in item or "getting started" in item or "local run" in item or "run locally" in item:
             return points[:max_points]
 
     injected = (
@@ -216,12 +207,8 @@ async def run_code_mapper_overview_hyde(
             get_sources = getattr(indexing_cfg, "resolve_ignore_sources", None)
             if callable(get_sources):
                 ignore_sources = list(get_sources())
-            gitignore_backend = str(
-                getattr(indexing_cfg, "gitignore_backend", "python")
-            )
-            workspace_root_only_gitignore = getattr(
-                indexing_cfg, "workspace_gitignore_nonrepo", None
-            )
+            gitignore_backend = str(getattr(indexing_cfg, "gitignore_backend", "python"))
+            workspace_root_only_gitignore = getattr(indexing_cfg, "workspace_gitignore_nonrepo", None)
     except (AttributeError, TypeError, ValueError) as exc:
         logger.debug(f"Code Mapper: failed to read indexing config overrides: {exc}")
         include_patterns = None
@@ -290,8 +277,7 @@ async def run_code_mapper_overview_hyde(
         context_guard = ""
         if context_text:
             context_guard = (
-                "- Use ONLY the user-provided context above; do not infer or assume "
-                "details from repository code.\n"
+                "- Use ONLY the user-provided context above; do not infer or assume details from repository code.\n"
             )
         return (
             f"{scope_prompt}\n\n"
@@ -394,9 +380,7 @@ async def run_code_mapper_overview_hyde(
         except OSError as exc:
             logger.debug(f"Code Mapper: failed to persist HyDE plan: {exc}")
 
-    arch_points = _extract_points_of_interest(
-        arch_overview_answer, max_points=max_points
-    )
+    arch_points = _extract_points_of_interest(arch_overview_answer, max_points=max_points)
     ops_points = _extract_points_of_interest(ops_overview_answer, max_points=ops_budget)
     ops_points = _ensure_operational_quickstart(ops_points, ops_budget)
 

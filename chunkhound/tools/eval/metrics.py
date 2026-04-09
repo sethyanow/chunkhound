@@ -60,10 +60,7 @@ def aggregate_metrics(
     """Aggregate metrics across a set of queries."""
     if not per_query:
         return AggregateMetrics(
-            metrics_by_k={
-                k: {"recall": 0.0, "precision": 0.0, "hit_rate": 0.0, "ndcg": 0.0}
-                for k in ks
-            },
+            metrics_by_k={k: {"recall": 0.0, "precision": 0.0, "hit_rate": 0.0, "ndcg": 0.0} for k in ks},
             latency_stats_ms={"mean": 0.0, "p50": 0.0, "p95": 0.0, "max": 0.0},
             mrr=0.0,
         )
@@ -161,21 +158,15 @@ def format_human_summary(result: EvalResult) -> None:
         precision = m.get("precision", 0.0)
         hit_rate = m.get("hit_rate", 0.0)
         ndcg = m.get("ndcg", 0.0)
-        print(
-            f"  k={k:2d}: recall={recall:.3f}, "
-            f"precision={precision:.3f}, hit-rate={hit_rate:.3f}, ndcg={ndcg:.3f}"
-        )
+        print(f"  k={k:2d}: recall={recall:.3f}, precision={precision:.3f}, hit-rate={hit_rate:.3f}, ndcg={ndcg:.3f}")
 
     lat = result.global_metrics.latency_stats_ms
-    print(
-        f"\nLatency (ms): mean={lat['mean']:.1f}, "
-        f"p50={lat['p50']:.1f}, p95={lat['p95']:.1f}, max={lat['max']:.1f}"
-    )
+    print(f"\nLatency (ms): mean={lat['mean']:.1f}, p50={lat['p50']:.1f}, p95={lat['p95']:.1f}, max={lat['max']:.1f}")
 
     print(f"\nMRR: {result.global_metrics.mrr:.3f}")
 
     print("\nPer-language metrics:")
-    for language in sorted(result.languages, key=lambda l: l.value):
+    for language in sorted(result.languages, key=lambda lang: lang.value):
         lang_metrics = result.per_language.get(language.value)
         if not lang_metrics:
             continue

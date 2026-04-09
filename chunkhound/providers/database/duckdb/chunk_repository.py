@@ -40,9 +40,7 @@ class DuckDBChunkRepository:
         try:
             # Delegate to provider's executor for thread safety
             if self._provider:
-                return self._provider._execute_in_db_thread_sync(
-                    "insert_chunk_single", chunk
-                )
+                return self._provider._execute_in_db_thread_sync("insert_chunk_single", chunk)
             else:
                 # Fallback for tests
                 result = self._connection_manager.connection.execute(
@@ -114,13 +112,9 @@ class DuckDBChunkRepository:
             # Execute bulk insert and get all IDs in one operation
             if self._provider:
                 # Provider not used for batch operations currently
-                results = self._connection_manager.connection.execute(
-                    query, params
-                ).fetchall()
+                results = self._connection_manager.connection.execute(query, params).fetchall()
             else:
-                results = self._connection_manager.connection.execute(
-                    query, params
-                ).fetchall()
+                results = self._connection_manager.connection.execute(query, params).fetchall()
             chunk_ids = [result[0] for result in results]
 
             return chunk_ids
@@ -129,18 +123,14 @@ class DuckDBChunkRepository:
             logger.error(f"Failed to insert chunks batch: {e}")
             raise
 
-    def get_chunk_by_id(
-        self, chunk_id: int, as_model: bool = False
-    ) -> dict[str, Any] | Chunk | None:
+    def get_chunk_by_id(self, chunk_id: int, as_model: bool = False) -> dict[str, Any] | Chunk | None:
         """Get chunk record by ID."""
         if self.connection is None:
             raise RuntimeError("No database connection")
 
         try:
             if self._provider:
-                result = self._provider._execute_in_db_thread_sync(
-                    "get_chunk_by_id_query", chunk_id
-                )
+                result = self._provider._execute_in_db_thread_sync("get_chunk_by_id_query", chunk_id)
             else:
                 result = self._connection_manager.connection.execute(
                     """
@@ -190,18 +180,14 @@ class DuckDBChunkRepository:
             logger.error(f"Failed to get chunk by ID {chunk_id}: {e}")
             return None
 
-    def get_chunks_by_file_id(
-        self, file_id: int, as_model: bool = False
-    ) -> list[dict[str, Any] | Chunk]:
+    def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Get all chunks for a specific file."""
         if self.connection is None:
             raise RuntimeError("No database connection")
 
         try:
             if self._provider:
-                results = self._provider._execute_in_db_thread_sync(
-                    "get_chunks_by_file_id_query", file_id
-                )
+                results = self._provider._execute_in_db_thread_sync("get_chunks_by_file_id_query", file_id)
             else:
                 results = self._connection_manager.connection.execute(
                     """
@@ -235,18 +221,14 @@ class DuckDBChunkRepository:
                     chunks.append(
                         Chunk(
                             file_id=result[1],
-                            chunk_type=ChunkType(result[2])
-                            if result[2]
-                            else ChunkType.UNKNOWN,
+                            chunk_type=ChunkType(result[2]) if result[2] else ChunkType.UNKNOWN,
                             symbol=result[3],
                             code=result[4],
                             start_line=result[5],
                             end_line=result[6],
                             start_byte=result[7],
                             end_byte=result[8],
-                            language=Language(result[9])
-                            if result[9]
-                            else Language.UNKNOWN,
+                            language=Language(result[9]) if result[9] else Language.UNKNOWN,
                             metadata=chunk_dict["metadata"],
                         )
                     )
@@ -270,9 +252,7 @@ class DuckDBChunkRepository:
                 self._provider._execute_in_db_thread_sync("delete_file_chunks", file_id)
             else:
                 # Fallback for tests - simplified version without embedding cleanup
-                self._connection_manager.connection.execute(
-                    "DELETE FROM chunks WHERE file_id = ?", [file_id]
-                )
+                self._connection_manager.connection.execute("DELETE FROM chunks WHERE file_id = ?", [file_id])
 
         except Exception as e:
             logger.error(f"Failed to delete chunks for file {file_id}: {e}")
@@ -289,9 +269,7 @@ class DuckDBChunkRepository:
                 self._provider._execute_in_db_thread_sync("delete_chunk", chunk_id)
             else:
                 # Fallback for tests - simplified version without embedding cleanup
-                self._connection_manager.connection.execute(
-                    "DELETE FROM chunks WHERE id = ?", [chunk_id]
-                )
+                self._connection_manager.connection.execute("DELETE FROM chunks WHERE id = ?", [chunk_id])
 
         except Exception as e:
             logger.error(f"Failed to delete chunk {chunk_id}: {e}")
@@ -332,9 +310,7 @@ class DuckDBChunkRepository:
 
                 query = f"UPDATE chunks SET {', '.join(set_clauses)} WHERE id = ?"
                 if self._provider:
-                    self._provider._execute_in_db_thread_sync(
-                        "update_chunk_query", chunk_id, query, values
-                    )
+                    self._provider._execute_in_db_thread_sync("update_chunk_query", chunk_id, query, values)
                 else:
                     self._connection_manager.connection.execute(query, values)
 
@@ -342,9 +318,7 @@ class DuckDBChunkRepository:
             logger.error(f"Failed to update chunk {chunk_id}: {e}")
             raise
 
-    def get_chunks_in_range(
-        self, file_id: int, start_line: int, end_line: int
-    ) -> list[dict]:
+    def get_chunks_in_range(self, file_id: int, start_line: int, end_line: int) -> list[dict]:
         """Get all chunks overlapping a line range (pattern from context_retriever.py).
 
         Args:
@@ -437,9 +411,7 @@ class DuckDBChunkRepository:
             """
 
             if self._provider:
-                results = self._provider._execute_in_db_thread_sync(
-                    "get_all_chunks_with_metadata_query", query
-                )
+                results = self._provider._execute_in_db_thread_sync("get_all_chunks_with_metadata_query", query)
             else:
                 results = self._connection_manager.connection.execute(query).fetchall()
 

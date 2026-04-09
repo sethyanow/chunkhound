@@ -114,9 +114,7 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
             return True
 
         # Check prefixes for dated model snapshots (e.g., "gpt-5.1-2025-11-13")
-        all_responses_models = (
-            self.RESPONSES_ONLY_MODELS | self.RESPONSES_PREFERRED_MODELS
-        )
+        all_responses_models = self.RESPONSES_ONLY_MODELS | self.RESPONSES_PREFERRED_MODELS
         for base_model in all_responses_models:
             if self._model.startswith(base_model + "-"):
                 return True
@@ -178,34 +176,24 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
                     # Message item contains the actual response text
                     for content_item in item.content:
                         # Responses API uses "output_text" type
-                        if content_item.type == "output_text" and hasattr(
-                            content_item, "text"
-                        ):
+                        if content_item.type == "output_text" and hasattr(content_item, "text"):
                             content_parts.append(content_item.text)
 
             content = "\n".join(content_parts) if content_parts else None
 
             tokens = response.usage.total_tokens if response.usage else 0
-            finish_reason = (
-                response.status
-            )  # Responses API uses 'status' instead of 'finish_reason'
+            finish_reason = response.status  # Responses API uses 'status' instead of 'finish_reason'
 
             # Validate content is not None or empty
             if content is None:
-                logger.error(
-                    f"OpenAI Responses API returned None content "
-                    f"(status={finish_reason}, tokens={tokens})"
-                )
+                logger.error(f"OpenAI Responses API returned None content (status={finish_reason}, tokens={tokens})")
                 raise RuntimeError(
                     f"LLM returned empty response (status={finish_reason}). "
                     "This may indicate a content filter, API error, or model refusal."
                 )
 
             if not content.strip():
-                logger.warning(
-                    f"OpenAI Responses API returned empty content "
-                    f"(status={finish_reason}, tokens={tokens})"
-                )
+                logger.warning(f"OpenAI Responses API returned empty content (status={finish_reason}, tokens={tokens})")
                 raise RuntimeError(
                     f"LLM returned empty response (status={finish_reason}). "
                     "This may indicate a content filter, API error, or model refusal."
@@ -215,10 +203,7 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
             if finish_reason == "incomplete":
                 usage_info = ""
                 if response.usage:
-                    usage_info = (
-                        f" (input={response.usage.input_tokens:,}, "
-                        f"output={response.usage.output_tokens:,})"
-                    )
+                    usage_info = f" (input={response.usage.input_tokens:,}, output={response.usage.output_tokens:,})"
 
                 raise RuntimeError(
                     f"LLM response incomplete - token limit exceeded{usage_info}. "
@@ -231,10 +216,7 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
 
             # Warn on other unexpected status
             if finish_reason not in ("completed", "complete"):
-                logger.warning(
-                    f"Unexpected status: {finish_reason} "
-                    f"(content_length={len(content)})"
-                )
+                logger.warning(f"Unexpected status: {finish_reason} (content_length={len(content)})")
 
             return LLMResponse(
                 content=content,
@@ -269,9 +251,7 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
         # Route to Responses API for compatible models
         if self._should_use_responses_api():
             logger.debug(f"Using Responses API for model: {self._model}")
-            return await self._complete_with_responses_api(
-                prompt, system, max_completion_tokens, timeout
-            )
+            return await self._complete_with_responses_api(prompt, system, max_completion_tokens, timeout)
 
         # Use Chat Completions API for standard models via parent implementation
         return await super().complete(prompt, system, max_completion_tokens, timeout)
@@ -337,9 +317,7 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
             for item in response.output:
                 if item.type == "message":
                     for content_item in item.content:
-                        if content_item.type == "output_text" and hasattr(
-                            content_item, "text"
-                        ):
+                        if content_item.type == "output_text" and hasattr(content_item, "text"):
                             content_parts.append(content_item.text)
 
             content = "\n".join(content_parts) if content_parts else None
@@ -347,36 +325,22 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
 
             # Validate content
             if content is None or not content.strip():
-                logger.error(
-                    f"Responses API structured output returned empty content "
-                    f"(status={finish_reason})"
-                )
-                raise RuntimeError(
-                    f"LLM structured output returned empty response "
-                    f"(status={finish_reason})"
-                )
+                logger.error(f"Responses API structured output returned empty content (status={finish_reason})")
+                raise RuntimeError(f"LLM structured output returned empty response (status={finish_reason})")
 
             # Check for incomplete responses
             if finish_reason == "incomplete":
                 usage_info = ""
                 if response.usage:
-                    usage_info = (
-                        f" (input={response.usage.input_tokens:,}, "
-                        f"output={response.usage.output_tokens:,})"
-                    )
-                raise RuntimeError(
-                    f"LLM structured output incomplete - token limit "
-                    f"exceeded{usage_info}"
-                )
+                    usage_info = f" (input={response.usage.input_tokens:,}, output={response.usage.output_tokens:,})"
+                raise RuntimeError(f"LLM structured output incomplete - token limit exceeded{usage_info}")
 
             # Parse JSON
             parsed = json.loads(content)
             return parsed
 
         except json.JSONDecodeError as e:
-            logger.error(
-                f"Failed to parse Responses API structured output as JSON: {e}"
-            )
+            logger.error(f"Failed to parse Responses API structured output as JSON: {e}")
             raise RuntimeError(f"Invalid JSON in structured output: {e}") from e
         except Exception as e:
             logger.error(f"Responses API structured completion failed: {e}")
@@ -411,14 +375,10 @@ class OpenAILLMProvider(OpenAICompatibleProvider):
         """
         # Route to Responses API for compatible models
         if self._should_use_responses_api():
-            logger.debug(
-                f"Using Responses API for structured output with model: {self._model}"
-            )
+            logger.debug(f"Using Responses API for structured output with model: {self._model}")
             return await self._complete_structured_with_responses_api(
                 prompt, json_schema, system, max_completion_tokens, timeout
             )
 
         # Use Chat Completions API for standard models via parent implementation
-        return await super().complete_structured(
-            prompt, json_schema, system, max_completion_tokens, timeout
-        )
+        return await super().complete_structured(prompt, json_schema, system, max_completion_tokens, timeout)

@@ -47,12 +47,8 @@ class EmbeddingService(BaseService):
 
         # Auto-detect optimal concurrency from provider if not explicitly set
         if max_concurrent_batches is None:
-            if embedding_provider and hasattr(
-                embedding_provider, "get_recommended_concurrency"
-            ):
-                self._max_concurrent_batches = (
-                    embedding_provider.get_recommended_concurrency()
-                )
+            if embedding_provider and hasattr(embedding_provider, "get_recommended_concurrency"):
+                self._max_concurrent_batches = embedding_provider.get_recommended_concurrency()
                 logger.info(
                     f"Auto-detected concurrency: {self._max_concurrent_batches} "
                     f"concurrent batches for {embedding_provider.name}"
@@ -65,9 +61,7 @@ class EmbeddingService(BaseService):
                         f"get_recommended_concurrency(), using default: {self._max_concurrent_batches}"
                     )
                 else:
-                    logger.debug(
-                        f"No embedding provider, using default concurrency: {self._max_concurrent_batches}"
-                    )
+                    logger.debug(f"No embedding provider, using default concurrency: {self._max_concurrent_batches}")
         else:
             self._max_concurrent_batches = max_concurrent_batches
             if embedding_provider:
@@ -156,9 +150,7 @@ class EmbeddingService(BaseService):
             timestamp = datetime.now().isoformat()
             try:
                 with open(debug_file, "a") as f:
-                    f.write(
-                        f"[{timestamp}] [ENTRY] Starting embedding generation for {len(chunk_ids)} chunks\n"
-                    )
+                    f.write(f"[{timestamp}] [ENTRY] Starting embedding generation for {len(chunk_ids)} chunks\n")
                     f.flush()
             except Exception:
                 pass
@@ -166,18 +158,14 @@ class EmbeddingService(BaseService):
             logger.debug(f"Generating embeddings for {len(chunk_ids)} chunks")
 
             # Filter out chunks that already have embeddings
-            filtered_chunks = await self._filter_existing_embeddings(
-                chunk_ids, chunk_texts
-            )
+            filtered_chunks = await self._filter_existing_embeddings(chunk_ids, chunk_texts)
 
             if not filtered_chunks:
                 logger.debug("All chunks already have embeddings")
                 return 0
 
             # Generate embeddings in batches
-            total_generated = await self._generate_embeddings_in_batches(
-                filtered_chunks, show_progress
-            )
+            total_generated = await self._generate_embeddings_in_batches(filtered_chunks, show_progress)
 
             logger.debug(f"Successfully generated {total_generated} embeddings")
             return total_generated
@@ -196,14 +184,18 @@ class EmbeddingService(BaseService):
             try:
                 with open(debug_file, "a") as f:
                     f.write(
-                        f"[{timestamp}] [TOP-LEVEL] Failed to generate embeddings (chunks: {len(chunk_sizes)}, total_chars: {total_chars}, max_chars: {max_size}): {e}\n"
+                        f"[{timestamp}] [TOP-LEVEL] Failed to generate embeddings"
+                        f" (chunks: {len(chunk_sizes)}, total_chars: {total_chars},"
+                        f" max_chars: {max_size}): {e}\n"
                     )
                     f.flush()
             except Exception:
                 pass
 
             logger.error(
-                f"[EmbSvc-L101] Failed to generate embeddings (chunks: {len(chunk_sizes)}, total_chars: {total_chars}, max_chars: {max_size}): {e}"
+                f"[EmbSvc-L101] Failed to generate embeddings"
+                f" (chunks: {len(chunk_sizes)}, total_chars: {total_chars},"
+                f" max_chars: {max_size}): {e}"
             )
             return 0
 
@@ -252,9 +244,7 @@ class EmbeddingService(BaseService):
             chunk_id_list = [chunk["id"] for chunk in chunks_data]
             chunk_texts = [chunk["code"] for chunk in chunks_data]
 
-            generated_count = await self.generate_embeddings_for_chunks(
-                chunk_id_list, chunk_texts, show_progress=True
-            )
+            generated_count = await self.generate_embeddings_for_chunks(chunk_id_list, chunk_texts, show_progress=True)
 
             return {
                 "status": "success",
@@ -307,24 +297,18 @@ class EmbeddingService(BaseService):
                     "message": "No chunks found",
                 }
 
-            logger.info(
-                f"Regenerating embeddings for {len(chunks_to_regenerate)} chunks"
-            )
+            logger.info(f"Regenerating embeddings for {len(chunks_to_regenerate)} chunks")
 
             # Delete existing embeddings
             provider_name = self._embedding_provider.name
             model_name = self._embedding_provider.model
 
             chunk_ids_to_regenerate = [chunk["id"] for chunk in chunks_to_regenerate]
-            self._delete_embeddings_for_chunks(
-                chunk_ids_to_regenerate, provider_name, model_name
-            )
+            self._delete_embeddings_for_chunks(chunk_ids_to_regenerate, provider_name, model_name)
 
             # Generate new embeddings
             chunk_texts = [chunk["code"] for chunk in chunks_to_regenerate]
-            regenerated_count = await self.generate_embeddings_for_chunks(
-                chunk_ids_to_regenerate, chunk_texts
-            )
+            regenerated_count = await self.generate_embeddings_for_chunks(chunk_ids_to_regenerate, chunk_texts)
 
             return {
                 "status": "success",
@@ -353,12 +337,8 @@ class EmbeddingService(BaseService):
                     "total_embeddings": 0,
                     "total_unique_chunks": 0,
                     "providers": [],
-                    "configured_provider": self._embedding_provider.name
-                    if self._embedding_provider
-                    else None,
-                    "configured_model": self._embedding_provider.model
-                    if self._embedding_provider
-                    else None,
+                    "configured_provider": self._embedding_provider.name if self._embedding_provider else None,
+                    "configured_model": self._embedding_provider.model if self._embedding_provider else None,
                 }
 
             # Query each table and aggregate results
@@ -384,10 +364,7 @@ class EmbeddingService(BaseService):
                 # Get chunk IDs for total unique calculation
                 chunk_query = f"SELECT provider, model, chunk_id FROM {table_name}"
                 chunk_results = self._db.execute_query(chunk_query)
-                all_chunks.update(
-                    (row["provider"], row["model"], row["chunk_id"])
-                    for row in chunk_results
-                )
+                all_chunks.update((row["provider"], row["model"], row["chunk_id"]) for row in chunk_results)
 
             # Calculate totals
             total_embeddings = sum(row["count"] for row in all_results)
@@ -397,12 +374,8 @@ class EmbeddingService(BaseService):
                 "total_embeddings": total_embeddings,
                 "total_unique_chunks": total_unique_chunks,
                 "providers": all_results,
-                "configured_provider": self._embedding_provider.name
-                if self._embedding_provider
-                else None,
-                "configured_model": self._embedding_provider.model
-                if self._embedding_provider
-                else None,
+                "configured_provider": self._embedding_provider.name if self._embedding_provider else None,
+                "configured_model": self._embedding_provider.model if self._embedding_provider else None,
             }
 
         except Exception as e:
@@ -437,7 +410,6 @@ class EmbeddingService(BaseService):
                 # Default to 1536 for most embedding models (OpenAI, etc.)
                 pass
 
-
             existing_chunk_ids = self._db.get_existing_embeddings(
                 chunk_ids=[int(cid) for cid in chunk_ids],
                 provider=provider_name,
@@ -460,13 +432,9 @@ class EmbeddingService(BaseService):
                 filtered_chunks.append((chunk_id, text))
 
         if skipped_empty > 0:
-            logger.info(
-                f"Skipped {skipped_empty} chunks with empty content after normalization"
-            )
+            logger.info(f"Skipped {skipped_empty} chunks with empty content after normalization")
 
-        logger.debug(
-            f"Filtered {len(filtered_chunks)} chunks (out of {len(chunk_ids)}) need embeddings"
-        )
+        logger.debug(f"Filtered {len(filtered_chunks)} chunks (out of {len(chunk_ids)}) need embeddings")
         return filtered_chunks
 
     async def _generate_embeddings_in_batches(
@@ -486,12 +454,8 @@ class EmbeddingService(BaseService):
         # Create token-aware batches immediately (fast operation)
         batches = self._create_token_aware_batches(chunk_data)
 
-        avg_batch_size = (
-            sum(len(batch) for batch in batches) / len(batches) if batches else 0
-        )
-        logger.debug(
-            f"Processing {len(batches)} token-aware batches (avg {avg_batch_size:.1f} chunks each)"
-        )
+        avg_batch_size = sum(len(batch) for batch in batches) / len(batches) if batches else 0
+        logger.debug(f"Processing {len(batches)} token-aware batches (avg {avg_batch_size:.1f} chunks each)")
 
         # Process batches with concurrency control
         semaphore = asyncio.Semaphore(self._max_concurrent_batches)
@@ -509,9 +473,7 @@ class EmbeddingService(BaseService):
                 if self._metrics_collector and retry_depth == 0:
                     timing = self._metrics_collector.start_batch(batch_num, len(batch))
                 try:
-                    logger.debug(
-                        f"Processing batch {batch_num + 1}/{len(batches)} with {len(batch)} chunks"
-                    )
+                    logger.debug(f"Processing batch {batch_num + 1}/{len(batches)} with {len(batch)} chunks")
 
                     # Extract chunk IDs and texts
                     chunk_ids = [chunk_id for chunk_id, _ in batch]
@@ -538,12 +500,8 @@ class EmbeddingService(BaseService):
                         embeddings_data.append(
                             {
                                 "chunk_id": chunk_id,
-                                "provider": self._embedding_provider.name
-                                if self._embedding_provider
-                                else "unknown",
-                                "model": self._embedding_provider.model
-                                if self._embedding_provider
-                                else "unknown",
+                                "provider": self._embedding_provider.name if self._embedding_provider else "unknown",
+                                "model": self._embedding_provider.model if self._embedding_provider else "unknown",
                                 "dims": len(vector),
                                 "embedding": vector,
                             }
@@ -552,14 +510,10 @@ class EmbeddingService(BaseService):
                     # Store in database with configurable batch size
                     if timing:
                         timing.mark_db_insert_start()
-                    stored_count = self._db.insert_embeddings_batch(
-                        embeddings_data, self._db_batch_size
-                    )
+                    stored_count = self._db.insert_embeddings_batch(embeddings_data, self._db_batch_size)
                     if timing:
                         timing.mark_db_insert_end()
-                    logger.debug(
-                        f"Batch {batch_num + 1} completed: {stored_count} embeddings stored"
-                    )
+                    logger.debug(f"Batch {batch_num + 1} completed: {stored_count} embeddings stored")
 
                     return stored_count
 
@@ -583,12 +537,8 @@ class EmbeddingService(BaseService):
                         batch2 = batch[mid:]
 
                         # Recursively process both halves
-                        result1 = await process_batch(
-                            batch1, batch_num, retry_depth + 1
-                        )
-                        result2 = await process_batch(
-                            batch2, batch_num, retry_depth + 1
-                        )
+                        result1 = await process_batch(batch1, batch_num, retry_depth + 1)
+                        result2 = await process_batch(batch2, batch_num, retry_depth + 1)
                         return result1 + result2
 
                     # Log batch details for non-retryable errors or max retries exceeded
@@ -598,21 +548,22 @@ class EmbeddingService(BaseService):
                     import os
                     from datetime import datetime
 
-                    debug_file = os.getenv(
-                        "CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_debug.log"
-                    )
+                    debug_file = os.getenv("CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_debug.log")
                     timestamp = datetime.now().isoformat()
                     try:
                         with open(debug_file, "a") as f:
                             f.write(
-                                f"[{timestamp}] [BATCH-PROCESS] Batch {batch_num + 1} failed (chunks: {len(batch)}, max_chars: {max_size}): {e}\n"
+                                f"[{timestamp}] [BATCH-PROCESS] Batch {batch_num + 1}"
+                                f" failed (chunks: {len(batch)},"
+                                f" max_chars: {max_size}): {e}\n"
                             )
                             f.flush()
                     except Exception:
                         pass
 
                     logger.error(
-                        f"[EmbSvc-BatchProcess] Batch {batch_num + 1} failed (chunks: {len(batch)}, max_chars: {max_size}): {e}"
+                        f"[EmbSvc-BatchProcess] Batch {batch_num + 1} failed"
+                        f" (chunks: {len(batch)}, max_chars: {max_size}): {e}"
                     )
                     return 0
                 finally:
@@ -632,9 +583,7 @@ class EmbeddingService(BaseService):
         update_lock = threading.Lock()
         processed_count = 0
 
-        async def process_batch_with_optional_progress(
-            batch: list[tuple[ChunkId, str]], batch_num: int
-        ) -> int:
+        async def process_batch_with_optional_progress(batch: list[tuple[ChunkId, str]], batch_num: int) -> int:
             nonlocal processed_count
             result = await process_batch(batch, batch_num)
 
@@ -643,17 +592,12 @@ class EmbeddingService(BaseService):
                 with update_lock:
                     processed_count += len(batch)
                     if embed_task is not None and self.progress:
-                        self._update_progress_with_speed(
-                            embed_task, len(batch), processed_count, batch_num
-                        )
+                        self._update_progress_with_speed(embed_task, len(batch), processed_count, batch_num)
 
             return result
 
         # Create tasks (always process batches, with optional progress tracking)
-        tasks = [
-            process_batch_with_optional_progress(batch, i)
-            for i, batch in enumerate(batches)
-        ]
+        tasks = [process_batch_with_optional_progress(batch, i) for i, batch in enumerate(batches)]
         results = await asyncio.gather(*tasks, return_exceptions=True)
 
         # Count successful embeddings and track completed batches
@@ -677,9 +621,7 @@ class EmbeddingService(BaseService):
                 from datetime import datetime
 
                 # Write directly to debug file like the MCP debug_log mechanism
-                debug_file = os.getenv(
-                    "CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_debug.log"
-                )
+                debug_file = os.getenv("CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_debug.log")
                 timestamp = datetime.now().isoformat()
                 debug_msg = (
                     f"[{timestamp}] [EMBEDDING-DEBUG] Batch {i + 1} failed "
@@ -702,9 +644,7 @@ class EmbeddingService(BaseService):
 
         return total_generated
 
-    def _create_token_aware_batches(
-        self, chunk_data: list[tuple[ChunkId, str]]
-    ) -> list[list[tuple[ChunkId, str]]]:
+    def _create_token_aware_batches(self, chunk_data: list[tuple[ChunkId, str]]) -> list[list[tuple[ChunkId, str]]]:
         """Create batches that respect provider token limits using provider-agnostic logic.
 
         Args:
@@ -729,7 +669,7 @@ class EmbeddingService(BaseService):
         # - Not so large that a single slow batch blocks progress significantly
         #
         # Can be tuned per-provider if profiling shows different optimal values
-        MAX_CHUNKS_PER_BATCH = 300
+        max_chunks_per_batch = 300
 
         if not self._embedding_provider:
             # No provider - use simple batching
@@ -754,9 +694,7 @@ class EmbeddingService(BaseService):
         for chunk_id, text in chunk_data:
             # Use accurate provider-specific token estimation
             if self._embedding_provider:
-                text_tokens = estimate_tokens(
-                    text, self._embedding_provider.name, self._embedding_provider.model
-                )
+                text_tokens = estimate_tokens(text, self._embedding_provider.name, self._embedding_provider.model)
             else:
                 # Fallback for no provider (conservative default)
                 text_tokens = max(1, int(len(text) / DEFAULT_CHARS_PER_TOKEN))
@@ -765,7 +703,7 @@ class EmbeddingService(BaseService):
             if (
                 (current_tokens + text_tokens > safe_limit and current_batch)
                 or len(current_batch) >= max_documents
-                or len(current_batch) >= MAX_CHUNKS_PER_BATCH
+                or len(current_batch) >= max_chunks_per_batch
             ):
                 # Start new batch
                 batches.append(current_batch)
@@ -786,12 +724,12 @@ class EmbeddingService(BaseService):
             f"Created {len(batches)} batches for {len(chunk_data)} chunks "
             f"(concurrency limit: {self._max_concurrent_batches}, "
             f"effective concurrency: {effective_concurrency}, "
-            f"max_chunks_per_batch: {MAX_CHUNKS_PER_BATCH})"
+            f"max_chunks_per_batch: {max_chunks_per_batch})"
         )
 
         logger.debug(
             f"Batch constraints: max_tokens={max_tokens}, max_documents={max_documents}, "
-            f"safe_limit={safe_limit}, max_chunks={MAX_CHUNKS_PER_BATCH}"
+            f"safe_limit={safe_limit}, max_chunks={max_chunks_per_batch}"
         )
         return batches
 
@@ -833,20 +771,12 @@ class EmbeddingService(BaseService):
             return []
 
         # Use provider-agnostic get_existing_embeddings to check which chunks already have embeddings
-        existing_chunk_ids = self._db.get_existing_embeddings(
-            chunk_ids=all_chunk_ids, provider=provider, model=model
-        )
+        existing_chunk_ids = self._db.get_existing_embeddings(chunk_ids=all_chunk_ids, provider=provider, model=model)
 
         # Return only chunks that don't have embeddings (convert back to ChunkId)
-        return [
-            ChunkId(chunk_id)
-            for chunk_id in all_chunk_ids
-            if chunk_id not in existing_chunk_ids
-        ]
+        return [ChunkId(chunk_id) for chunk_id in all_chunk_ids if chunk_id not in existing_chunk_ids]
 
-    def _get_chunks_without_embeddings(
-        self, provider: str, model: str
-    ) -> list[dict[str, Any]]:
+    def _get_chunks_without_embeddings(self, provider: str, model: str) -> list[dict[str, Any]]:
         """Get chunks that don't have embeddings for the specified provider/model."""
         # Get all embedding tables
         embedding_tables = self._get_all_embedding_tables()
@@ -917,12 +847,8 @@ class EmbeddingService(BaseService):
                 # Ensure we have the expected fields
                 filtered_chunk = {
                     "id": chunk_id,
-                    "code": chunk.get(
-                        "content", chunk.get("code", "")
-                    ),  # LanceDB uses 'content'
-                    "symbol": chunk.get(
-                        "name", chunk.get("symbol", "")
-                    ),  # LanceDB uses 'name'
+                    "code": chunk.get("content", chunk.get("code", "")),  # LanceDB uses 'content'
+                    "symbol": chunk.get("name", chunk.get("symbol", "")),  # LanceDB uses 'name'
                     "path": chunk.get("file_path", ""),
                 }
                 filtered_chunks.append(filtered_chunk)
@@ -941,9 +867,7 @@ class EmbeddingService(BaseService):
 
         return self._db.execute_query(query, [file_path])
 
-    def _delete_embeddings_for_chunks(
-        self, chunk_ids: list[ChunkId], provider: str, model: str
-    ) -> None:
+    def _delete_embeddings_for_chunks(self, chunk_ids: list[ChunkId], provider: str, model: str) -> None:
         """Delete existing embeddings for specific chunks and provider/model."""
         if not chunk_ids:
             return
@@ -974,9 +898,7 @@ class EmbeddingService(BaseService):
             except Exception as e:
                 logger.error(f"Failed to delete from {table_name}: {e}")
 
-        logger.debug(
-            f"Deleted existing embeddings for {len(chunk_ids)} chunks from {deleted_count} tables"
-        )
+        logger.debug(f"Deleted existing embeddings for {len(chunk_ids)} chunks from {deleted_count} tables")
 
     def _get_all_embedding_tables(self) -> list[str]:
         """Get list of all embedding tables (dimension-specific)."""

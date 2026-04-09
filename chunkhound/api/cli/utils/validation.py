@@ -6,9 +6,7 @@ from pathlib import Path
 from loguru import logger
 
 
-def validate_path(
-    path: Path, must_exist: bool = True, must_be_dir: bool = True
-) -> bool:
+def validate_path(path: Path, must_exist: bool = True, must_be_dir: bool = True) -> bool:
     """Validate a file system path."""
     if must_exist and not path.exists():
         logger.error(f"Path does not exist: {path}")
@@ -44,9 +42,7 @@ def ensure_config_directory(config_path: Path | None) -> bool:
         return False
 
 
-def validate_provider_args(
-    provider: str | None, api_key: str | None, base_url: str | None, model: str | None
-) -> bool:
+def validate_provider_args(provider: str | None, api_key: str | None, base_url: str | None, model: str | None) -> bool:
     """Validate embedding provider arguments."""
     if not provider:
         logger.error(
@@ -90,9 +86,7 @@ def validate_provider_args(
     return True
 
 
-def validate_config_args(
-    server_type: str, base_url: str | None, model: str | None, api_key: str | None
-) -> bool:
+def validate_config_args(server_type: str, base_url: str | None, model: str | None, api_key: str | None) -> bool:
     """Validate configuration server arguments."""
     if server_type in ["openai"] and not model:
         logger.error(f"Model is required for {server_type} servers")
@@ -109,9 +103,7 @@ def validate_config_args(
     return True
 
 
-def validate_file_patterns(
-    include_patterns: list[str] | None, exclude_patterns: list[str] | None
-) -> bool:
+def validate_file_patterns(include_patterns: list[str] | None, exclude_patterns: list[str] | None) -> bool:
     """Validate file inclusion and exclusion patterns."""
     if include_patterns is not None:
         if any(not pattern.strip() for pattern in include_patterns):
@@ -133,10 +125,7 @@ def validate_server_name(name: str, existing_servers: list[str]) -> bool:
         return False
 
     if not name.replace("-", "").replace("_", "").replace(".", "").isalnum():
-        logger.error(
-            "Server name can only contain letters, numbers, hyphens, "
-            "underscores, and dots"
-        )
+        logger.error("Server name can only contain letters, numbers, hyphens, underscores, and dots")
         return False
 
     if name in existing_servers:

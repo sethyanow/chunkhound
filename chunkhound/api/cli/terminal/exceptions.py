@@ -70,11 +70,7 @@ class TerminalSetupError(TerminalError):
         if operation:
             parts.append(f"operation={operation}")
 
-        prefix = (
-            f"Terminal setup error ({', '.join(parts)})"
-            if parts
-            else "Terminal setup error"
-        )
+        prefix = f"Terminal setup error ({', '.join(parts)})" if parts else "Terminal setup error"
         message = f"{prefix}: {reason}" if reason else prefix
 
         super().__init__(message, context)
@@ -83,7 +79,7 @@ class TerminalSetupError(TerminalError):
         self.reason = reason
 
 
-class TerminalInputTimeout(TerminalError):
+class TerminalInputTimeoutError(TerminalError):
     """Raised when input operation times out.
 
     This exception is used when no input is received within the
@@ -113,7 +109,7 @@ class TerminalInputTimeout(TerminalError):
         self.operation = operation
 
 
-class TerminalUnsupportedPlatform(TerminalError):
+class TerminalUnsupportedPlatformError(TerminalError):
     """Raised when terminal operations are not supported on current platform.
 
     This exception is used when the current platform doesn't support
@@ -172,11 +168,7 @@ class TerminalConfigurationError(TerminalError):
         if config_key:
             message = f"Terminal configuration error for '{config_key}': {reason}"
         else:
-            message = (
-                f"Terminal configuration error: {reason}"
-                if reason
-                else "Terminal configuration error"
-            )
+            message = f"Terminal configuration error: {reason}" if reason else "Terminal configuration error"
 
         super().__init__(message, context)
         self.config_key = config_key

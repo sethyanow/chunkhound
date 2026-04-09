@@ -95,9 +95,7 @@ class TomlMapping(BaseMapping):
         else:
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for TOML parsing
@@ -148,33 +146,25 @@ class TomlMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         Extracts only the matched node's content to avoid duplication.
         """
         # Extract only the specific captured node's content
-        def_node = captures.get("definition") or (
-            list(captures.values())[0] if captures else None
-        )
+        def_node = captures.get("definition") or (list(captures.values())[0] if captures else None)
         if not def_node:
             return ""
 
         # Return only the matched node's text, not the entire file
         return content.decode("utf-8")[def_node.start_byte : def_node.end_byte]
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract TOML-specific metadata."""
 
         metadata = {}
 
-        def_node = captures.get("definition") or (
-            list(captures.values())[0] if captures else None
-        )
+        def_node = captures.get("definition") or (list(captures.values())[0] if captures else None)
         if def_node is not None:
             metadata["node_type"] = getattr(def_node, "type", "")
             if def_node.type == "pair":
@@ -244,24 +234,14 @@ class TomlMapping(BaseMapping):
 
                 if isinstance(data, dict):
                     # Count different types of content
-                    metadata["nested_tables"] = sum(
-                        1 for v in data.values() if isinstance(v, dict)
-                    )
-                    metadata["arrays"] = sum(
-                        1 for v in data.values() if isinstance(v, list)
-                    )
-                    metadata["scalars"] = sum(
-                        1 for v in data.values() if not isinstance(v, (dict, list))
-                    )
+                    metadata["nested_tables"] = sum(1 for v in data.values() if isinstance(v, dict))
+                    metadata["arrays"] = sum(1 for v in data.values() if isinstance(v, list))
+                    metadata["scalars"] = sum(1 for v in data.values() if not isinstance(v, (dict, list)))
 
                     # Detect array of tables pattern
                     array_of_tables = []
                     for key, value in data.items():
-                        if (
-                            isinstance(value, list)
-                            and value
-                            and isinstance(value[0], dict)
-                        ):
+                        if isinstance(value, list) and value and isinstance(value[0], dict):
                             array_of_tables.append(key)
 
                     if array_of_tables:
@@ -293,9 +273,7 @@ class TomlMapping(BaseMapping):
         if isinstance(data, dict):
             if not data:
                 return current_depth
-            return max(
-                self._calculate_toml_depth(v, current_depth + 1) for v in data.values()
-            )
+            return max(self._calculate_toml_depth(v, current_depth + 1) for v in data.values())
         elif isinstance(data, list):
             if not data:
                 return current_depth
@@ -334,9 +312,7 @@ class TomlMapping(BaseMapping):
 
         return comments
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Data formats don't have imports."""
         return []
 
@@ -393,14 +369,10 @@ class TomlMapping(BaseMapping):
                                 if isinstance(item, dict):
                                     # Add array element marker
                                     indexed_key = f"{full_key}[{idx}]"
-                                    constants.append(
-                                        {"name": indexed_key, "value": "[array_table]"}
-                                    )
+                                    constants.append({"name": indexed_key, "value": "[array_table]"})
                                     # Recurse into array element
                                     extract_from_dict(item, indexed_key)
-                    elif value is not None and isinstance(
-                        value, (str, int, float, bool)
-                    ):
+                    elif value is not None and isinstance(value, (str, int, float, bool)):
                         # Add scalar value
                         value_str = str(value)
                         if len(value_str) > MAX_CONSTANT_VALUE_LENGTH:

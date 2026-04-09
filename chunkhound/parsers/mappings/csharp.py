@@ -203,9 +203,7 @@ class CSharpMapping(BaseMapping):
         else:
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
         from chunkhound.parsers.universal_engine import UniversalConcept
 
@@ -229,11 +227,7 @@ class CSharpMapping(BaseMapping):
                     if var_name_node:
                         return self.get_node_text(var_name_node, source).strip()
                 line = def_node.start_point[0] + 1
-                node_prefix = (
-                    "local"
-                    if def_node.type == "local_declaration_statement"
-                    else "field"
-                )
+                node_prefix = "local" if def_node.type == "local_declaration_statement" else "field"
                 return f"{node_prefix}_line_{line}"
 
             return "unnamed_definition"
@@ -256,9 +250,7 @@ class CSharpMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -456,13 +448,9 @@ class CSharpMapping(BaseMapping):
 
         try:
             # Look for namespace_declaration or file_scoped_namespace_declaration
-            namespace_nodes = self.find_nodes_by_type(
-                root_node, "namespace_declaration"
-            )
+            namespace_nodes = self.find_nodes_by_type(root_node, "namespace_declaration")
             if not namespace_nodes:
-                namespace_nodes = self.find_nodes_by_type(
-                    root_node, "file_scoped_namespace_declaration"
-                )
+                namespace_nodes = self.find_nodes_by_type(root_node, "file_scoped_namespace_declaration")
 
             if not namespace_nodes:
                 return ""
@@ -470,9 +458,7 @@ class CSharpMapping(BaseMapping):
             namespace_node = namespace_nodes[0]
 
             # Find the qualified_name or identifier
-            qualified_name_node = self.find_child_by_type(
-                namespace_node, "qualified_name"
-            )
+            qualified_name_node = self.find_child_by_type(namespace_node, "qualified_name")
             if qualified_name_node:
                 return self.get_node_text(qualified_name_node, source).strip()
 
@@ -486,9 +472,7 @@ class CSharpMapping(BaseMapping):
 
         return ""
 
-    def extract_using_statements(
-        self, root_node: TSNode | None, source: str
-    ) -> list[str]:
+    def extract_using_statements(self, root_node: TSNode | None, source: str) -> list[str]:
         """Extract using statements from C# file.
 
         Args:
@@ -571,13 +555,10 @@ class CSharpMapping(BaseMapping):
                 type_params = self.get_node_text(type_params_node, source).strip()
 
                 # Look for type parameter constraints
-                constraints_nodes = self.find_children_by_type(
-                    node, "type_parameter_constraints_clause"
-                )
+                constraints_nodes = self.find_children_by_type(node, "type_parameter_constraints_clause")
                 if constraints_nodes:
                     constraints_text = " ".join(
-                        self.get_node_text(constraint_node, source).strip()
-                        for constraint_node in constraints_nodes
+                        self.get_node_text(constraint_node, source).strip() for constraint_node in constraints_nodes
                     )
                     return f"{type_params} {constraints_text}"
 
@@ -910,9 +891,7 @@ class CSharpMapping(BaseMapping):
                                     "boolean_literal",
                                     "null_literal",
                                 ):
-                                    value_text = self.get_node_text(
-                                        init_child, source
-                                    ).strip()
+                                    value_text = self.get_node_text(init_child, source).strip()
                                     break
 
                             # Truncate to 50 chars if longer
@@ -929,9 +908,7 @@ class CSharpMapping(BaseMapping):
                                     "array_type",
                                     "nullable_type",
                                 ):
-                                    type_text = self.get_node_text(
-                                        type_child, source
-                                    ).strip()
+                                    type_text = self.get_node_text(type_child, source).strip()
                                     break
 
                             const_info: dict[str, str] = {
@@ -969,9 +946,7 @@ class CSharpMapping(BaseMapping):
                                     "boolean_literal",
                                     "null_literal",
                                 ):
-                                    value_text = self.get_node_text(
-                                        init_child, source
-                                    ).strip()
+                                    value_text = self.get_node_text(init_child, source).strip()
                                     break
 
                             # Truncate to 50 chars if longer
@@ -988,9 +963,7 @@ class CSharpMapping(BaseMapping):
                                     "array_type",
                                     "nullable_type",
                                 ):
-                                    type_text = self.get_node_text(
-                                        type_child, source
-                                    ).strip()
+                                    type_text = self.get_node_text(type_child, source).strip()
                                     break
 
                             const_info: dict[str, str] = {
@@ -1004,9 +977,7 @@ class CSharpMapping(BaseMapping):
 
         return constants if constants else None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path for C#.
 
         C# using directives map to assemblies, not files.

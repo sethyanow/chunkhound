@@ -7,7 +7,7 @@ Now uses our custom terminal module instead of readchar to fix
 cross-platform compatibility issues.
 """
 
-from .terminal import Keys, TerminalError, TerminalInput, TerminalInputTimeout
+from .terminal import Keys, TerminalError, TerminalInput, TerminalInputTimeoutError
 
 
 class KeyboardInput:
@@ -113,7 +113,7 @@ class KeyboardInput:
                 # Multi-character sequences or unrecognized keys - return as-is
                 return key
 
-        except TerminalInputTimeout:
+        except TerminalInputTimeoutError:
             # Convert timeout to the same format as readchar would
             raise TimeoutError("Input timeout")
         except KeyboardInterrupt:

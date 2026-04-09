@@ -24,9 +24,7 @@ from chunkhound.utils.file_patterns import (
 from chunkhound.utils.git_safe import GitCommandError, run_git
 
 
-def build_git_pathspecs(
-    rel_prefix: str | None, include_patterns: Sequence[str]
-) -> list[str]:
+def build_git_pathspecs(rel_prefix: str | None, include_patterns: Sequence[str]) -> list[str]:
     """Build a minimal set of Git :(glob) pathspecs from CH include patterns.
 
     We only push down simple, lossless patterns:
@@ -63,9 +61,7 @@ def build_git_pathspecs(
     return specs
 
 
-def _run_git_ls_files(
-    repo_root: Path, pathspecs: list[str] | None = None
-) -> tuple[list[str], int, int]:
+def _run_git_ls_files(repo_root: Path, pathspecs: list[str] | None = None) -> tuple[list[str], int, int]:
     """Return repo-relative paths from git ls-files (tracked + untracked non-ignored)."""
     repo_root = repo_root.resolve()
     # Tracked files
@@ -76,9 +72,7 @@ def _run_git_ls_files(
             args += ["--", *pathspecs]
         res = run_git(args, cwd=repo_root, timeout_s=None)
         if res.returncode != 0:
-            logger.debug(
-                f"git ls-files failed (rc={res.returncode}): {res.stderr.strip()}"
-            )
+            logger.debug(f"git ls-files failed (rc={res.returncode}): {res.stderr.strip()}")
             tracked = []
         else:
             tracked = [p for p in (res.stdout or "").split("\x00") if p]
@@ -100,9 +94,7 @@ def _run_git_ls_files(
             args += ["--", *pathspecs]
         res = run_git(args, cwd=repo_root, timeout_s=None)
         if res.returncode != 0:
-            logger.debug(
-                f"git ls-files others failed (rc={res.returncode}): {res.stderr.strip()}"
-            )
+            logger.debug(f"git ls-files others failed (rc={res.returncode}): {res.stderr.strip()}")
             others = []
         else:
             others = [p for p in (res.stdout or "").split("\x00") if p]
@@ -185,14 +177,10 @@ def list_repo_files_via_git(
     else:
         pathspecs = [rel_prefix] if rel_prefix else None
 
-    rel_paths, rows_tracked, rows_others = _run_git_ls_files(
-        repo_root, pathspecs or None
-    )
+    rel_paths, rows_tracked, rows_others = _run_git_ls_files(repo_root, pathspecs or None)
     if rel_prefix:
         rel_prefix_slash = rel_prefix + "/"
-        rel_paths = [
-            p for p in rel_paths if p == rel_prefix or p.startswith(rel_prefix_slash)
-        ]
+        rel_paths = [p for p in rel_paths if p == rel_prefix or p.startswith(rel_prefix_slash)]
 
     # Assume caller provides patterns already normalized where needed
     norm_includes = list(include_patterns)
@@ -213,9 +201,7 @@ def list_repo_files_via_git(
             continue
 
         # Apply ChunkHound config/default excludes on top of Git results
-        if config_excludes and should_exclude_path(
-            abs_path, base_for_filters, list(config_excludes), pcache
-        ):
+        if config_excludes and should_exclude_path(abs_path, base_for_filters, list(config_excludes), pcache):
             continue
 
         # Apply include patterns

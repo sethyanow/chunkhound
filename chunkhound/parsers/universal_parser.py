@@ -87,9 +87,7 @@ class UniversalParser:
         self.base_mapping = mapping
 
         # Convert BaseMapping to LanguageMapping if needed
-        if isinstance(mapping, BaseMapping) and not hasattr(
-            mapping, "get_query_for_concept"
-        ):
+        if isinstance(mapping, BaseMapping) and not hasattr(mapping, "get_query_for_concept"):
             # Use adapter to bridge BaseMapping to LanguageMapping protocol
             adapted_mapping = MappingAdapter(mapping)
         else:
@@ -151,14 +149,9 @@ class UniversalParser:
         if file_path.suffix.lower() == ".pdf":
             content_bytes = file_path.read_bytes()
             if hasattr(self.base_mapping, "parse_pdf_content"):
-                return self.base_mapping.parse_pdf_content(
-                    content_bytes, file_path, file_id
-                )
+                return self.base_mapping.parse_pdf_content(content_bytes, file_path, file_id)
             # PDF files require a mapping with parse_pdf_content method
-            raise RuntimeError(
-                f"PDF parsing requires parse_pdf_content method, "
-                f"got {type(self.base_mapping)}"
-            )
+            raise RuntimeError(f"PDF parsing requires parse_pdf_content method, got {type(self.base_mapping)}")
 
         try:
             content = file_path.read_text(encoding="utf-8")
@@ -171,9 +164,7 @@ class UniversalParser:
                 except UnicodeDecodeError:
                     continue
             else:
-                raise UnicodeDecodeError(
-                    "utf-8", b"", 0, 1, f"Could not decode file {file_path}"
-                ) from e
+                raise UnicodeDecodeError("utf-8", b"", 0, 1, f"Could not decode file {file_path}") from e
 
         # Normalize content for consistent parsing and chunk comparison
         # Skip for binary/protocol files where CRLF is semantic
@@ -212,23 +203,13 @@ class UniversalParser:
         # Special handling for text files (no tree-sitter parsing)
         if self.engine is None:
             # Check if this is PDF content by looking at language mapping
-            if (
-                hasattr(self.base_mapping, "language")
-                and self.base_mapping.language == Language.PDF
-            ):
+            if hasattr(self.base_mapping, "language") and self.base_mapping.language == Language.PDF:
                 # Convert string content back to bytes for PDF processing
-                content_bytes = (
-                    content.encode("utf-8") if isinstance(content, str) else content
-                )
+                content_bytes = content.encode("utf-8") if isinstance(content, str) else content
                 if hasattr(self.base_mapping, "parse_pdf_content"):
-                    return self.base_mapping.parse_pdf_content(
-                        content_bytes, file_path, file_id
-                    )
+                    return self.base_mapping.parse_pdf_content(content_bytes, file_path, file_id)
                 # PDF files require a mapping with parse_pdf_content method
-                raise RuntimeError(
-                    f"PDF parsing requires parse_pdf_content method, "
-                    f"got {type(self.base_mapping)}"
-                )
+                raise RuntimeError(f"PDF parsing requires parse_pdf_content method, got {type(self.base_mapping)}")
             return self._parse_text_content(content, file_path, file_id)
 
         # Parse to AST using TreeSitterEngine
@@ -238,9 +219,7 @@ class UniversalParser:
         # Extract universal concepts using ConceptExtractor
         if self.extractor is None:
             raise RuntimeError("extractor must not be None when engine is set")
-        universal_chunks = self.extractor.extract_all_concepts(
-            ast_tree.root_node, content_bytes
-        )
+        universal_chunks = self.extractor.extract_all_concepts(ast_tree.root_node, content_bytes)
 
         # Filter out whitespace-only chunks as secondary safety measure
         filtered_chunks = []
@@ -253,18 +232,14 @@ class UniversalParser:
         universal_chunks = filtered_chunks
 
         # Apply cAST algorithm for optimal chunking
-        optimized_chunks = self._apply_cast_algorithm(
-            universal_chunks, ast_tree, content
-        )
+        optimized_chunks = self._apply_cast_algorithm(universal_chunks, ast_tree, content)
 
         # Convert to standard Chunk format
         chunks = self._convert_to_chunks(optimized_chunks, content, file_path, file_id)
 
         # Detect embedded SQL if enabled
         if self.sql_detector and ast_tree:
-            embedded_sql_chunks = self._detect_embedded_sql(
-                ast_tree, content, file_path, file_id
-            )
+            embedded_sql_chunks = self._detect_embedded_sql(ast_tree, content, file_path, file_id)
             chunks.extend(embedded_sql_chunks)
 
         # Update statistics
@@ -488,11 +463,7 @@ class UniversalParser:
             return True
 
         # Calculate combined size
-        total_content = (
-            "\n".join(chunk.content for chunk in current_group)
-            + "\n"
-            + candidate.content
-        )
+        total_content = "\n".join(chunk.content for chunk in current_group) + "\n" + candidate.content
         metrics = ChunkMetrics.from_content(total_content)
 
         # Check BOTH character and token constraints
@@ -500,8 +471,7 @@ class UniversalParser:
         safe_token_limit = self.cast_config.safe_token_limit
 
         if (
-            metrics.non_whitespace_chars
-            > self.cast_config.max_chunk_size * self.cast_config.merge_threshold
+            metrics.non_whitespace_chars > self.cast_config.max_chunk_size * self.cast_config.merge_threshold
             or estimated_tokens > safe_token_limit * self.cast_config.merge_threshold
         ):
             return False
@@ -555,9 +525,7 @@ class UniversalParser:
 
         # Combine names
         unique_names = list(dict.fromkeys(chunk.name for chunk in sorted_group))
-        merged_name = (
-            "_".join(unique_names) if len(unique_names) > 1 else unique_names[0]
-        )
+        merged_name = "_".join(unique_names) if len(unique_names) > 1 else unique_names[0]
 
         # Combine metadata
         merged_metadata = first_chunk.metadata.copy()
@@ -638,11 +606,7 @@ class UniversalParser:
             # Check for semantic incompatibility within same concept type.
             # E.g., Makefile variables and rules are both DEFINITION but differ.
             semantic_mismatch = False
-            if (
-                current_chunk.concept
-                == next_chunk.concept
-                == UniversalConcept.DEFINITION
-            ):
+            if current_chunk.concept == next_chunk.concept == UniversalConcept.DEFINITION:
                 # Check if both chunks have 'kind' metadata
                 current_kind = current_chunk.metadata.get("kind")
                 next_kind = next_chunk.metadata.get("kind")
@@ -662,10 +626,7 @@ class UniversalParser:
             max_gap = 5  # Default: allow reasonable gaps for related code
             if current_chunk.concept != next_chunk.concept:
                 # Cross-concept merge - check if either is COMMENT
-                if (
-                    current_chunk.concept == UniversalConcept.COMMENT
-                    or next_chunk.concept == UniversalConcept.COMMENT
-                ):
+                if current_chunk.concept == UniversalConcept.COMMENT or next_chunk.concept == UniversalConcept.COMMENT:
                     max_gap = 1  # Strict: only merge immediately adjacent comments/code
 
             # Simple merge condition: fits in size limit and close proximity
@@ -709,9 +670,7 @@ class UniversalParser:
                     name=merged_name,
                     content=combined_content,
                     start_line=current_chunk.start_line,
-                    end_line=next_chunk.end_line
-                    if is_new_content
-                    else current_chunk.end_line,
+                    end_line=next_chunk.end_line if is_new_content else current_chunk.end_line,
                     metadata=merged_metadata,
                     language_node_type=merged_language_node_type,
                 )
@@ -792,9 +751,7 @@ class UniversalParser:
             end_byte = None
             if content:
                 lines_before = content.split("\n")[: uc.start_line - 1]
-                start_byte = ByteOffset(
-                    sum(len(line) + 1 for line in lines_before)
-                )  # +1 for newlines
+                start_byte = ByteOffset(sum(len(line) + 1 for line in lines_before))  # +1 for newlines
                 end_byte = ByteOffset(start_byte + len(uc.content.encode("utf-8")))
 
             chunk = Chunk(
@@ -815,9 +772,7 @@ class UniversalParser:
 
         return chunks
 
-    def _map_concept_to_chunk_type(
-        self, concept: UniversalConcept, metadata: dict[str, Any]
-    ) -> ChunkType:
+    def _map_concept_to_chunk_type(self, concept: UniversalConcept, metadata: dict[str, Any]) -> ChunkType:
         """Map UniversalConcept to ChunkType for compatibility.
 
         Args:
@@ -885,10 +840,7 @@ class UniversalParser:
                 return ChunkType.PROPERTY
             elif kind == "field" or "field" in node_type:
                 return ChunkType.FIELD
-            elif (
-                kind in {"variable", "loop_variable", "constant", "const", "define"}
-                or "variable" in node_type
-            ):
+            elif kind in {"variable", "loop_variable", "constant", "const", "define"} or "variable" in node_type:
                 return ChunkType.VARIABLE
             elif kind in {"type_alias", "typedef"} or "type_alias" in node_type:
                 return ChunkType.TYPE_ALIAS
@@ -920,9 +872,7 @@ class UniversalParser:
         else:
             return ChunkType.UNKNOWN
 
-    def _parse_text_content(
-        self, content: str, file_path: Path | None, file_id: FileId | None
-    ) -> list[Chunk]:
+    def _parse_text_content(self, content: str, file_path: Path | None, file_id: FileId | None) -> list[Chunk]:
         """Parse plain text content without tree-sitter.
 
         For text files, we simply chunk by paragraphs or fixed-size blocks.

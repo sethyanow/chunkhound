@@ -69,15 +69,11 @@ class DatabaseProvider(Protocol):
         """Create database indexes for performance optimization."""
         ...
 
-    def create_vector_index(
-        self, provider: str, model: str, dims: int, metric: str = "cosine"
-    ) -> None:
+    def create_vector_index(self, provider: str, model: str, dims: int, metric: str = "cosine") -> None:
         """Create vector index for specific provider/model/dims combination."""
         ...
 
-    def drop_vector_index(
-        self, provider: str, model: str, dims: int, metric: str = "cosine"
-    ) -> str:
+    def drop_vector_index(self, provider: str, model: str, dims: int, metric: str = "cosine") -> str:
         """Drop vector index for specific provider/model/dims combination."""
         ...
 
@@ -86,15 +82,11 @@ class DatabaseProvider(Protocol):
         """Insert file record and return file ID."""
         ...
 
-    def get_file_by_path(
-        self, path: str, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    def get_file_by_path(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path."""
         ...
 
-    def get_file_by_id(
-        self, file_id: int, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    def get_file_by_id(self, file_id: int, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by ID."""
         ...
 
@@ -114,9 +106,7 @@ class DatabaseProvider(Protocol):
         """Insert file record and return file ID (asynchronous)."""
         ...
 
-    async def get_file_by_path_async(
-        self, path: str, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    async def get_file_by_path_async(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path (asynchronous)."""
         ...
 
@@ -133,21 +123,15 @@ class DatabaseProvider(Protocol):
         """Insert multiple chunks in batch and return chunk IDs."""
         ...
 
-    def get_chunk_by_id(
-        self, chunk_id: int, as_model: bool = False
-    ) -> dict[str, Any] | Chunk | None:
+    def get_chunk_by_id(self, chunk_id: int, as_model: bool = False) -> dict[str, Any] | Chunk | None:
         """Get chunk record by ID."""
         ...
 
-    def get_chunks_by_file_id(
-        self, file_id: int, as_model: bool = False
-    ) -> list[dict[str, Any] | Chunk]:
+    def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Get all chunks for a specific file."""
         ...
 
-    async def get_chunks_by_file_id_async(
-        self, file_id: int, as_model: bool = False
-    ) -> list[dict[str, Any] | Chunk]:
+    async def get_chunks_by_file_id_async(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Get all chunks for a specific file (asynchronous)."""
         ...
 
@@ -195,15 +179,11 @@ class DatabaseProvider(Protocol):
         """
         ...
 
-    def get_embedding_by_chunk_id(
-        self, chunk_id: int, provider: str, model: str
-    ) -> Embedding | None:
+    def get_embedding_by_chunk_id(self, chunk_id: int, provider: str, model: str) -> Embedding | None:
         """Get embedding for specific chunk, provider, and model."""
         ...
 
-    def get_existing_embeddings(
-        self, chunk_ids: list[int], provider: str, model: str
-    ) -> set[int]:
+    def get_existing_embeddings(self, chunk_ids: list[int], provider: str, model: str) -> set[int]:
         """Get set of chunk IDs that already have embeddings for given provider/model."""
         ...
 
@@ -334,9 +314,7 @@ class DatabaseProvider(Protocol):
         """
         ...
 
-    def get_chunks_in_range(
-        self, file_id: int, start_line: int, end_line: int
-    ) -> list[dict[str, Any]]:
+    def get_chunks_in_range(self, file_id: int, start_line: int, end_line: int) -> list[dict[str, Any]]:
         """Get chunks overlapping a line range within a file.
 
         Used for window expansion in research to find neighboring context.
@@ -369,9 +347,7 @@ class DatabaseProvider(Protocol):
         ...
 
     # Transaction and Bulk Operations
-    def execute_query(
-        self, query: str, params: list[Any] | None = None
-    ) -> list[dict[str, Any]]:
+    def execute_query(self, query: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         """Execute a SQL query and return results."""
         ...
 
@@ -400,9 +376,7 @@ class DatabaseProvider(Protocol):
         ...
 
     # File Processing Integration
-    async def process_file(
-        self, file_path: Path, skip_embeddings: bool = False
-    ) -> dict[str, Any]:
+    async def process_file(self, file_path: Path, skip_embeddings: bool = False) -> dict[str, Any]:
         """Process a file end-to-end: parse, chunk, and store in database."""
         ...
 
@@ -458,9 +432,7 @@ class DatabaseProvider(Protocol):
         """Return all symbols for a given file_id."""
         ...
 
-    def query_symbols_by_range(
-        self, file_path: str, line: int
-    ) -> dict[str, Any] | None:
+    def query_symbols_by_range(self, file_path: str, line: int) -> dict[str, Any] | None:
         """Return the innermost symbol containing the given line.
 
         Returns the symbol with the smallest range that covers the line,
@@ -468,9 +440,7 @@ class DatabaseProvider(Protocol):
         """
         ...
 
-    def query_symbols_by_range_overlap(
-        self, file_path: str, min_line: int, max_line: int
-    ) -> list[dict[str, Any]]:
+    def query_symbols_by_range_overlap(self, file_path: str, min_line: int, max_line: int) -> list[dict[str, Any]]:
         """Return all symbols whose range overlaps [min_line, max_line]."""
         ...
 

@@ -99,9 +99,7 @@ class BFSExplorationStrategy:
             embedding_manager=embedding_manager,
             config=config,
         )
-        self._question_generator = QuestionGenerator(
-            llm_manager, import_context_service=import_context_service
-        )
+        self._question_generator = QuestionGenerator(llm_manager, import_context_service=import_context_service)
 
     @property
     def name(self) -> str:
@@ -145,10 +143,7 @@ class BFSExplorationStrategy:
             if not current_level:
                 break
 
-            logger.info(
-                f"{log_prefix}: Processing depth {depth}/{self._max_depth}, "
-                f"nodes: {len(current_level)}"
-            )
+            logger.info(f"{log_prefix}: Processing depth {depth}/{self._max_depth}, nodes: {len(current_level)}")
 
             # Process all nodes at this level concurrently
             node_contexts = []
@@ -178,9 +173,7 @@ class BFSExplorationStrategy:
             next_level: list[BFSExplorationNode] = []
             for (node, node_ctx), children_result in zip(node_contexts, children_lists):
                 if isinstance(children_result, Exception):
-                    logger.error(
-                        f"{log_prefix} node failed for '{node.query[:50]}...': {children_result}"
-                    )
+                    logger.error(f"{log_prefix} node failed for '{node.query[:50]}...': {children_result}")
                     continue
 
                 assert isinstance(children_result, list)
@@ -199,9 +192,7 @@ class BFSExplorationStrategy:
 
             # Synthesize if too many questions
             if len(next_level) > MAX_FOLLOWUP_QUESTIONS:
-                next_level = await self._synthesize_questions(
-                    next_level, context, MAX_FOLLOWUP_QUESTIONS
-                )
+                next_level = await self._synthesize_questions(next_level, context, MAX_FOLLOWUP_QUESTIONS)
 
             current_level = next_level
 
@@ -356,9 +347,7 @@ class BFSExplorationStrategy:
             node.file_contents = {}
 
         # Check for new information (termination rule)
-        has_new_info, dedup_stats = self._detect_new_information(
-            node, node.chunks, global_explored_data
-        )
+        has_new_info, dedup_stats = self._detect_new_information(node, node.chunks, global_explored_data)
         node.new_chunk_count = dedup_stats["new_chunks"]
         node.duplicate_chunk_count = dedup_stats["duplicate_chunks"]
 
@@ -372,9 +361,7 @@ class BFSExplorationStrategy:
 
         # Skip follow-up generation at max depth
         if depth >= self._max_depth:
-            logger.debug(
-                f"Node at max depth {depth}/{self._max_depth}, skipping follow-ups"
-            )
+            logger.debug(f"Node at max depth {depth}/{self._max_depth}, skipping follow-ups")
             return []
 
         # Generate follow-up questions
@@ -415,21 +402,14 @@ class BFSExplorationStrategy:
         if not context.ancestors:
             return query
 
-        parent_context = (
-            context.ancestors[-2:]
-            if len(context.ancestors) >= 2
-            else context.ancestors[-1:]
-        )
+        parent_context = context.ancestors[-2:] if len(context.ancestors) >= 2 else context.ancestors[-1:]
         context_str = " → ".join(parent_context)
         return f"{query} | Context: {context_str}"
 
     def _get_file_budget(self, depth: int) -> int:
         """Get file content token budget based on depth."""
         depth_ratio = depth / max(self._max_depth, 1)
-        return int(
-            FILE_CONTENT_TOKENS_MIN
-            + (FILE_CONTENT_TOKENS_MAX - FILE_CONTENT_TOKENS_MIN) * depth_ratio
-        )
+        return int(FILE_CONTENT_TOKENS_MIN + (FILE_CONTENT_TOKENS_MAX - FILE_CONTENT_TOKENS_MIN) * depth_ratio)
 
     async def _read_files_with_budget(
         self, chunks: list[dict[str, Any]], max_tokens: int | None = None
@@ -455,11 +435,7 @@ class BFSExplorationStrategy:
                 break
 
             try:
-                path = (
-                    Path(file_path)
-                    if Path(file_path).is_absolute()
-                    else base_dir / file_path
-                )
+                path = Path(file_path) if Path(file_path).is_absolute() else base_dir / file_path
                 if not path.exists():
                     continue
 
@@ -570,9 +546,7 @@ class BFSExplorationStrategy:
 
         return False
 
-    def _update_global_explored_data(
-        self, global_explored_data: dict[str, Any], node: BFSExplorationNode
-    ) -> None:
+    def _update_global_explored_data(self, global_explored_data: dict[str, Any], node: BFSExplorationNode) -> None:
         """Update global explored data with discoveries from a node."""
         # Track line coverage from chunks instead of file content length
         for chunk in node.chunks:
@@ -584,9 +558,7 @@ class BFSExplorationStrategy:
 
             # Track line coverage per file
             coverage = global_explored_data.setdefault("file_line_coverage", {})
-            coverage.setdefault(file_path, set()).update(
-                range(start_line, end_line + 1)
-            )
+            coverage.setdefault(file_path, set()).update(range(start_line, end_line + 1))
 
             # Mark as "explored" if we've seen 50+ lines (heuristic to prevent re-exploration)
             if len(coverage[file_path]) > 50:
@@ -596,14 +568,10 @@ class BFSExplorationStrategy:
             file_path = chunk.get("file_path")
             if file_path:
                 expanded_range = self._get_chunk_expanded_range(chunk)
-                global_explored_data["chunk_ranges"].setdefault(file_path, []).append(
-                    expanded_range
-                )
+                global_explored_data["chunk_ranges"].setdefault(file_path, []).append(expanded_range)
                 global_explored_data["chunks"].append(chunk)
 
-    def _build_exploration_gist(
-        self, global_explored_data: dict[str, Any]
-    ) -> str | None:
+    def _build_exploration_gist(self, global_explored_data: dict[str, Any]) -> str | None:
         """Build summary of explored files for follow-up generation."""
         chunks = global_explored_data["chunks"]
         if not chunks:
@@ -655,9 +623,7 @@ class BFSExplorationStrategy:
             for n in result
         ]
 
-    def _aggregate_chunks(
-        self, all_nodes: list[BFSExplorationNode]
-    ) -> list[dict[str, Any]]:
+    def _aggregate_chunks(self, all_nodes: list[BFSExplorationNode]) -> list[dict[str, Any]]:
         """Aggregate all chunks from BFS tree, deduplicated by chunk_id.
 
         Keeps the highest-scoring version when the same chunk appears multiple times,
@@ -814,9 +780,7 @@ class BFSExplorationStrategy:
         if len(file_documents) <= max_batch:
             logger.debug(f"Reranking {len(file_documents)} files in single batch")
             try:
-                rerank_results = await embedding_provider.rerank(
-                    query=root_query, documents=file_documents, top_k=None
-                )
+                rerank_results = await embedding_provider.rerank(query=root_query, documents=file_documents, top_k=None)
 
                 # Convert to (file_path, score) tuples
                 results = []
@@ -827,8 +791,7 @@ class BFSExplorationStrategy:
                     # Validate index bounds
                     if idx < 0 or idx >= len(file_paths):
                         logger.warning(
-                            f"Reranker returned invalid index {idx} "
-                            f"(valid range: 0-{len(file_paths) - 1}), skipping"
+                            f"Reranker returned invalid index {idx} (valid range: 0-{len(file_paths) - 1}), skipping"
                         )
                         continue
 
@@ -842,8 +805,7 @@ class BFSExplorationStrategy:
         # Multiple batches required
         num_batches = math.ceil(len(file_documents) / max_batch)
         logger.info(
-            f"Reranking {len(file_documents)} files in {num_batches} batches "
-            f"of {max_batch} ({embedding_provider.name})"
+            f"Reranking {len(file_documents)} files in {num_batches} batches of {max_batch} ({embedding_provider.name})"
         )
 
         all_results: list[tuple[str, float]] = []
@@ -854,10 +816,7 @@ class BFSExplorationStrategy:
             batch_documents = file_documents[start_idx:end_idx]
             batch_file_paths = file_paths[start_idx:end_idx]
 
-            logger.debug(
-                f"Reranking batch {batch_idx + 1}/{num_batches} "
-                f"({len(batch_documents)} files)"
-            )
+            logger.debug(f"Reranking batch {batch_idx + 1}/{num_batches} ({len(batch_documents)} files)")
 
             try:
                 rerank_results = await embedding_provider.rerank(
@@ -870,9 +829,7 @@ class BFSExplorationStrategy:
                     score = result.score
 
                     # Validate index within batch
-                    if batch_relative_idx < 0 or batch_relative_idx >= len(
-                        batch_file_paths
-                    ):
+                    if batch_relative_idx < 0 or batch_relative_idx >= len(batch_file_paths):
                         logger.warning(
                             f"Batch {batch_idx + 1} returned invalid index "
                             f"{batch_relative_idx} (valid range: 0-{len(batch_file_paths) - 1}), "
@@ -880,14 +837,11 @@ class BFSExplorationStrategy:
                         )
                         continue
 
-                    all_results.append(
-                        (batch_file_paths[batch_relative_idx], float(score))
-                    )
+                    all_results.append((batch_file_paths[batch_relative_idx], float(score)))
 
             except Exception as e:
                 logger.error(
-                    f"Batch {batch_idx + 1}/{num_batches} reranking failed: {e}, "
-                    f"continuing with remaining batches"
+                    f"Batch {batch_idx + 1}/{num_batches} reranking failed: {e}, continuing with remaining batches"
                 )
                 # Continue processing other batches
                 continue
@@ -919,16 +873,11 @@ class BFSExplorationStrategy:
         # Apply elbow detection using shared utility (handles sorting internally)
         original_count = len(chunks)
         sorted_chunks, elbow_stats = filter_chunks_by_elbow(chunks, score_key=None)
-        logger.info(
-            f"Elbow detection: keeping {len(sorted_chunks)}/{original_count} chunks"
-        )
+        logger.info(f"Elbow detection: keeping {len(sorted_chunks)}/{original_count} chunks")
 
         # Read files for elbow-filtered chunks (token budget applied here)
         elbow_filtered_files = await self._read_files_for_synthesis(sorted_chunks)
-        logger.info(
-            f"Read {len(elbow_filtered_files)} files for "
-            f"{len(sorted_chunks)} elbow-filtered chunks"
-        )
+        logger.info(f"Read {len(elbow_filtered_files)} files for {len(sorted_chunks)} elbow-filtered chunks")
 
         # Build file-to-chunks mapping (use read files only)
         file_to_chunks: dict[str, list[dict[str, Any]]] = {}
@@ -945,9 +894,7 @@ class BFSExplorationStrategy:
 
         for file_path, file_chunks in file_to_chunks.items():
             # Sort chunks by score and take top N chunks
-            sorted_file_chunks = sorted(
-                file_chunks, key=get_unified_score, reverse=True
-            )
+            sorted_file_chunks = sorted(file_chunks, key=get_unified_score, reverse=True)
             top_chunks = sorted_file_chunks[:MAX_CHUNKS_PER_FILE_REPR]
 
             # Build representative document
@@ -969,9 +916,7 @@ class BFSExplorationStrategy:
             file_documents.append(document)
 
         # Rerank files by relevance to root query using explicit batch management
-        rerank_results = await self._rerank_files_in_batches(
-            root_query, file_paths, file_documents
-        )
+        rerank_results = await self._rerank_files_in_batches(root_query, file_paths, file_documents)
 
         # Initialize file priorities dict
         file_priorities: dict[str, float] = {}
@@ -981,18 +926,12 @@ class BFSExplorationStrategy:
             for file_path, score in rerank_results:
                 file_priorities[file_path] = score
 
-            logger.info(
-                f"Reranked {len(file_priorities)} files for synthesis budget allocation"
-            )
+            logger.info(f"Reranked {len(file_priorities)} files for synthesis budget allocation")
         else:
             # Fallback: Use accumulated chunk scores
-            logger.warning(
-                "File reranking returned no results, falling back to chunk scores"
-            )
+            logger.warning("File reranking returned no results, falling back to chunk scores")
             for file_path, file_chunks in file_to_chunks.items():
-                file_priorities[file_path] = sum(
-                    get_unified_score(c) for c in file_chunks
-                )
+                file_priorities[file_path] = sum(get_unified_score(c) for c in file_chunks)
 
             logger.info(f"Using chunk score fallback for {len(file_priorities)} files")
 
@@ -1016,8 +955,7 @@ class BFSExplorationStrategy:
 
         if missing_files:
             logger.debug(
-                f"Synthesis budget: {len(missing_files)} files exceeded budget "
-                f"(kept {len(selected_files)} files)"
+                f"Synthesis budget: {len(missing_files)} files exceeded budget (kept {len(selected_files)} files)"
             )
 
         filter_stats = {

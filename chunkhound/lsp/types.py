@@ -67,9 +67,7 @@ class LSPCapabilityError(LSPError):
         self.method = method
         self.server_name = server_name
         server_part = f" ({server_name})" if server_name else ""
-        super().__init__(
-            f"Server{server_part} does not advertise capability for: {method}"
-        )
+        super().__init__(f"Server{server_part} does not advertise capability for: {method}")
 
 
 class LSPTransportError(LSPError):

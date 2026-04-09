@@ -119,11 +119,7 @@ def build_generation_stats_with_coverage(
             "referenced": referenced_files,
             "total_indexed": files_denominator or 0,
             "basis": files_basis,
-            "coverage": (
-                f"{(referenced_files / files_denominator) * 100.0:.2f}%"
-                if files_denominator
-                else None
-            ),
+            "coverage": (f"{(referenced_files / files_denominator) * 100.0:.2f}%" if files_denominator else None),
             "referenced_in_scope": referenced_in_scope,
             "unreferenced_in_scope": unreferenced_in_scope,
         },
@@ -131,11 +127,7 @@ def build_generation_stats_with_coverage(
             "referenced": referenced_chunks,
             "total_indexed": chunks_denominator or 0,
             "basis": chunks_basis,
-            "coverage": (
-                f"{(referenced_chunks / chunks_denominator) * 100.0:.2f}%"
-                if chunks_denominator
-                else None
-            ),
+            "coverage": (f"{(referenced_chunks / chunks_denominator) * 100.0:.2f}%" if chunks_denominator else None),
         },
     }
 
@@ -164,9 +156,7 @@ def build_generation_stats(
     scope_label: str,
 ) -> dict[str, Any]:
     """Build minimal generation stats for Code Mapper metadata."""
-    scope_total_files, scope_total_chunks, _scoped_files = compute_db_scope_stats(
-        services, scope_label
-    )
+    scope_total_files, scope_total_chunks, _scoped_files = compute_db_scope_stats(services, scope_label)
     stats, _coverage = build_generation_stats_with_coverage(
         generator_mode=generator_mode,
         total_research_calls=total_research_calls,

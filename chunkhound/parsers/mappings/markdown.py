@@ -236,11 +236,7 @@ class MarkdownMapping(BaseMapping):
             marker_node = None
             for i in range(node.child_count):
                 child = node.child(i)
-                if (
-                    child
-                    and child.type.startswith("atx_h")
-                    and child.type.endswith("_marker")
-                ):
+                if child and child.type.startswith("atx_h") and child.type.endswith("_marker"):
                     marker_node = child
                     break
 
@@ -298,10 +294,7 @@ class MarkdownMapping(BaseMapping):
         if first_item:
             # Look for ordered list marker (numbers followed by . or ))
             for child in self.walk_tree(first_item):
-                if (
-                    child.type == "list_marker_dot"
-                    or child.type == "list_marker_parenthesis"
-                ):
+                if child.type == "list_marker_dot" or child.type == "list_marker_parenthesis":
                     return "ordered"
                 elif child.type in (
                     "list_marker_minus",
@@ -404,9 +397,7 @@ class MarkdownMapping(BaseMapping):
 
         return True
 
-    def create_heading_chunk(
-        self, node: TSNode | None, source: str, file_path, name: str
-    ) -> dict[str, Any]:
+    def create_heading_chunk(self, node: TSNode | None, source: str, file_path, name: str) -> dict[str, Any]:
         """Create a chunk dictionary for a Markdown heading.
 
         Args:
@@ -435,9 +426,7 @@ class MarkdownMapping(BaseMapping):
             heading_type=node.type,
         )
 
-    def create_code_block_chunk(
-        self, node: TSNode | None, source: str, file_path, name: str
-    ) -> dict[str, Any]:
+    def create_code_block_chunk(self, node: TSNode | None, source: str, file_path, name: str) -> dict[str, Any]:
         """Create a chunk dictionary for a Markdown code block.
 
         Args:
@@ -452,11 +441,7 @@ class MarkdownMapping(BaseMapping):
         if node is None:
             return {}
 
-        language = (
-            self.extract_code_language(node, source)
-            if node.type == "fenced_code_block"
-            else ""
-        )
+        language = self.extract_code_language(node, source) if node.type == "fenced_code_block" else ""
 
         return self.create_chunk_dict(
             node=node,
@@ -469,9 +454,7 @@ class MarkdownMapping(BaseMapping):
             block_type=node.type,
         )
 
-    def create_list_chunk(
-        self, node: TSNode | None, source: str, file_path, name: str
-    ) -> dict[str, Any]:
+    def create_list_chunk(self, node: TSNode | None, source: str, file_path, name: str) -> dict[str, Any]:
         """Create a chunk dictionary for a Markdown list.
 
         Args:
@@ -566,9 +549,7 @@ class MarkdownMapping(BaseMapping):
         else:
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for markdown processing
@@ -656,9 +637,7 @@ class MarkdownMapping(BaseMapping):
         else:
             return f"unnamed_{concept.value}"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         This is the critical method - it must preserve the original markdown text
@@ -692,13 +671,9 @@ class MarkdownMapping(BaseMapping):
             # Add concept-specific metadata
             if concept == UniversalConcept.DEFINITION:
                 if def_node.type in ("atx_heading", "setext_heading"):
-                    metadata["heading_level"] = self.extract_heading_level(
-                        def_node, source
-                    )
+                    metadata["heading_level"] = self.extract_heading_level(def_node, source)
                 elif def_node.type == "fenced_code_block":
-                    metadata["code_language"] = self.extract_code_language(
-                        def_node, source
-                    )
+                    metadata["code_language"] = self.extract_code_language(def_node, source)
 
             elif concept == UniversalConcept.BLOCK:
                 if def_node.type == "list":
@@ -742,8 +717,6 @@ class MarkdownMapping(BaseMapping):
 
         return None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Data formats don't have imports."""
         return []

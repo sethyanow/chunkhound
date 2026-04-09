@@ -44,9 +44,7 @@ class PDFMapping(BaseMapping):
         super().__init__(Language.PDF)
         self._splitter = ChunkSplitter(cast_config or CASTConfig())
 
-    def parse_pdf_content(
-        self, content_bytes: bytes, file_path: Path | None, file_id: FileId | None
-    ) -> list[Chunk]:
+    def parse_pdf_content(self, content_bytes: bytes, file_path: Path | None, file_id: FileId | None) -> list[Chunk]:
         """Parse PDF content and extract semantic chunks.
 
         This method handles the complete PDF parsing workflow:
@@ -122,9 +120,7 @@ class PDFMapping(BaseMapping):
                         current_line += para_lines
 
                 # If no paragraphs were extracted, create a single page chunk
-                if not any(
-                    c.symbol.startswith(f"page_{page_num + 1}_") for c in chunks
-                ):
+                if not any(c.symbol.startswith(f"page_{page_num + 1}_") for c in chunks):
                     page_lines = len(page_text.split("\n"))
 
                     chunks.extend(
@@ -198,9 +194,7 @@ class PDFMapping(BaseMapping):
         # PDF doesn't use tree-sitter queries - we'll parse using text extraction
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Extract text from PDF content
@@ -243,19 +237,14 @@ class PDFMapping(BaseMapping):
                             return f"page_{page_num}_numbered_item_{item_text[:20]}"
 
                     # If it's the first non-empty line on the page, use it
-                    if i == 0 or (
-                        i > 0 and not any(lines[j].strip() for j in range(i))
-                    ):
+                    if i == 0 or (i > 0 and not any(lines[j].strip() for j in range(i))):
                         return f"page_{page_num}_first_line_{line[:30]}"
 
             return "pdf_definition"
 
         elif concept == UniversalConcept.BLOCK:
             # Identify text blocks (paragraphs, pages)
-            total_paragraphs = sum(
-                len(self._split_into_paragraphs(page_text))
-                for page_text in page_info.values()
-            )
+            total_paragraphs = sum(len(self._split_into_paragraphs(page_text)) for page_text in page_info.values())
             total_pages = len(page_info)
 
             if total_pages > 1:
@@ -299,9 +288,7 @@ class PDFMapping(BaseMapping):
                         return f"page_{page_num}_cross_reference"
                     elif line.startswith(("http://", "https://", "www.")):
                         return f"page_{page_num}_url_reference"
-                    elif re.search(
-                        r"\b[\w.-]+\.(pdf|doc|docx|txt)\b", line, re.IGNORECASE
-                    ):
+                    elif re.search(r"\b[\w.-]+\.(pdf|doc|docx|txt)\b", line, re.IGNORECASE):
                         return f"page_{page_num}_document_reference"
 
             return "pdf_import"
@@ -312,9 +299,7 @@ class PDFMapping(BaseMapping):
         # This should never be reached since all enum cases are handled above
         raise ValueError(f"Unexpected concept: {concept}")
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Extract text from PDF content
@@ -331,11 +316,7 @@ class PDFMapping(BaseMapping):
                     lines = first_page_text.split("\n")
                     # Return first few non-empty lines
                     meaningful_lines = [line for line in lines[:5] if line.strip()]
-                    return (
-                        "\n".join(meaningful_lines)
-                        if meaningful_lines
-                        else first_page_text[:200]
-                    )
+                    return "\n".join(meaningful_lines) if meaningful_lines else first_page_text[:200]
             return pdf_text[:200] if pdf_text else ""
 
         elif concept == UniversalConcept.BLOCK:
@@ -345,16 +326,10 @@ class PDFMapping(BaseMapping):
                 summary_parts = []
                 for page_num, page_text in page_info.items():
                     paragraphs = self._split_into_paragraphs(page_text)
-                    summary_parts.append(
-                        f"Page {page_num}: {len(paragraphs)} paragraphs"
-                    )
+                    summary_parts.append(f"Page {page_num}: {len(paragraphs)} paragraphs")
                     if paragraphs:
                         # Include first paragraph preview
-                        preview = (
-                            paragraphs[0][:100] + "..."
-                            if len(paragraphs[0]) > 100
-                            else paragraphs[0]
-                        )
+                        preview = paragraphs[0][:100] + "..." if len(paragraphs[0]) > 100 else paragraphs[0]
                         summary_parts.append(f"Preview: {preview}")
                 return "\n".join(summary_parts)
             else:
@@ -364,9 +339,7 @@ class PDFMapping(BaseMapping):
             # Return the entire PDF content for other concepts
             return pdf_text
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract PDF-specific metadata."""
 
         pdf_text, page_info = self._extract_pdf_text(content)
@@ -406,8 +379,7 @@ class PDFMapping(BaseMapping):
 
             # Look for tables of contents or indices
             if any(
-                "table of contents" in page_text.lower()
-                or "contents" in page_text.lower()
+                "table of contents" in page_text.lower() or "contents" in page_text.lower()
                 for page_text in page_info.values()
             ):
                 metadata["has_table_of_contents"] = True
@@ -427,21 +399,15 @@ class PDFMapping(BaseMapping):
             metadata["total_paragraphs"] = len(all_paragraphs)
 
             if all_paragraphs:
-                avg_paragraph_length = sum(
-                    len(p.split()) for p in all_paragraphs
-                ) / len(all_paragraphs)
+                avg_paragraph_length = sum(len(p.split()) for p in all_paragraphs) / len(all_paragraphs)
                 metadata["avg_paragraph_words"] = int(avg_paragraph_length)
 
                 # Analyze paragraph distribution across pages
                 pages_with_single_paragraph = sum(
-                    1
-                    for page_text in page_info.values()
-                    if len(self._split_into_paragraphs(page_text)) == 1
+                    1 for page_text in page_info.values() if len(self._split_into_paragraphs(page_text)) == 1
                 )
                 pages_with_many_paragraphs = sum(
-                    1
-                    for page_text in page_info.values()
-                    if len(self._split_into_paragraphs(page_text)) > 5
+                    1 for page_text in page_info.values() if len(self._split_into_paragraphs(page_text)) > 5
                 )
 
                 if pages_with_single_paragraph > total_pages * 0.7:
@@ -474,9 +440,7 @@ class PDFMapping(BaseMapping):
                 urls = re.findall(r'https?://[^\s<>"{}|\\^`\[\]]+', page_text)
                 all_urls.extend(urls)
 
-                file_refs = re.findall(
-                    r"\b[\w.-]+\.(pdf|doc|docx|txt|html)\b", page_text, re.IGNORECASE
-                )
+                file_refs = re.findall(r"\b[\w.-]+\.(pdf|doc|docx|txt|html)\b", page_text, re.IGNORECASE)
                 all_references.extend(file_refs)
 
             if all_urls:
@@ -485,9 +449,7 @@ class PDFMapping(BaseMapping):
 
             if all_references:
                 metadata["document_references"] = len(all_references)
-                metadata["reference_types"] = list(
-                    set(ext.split(".")[-1].lower() for ext in all_references)
-                )
+                metadata["reference_types"] = list(set(ext.split(".")[-1].lower() for ext in all_references))
 
         elif concept == UniversalConcept.STRUCTURE:
             # Overall document analysis
@@ -495,8 +457,7 @@ class PDFMapping(BaseMapping):
 
             # Estimate document complexity based on structure
             total_headings = sum(
-                len(self._extract_headings(page_text, page_num))
-                for page_num, page_text in page_info.items()
+                len(self._extract_headings(page_text, page_num)) for page_num, page_text in page_info.items()
             )
 
             if total_pages > 50:
@@ -570,9 +531,7 @@ class PDFMapping(BaseMapping):
         # Fix common PDF extraction issues
         text = re.sub(r"([a-z])([A-Z])", r"\1 \2", text)  # Add space between words
         text = re.sub(r"(\w)(\d)", r"\1 \2", text)  # Space between word and number
-        text = re.sub(
-            r"(\d)([A-Za-z])", r"\1 \2", text
-        )  # Space between number and word
+        text = re.sub(r"(\d)([A-Za-z])", r"\1 \2", text)  # Space between number and word
 
         return text.strip()
 
@@ -632,15 +591,11 @@ class PDFMapping(BaseMapping):
         """Extract annotation types from text."""
         annotations = []
 
-        for match in re.finditer(
-            r"\b(NOTE|IMPORTANT|WARNING|CAUTION|ATTENTION):", text, re.IGNORECASE
-        ):
+        for match in re.finditer(r"\b(NOTE|IMPORTANT|WARNING|CAUTION|ATTENTION):", text, re.IGNORECASE):
             annotations.append(match.group(1).upper())
 
         return annotations
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Data formats don't have imports."""
         return []

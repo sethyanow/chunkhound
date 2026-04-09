@@ -103,21 +103,15 @@ class LLMConfig(BaseSettings):
         description="Model for final synthesis (large context analysis)",
     )
 
-    codex_reasoning_effort: (
-        Literal["minimal", "low", "medium", "high", "xhigh"] | None
-    ) = Field(
+    codex_reasoning_effort: Literal["minimal", "low", "medium", "high", "xhigh"] | None = Field(
         default=None,
         description="Default Codex CLI reasoning effort (Responses API thinking level)",
     )
-    codex_reasoning_effort_utility: (
-        Literal["minimal", "low", "medium", "high", "xhigh"] | None
-    ) = Field(
+    codex_reasoning_effort_utility: Literal["minimal", "low", "medium", "high", "xhigh"] | None = Field(
         default=None,
         description="Codex CLI reasoning effort override for utility-stage operations",
     )
-    codex_reasoning_effort_synthesis: (
-        Literal["minimal", "low", "medium", "high", "xhigh"] | None
-    ) = Field(
+    codex_reasoning_effort_synthesis: Literal["minimal", "low", "medium", "high", "xhigh"] | None = Field(
         default=None,
         description="Codex CLI reasoning effort override for synthesis-stage operations",
     )
@@ -181,18 +175,12 @@ class LLMConfig(BaseSettings):
         | None
     ) = Field(
         default=None,
-        description=(
-            "Override provider for AutoDoc LLM cleanup. "
-            "Falls back to the synthesis provider when unset."
-        ),
+        description=("Override provider for AutoDoc LLM cleanup. Falls back to the synthesis provider when unset."),
     )
 
     autodoc_cleanup_model: str | None = Field(
         default=None,
-        description=(
-            "Override model for AutoDoc LLM cleanup. "
-            "Falls back to the synthesis model when unset."
-        ),
+        description=("Override model for AutoDoc LLM cleanup. Falls back to the synthesis model when unset."),
     )
 
     autodoc_cleanup_reasoning_effort: (
@@ -259,8 +247,7 @@ class LLMConfig(BaseSettings):
     anthropic_clear_tool_uses_trigger_tokens: int | None = Field(
         default=None,
         description=(
-            "Input token threshold to trigger tool result clearing. "
-            "Default is 100,000 tokens if not specified."
+            "Input token threshold to trigger tool result clearing. Default is 100,000 tokens if not specified."
         ),
     )
 
@@ -269,16 +256,11 @@ class LLMConfig(BaseSettings):
         description="Number of recent tool use/result pairs to keep after clearing. Default is 3.",
     )
 
-    api_key: SecretStr | None = Field(
-        default=None, description="API key for authentication (provider-specific)"
-    )
+    api_key: SecretStr | None = Field(default=None, description="API key for authentication (provider-specific)")
 
     base_url: str | None = Field(
         default=None,
-        description=(
-            "Provider-specific base URL: "
-            "OpenAI/Ollama: API endpoint (e.g., http://localhost:11434/v1)"
-        ),
+        description=("Provider-specific base URL: OpenAI/Ollama: API endpoint (e.g., http://localhost:11434/v1)"),
     )
 
     # Internal settings
@@ -385,51 +367,33 @@ class LLMConfig(BaseSettings):
         # Add Anthropic configuration
         if resolved_utility_provider == "anthropic":
             utility_config["thinking_enabled"] = self.anthropic_thinking_enabled
-            utility_config["thinking_budget_tokens"] = (
-                self.anthropic_thinking_budget_tokens
-            )
+            utility_config["thinking_budget_tokens"] = self.anthropic_thinking_budget_tokens
             utility_config["interleaved_thinking"] = self.anthropic_interleaved_thinking
             if self.anthropic_effort:
                 utility_config["effort"] = self.anthropic_effort
             if self.anthropic_context_management_enabled:
                 utility_config["context_management_enabled"] = True
                 if self.anthropic_clear_thinking_keep_turns is not None:
-                    utility_config["clear_thinking_keep_turns"] = (
-                        self.anthropic_clear_thinking_keep_turns
-                    )
+                    utility_config["clear_thinking_keep_turns"] = self.anthropic_clear_thinking_keep_turns
                 if self.anthropic_clear_tool_uses_trigger_tokens is not None:
-                    utility_config["clear_tool_uses_trigger_tokens"] = (
-                        self.anthropic_clear_tool_uses_trigger_tokens
-                    )
+                    utility_config["clear_tool_uses_trigger_tokens"] = self.anthropic_clear_tool_uses_trigger_tokens
                 if self.anthropic_clear_tool_uses_keep is not None:
-                    utility_config["clear_tool_uses_keep"] = (
-                        self.anthropic_clear_tool_uses_keep
-                    )
+                    utility_config["clear_tool_uses_keep"] = self.anthropic_clear_tool_uses_keep
 
         if resolved_synthesis_provider == "anthropic":
             synthesis_config["thinking_enabled"] = self.anthropic_thinking_enabled
-            synthesis_config["thinking_budget_tokens"] = (
-                self.anthropic_thinking_budget_tokens
-            )
-            synthesis_config["interleaved_thinking"] = (
-                self.anthropic_interleaved_thinking
-            )
+            synthesis_config["thinking_budget_tokens"] = self.anthropic_thinking_budget_tokens
+            synthesis_config["interleaved_thinking"] = self.anthropic_interleaved_thinking
             if self.anthropic_effort:
                 synthesis_config["effort"] = self.anthropic_effort
             if self.anthropic_context_management_enabled:
                 synthesis_config["context_management_enabled"] = True
                 if self.anthropic_clear_thinking_keep_turns is not None:
-                    synthesis_config["clear_thinking_keep_turns"] = (
-                        self.anthropic_clear_thinking_keep_turns
-                    )
+                    synthesis_config["clear_thinking_keep_turns"] = self.anthropic_clear_thinking_keep_turns
                 if self.anthropic_clear_tool_uses_trigger_tokens is not None:
-                    synthesis_config["clear_tool_uses_trigger_tokens"] = (
-                        self.anthropic_clear_tool_uses_trigger_tokens
-                    )
+                    synthesis_config["clear_tool_uses_trigger_tokens"] = self.anthropic_clear_tool_uses_trigger_tokens
                 if self.anthropic_clear_tool_uses_keep is not None:
-                    synthesis_config["clear_tool_uses_keep"] = (
-                        self.anthropic_clear_tool_uses_keep
-                    )
+                    synthesis_config["clear_tool_uses_keep"] = self.anthropic_clear_tool_uses_keep
 
         return utility_config, synthesis_config
 
@@ -484,10 +448,7 @@ class LLMConfig(BaseSettings):
         resolved_utility_provider = self.utility_provider or self.provider
         resolved_synthesis_provider = self.synthesis_provider or self.provider
         no_key_required = {"ollama", "claude-code-cli", "codex-cli"}
-        if (
-            resolved_utility_provider in no_key_required
-            and resolved_synthesis_provider in no_key_required
-        ):
+        if resolved_utility_provider in no_key_required and resolved_synthesis_provider in no_key_required:
             # Ollama and Claude Code CLI don't require API key
             # Claude Code CLI uses subscription-based authentication
             return True
@@ -504,10 +465,7 @@ class LLMConfig(BaseSettings):
         """
         missing = []
 
-        if (
-            self.provider not in ("ollama", "claude-code-cli", "codex-cli")
-            and not self.api_key
-        ):
+        if self.provider not in ("ollama", "claude-code-cli", "codex-cli") and not self.api_key:
             missing.append("api_key (set CHUNKHOUND_LLM_API_KEY)")
 
         return missing
@@ -667,16 +625,10 @@ class LLMConfig(BaseSettings):
             config["synthesis_model"] = synthesis_model
         if codex_effort := os.getenv("CHUNKHOUND_LLM_CODEX_REASONING_EFFORT"):
             config["codex_reasoning_effort"] = codex_effort.strip().lower()
-        if codex_effort_util := os.getenv(
-            "CHUNKHOUND_LLM_CODEX_REASONING_EFFORT_UTILITY"
-        ):
+        if codex_effort_util := os.getenv("CHUNKHOUND_LLM_CODEX_REASONING_EFFORT_UTILITY"):
             config["codex_reasoning_effort_utility"] = codex_effort_util.strip().lower()
-        if codex_effort_syn := os.getenv(
-            "CHUNKHOUND_LLM_CODEX_REASONING_EFFORT_SYNTHESIS"
-        ):
-            config["codex_reasoning_effort_synthesis"] = (
-                codex_effort_syn.strip().lower()
-            )
+        if codex_effort_syn := os.getenv("CHUNKHOUND_LLM_CODEX_REASONING_EFFORT_SYNTHESIS"):
+            config["codex_reasoning_effort_synthesis"] = codex_effort_syn.strip().lower()
 
         if map_hyde_provider := os.getenv("CHUNKHOUND_LLM_MAP_HYDE_PROVIDER"):
             config["map_hyde_provider"] = map_hyde_provider
@@ -689,9 +641,7 @@ class LLMConfig(BaseSettings):
             config["autodoc_cleanup_provider"] = cleanup_provider
         if cleanup_model := os.getenv("CHUNKHOUND_LLM_AUTODOC_CLEANUP_MODEL"):
             config["autodoc_cleanup_model"] = cleanup_model
-        if cleanup_effort := os.getenv(
-            "CHUNKHOUND_LLM_AUTODOC_CLEANUP_REASONING_EFFORT"
-        ):
+        if cleanup_effort := os.getenv("CHUNKHOUND_LLM_AUTODOC_CLEANUP_REASONING_EFFORT"):
             config["autodoc_cleanup_reasoning_effort"] = cleanup_effort.strip().lower()
 
         return config
@@ -715,53 +665,26 @@ class LLMConfig(BaseSettings):
             overrides["utility_provider"] = args.llm_utility_provider
         if hasattr(args, "llm_synthesis_provider") and args.llm_synthesis_provider:
             overrides["synthesis_provider"] = args.llm_synthesis_provider
-        if (
-            hasattr(args, "llm_codex_reasoning_effort")
-            and args.llm_codex_reasoning_effort
-        ):
+        if hasattr(args, "llm_codex_reasoning_effort") and args.llm_codex_reasoning_effort:
             overrides["codex_reasoning_effort"] = args.llm_codex_reasoning_effort
-        if (
-            hasattr(args, "llm_codex_reasoning_effort_utility")
-            and args.llm_codex_reasoning_effort_utility
-        ):
-            overrides["codex_reasoning_effort_utility"] = (
-                args.llm_codex_reasoning_effort_utility
-            )
-        if (
-            hasattr(args, "llm_codex_reasoning_effort_synthesis")
-            and args.llm_codex_reasoning_effort_synthesis
-        ):
-            overrides["codex_reasoning_effort_synthesis"] = (
-                args.llm_codex_reasoning_effort_synthesis
-            )
+        if hasattr(args, "llm_codex_reasoning_effort_utility") and args.llm_codex_reasoning_effort_utility:
+            overrides["codex_reasoning_effort_utility"] = args.llm_codex_reasoning_effort_utility
+        if hasattr(args, "llm_codex_reasoning_effort_synthesis") and args.llm_codex_reasoning_effort_synthesis:
+            overrides["codex_reasoning_effort_synthesis"] = args.llm_codex_reasoning_effort_synthesis
 
         if hasattr(args, "llm_map_hyde_provider") and args.llm_map_hyde_provider:
             overrides["map_hyde_provider"] = args.llm_map_hyde_provider
         if hasattr(args, "llm_map_hyde_model") and args.llm_map_hyde_model:
             overrides["map_hyde_model"] = args.llm_map_hyde_model
-        if (
-            hasattr(args, "llm_map_hyde_reasoning_effort")
-            and args.llm_map_hyde_reasoning_effort
-        ):
+        if hasattr(args, "llm_map_hyde_reasoning_effort") and args.llm_map_hyde_reasoning_effort:
             overrides["map_hyde_reasoning_effort"] = args.llm_map_hyde_reasoning_effort
 
-        if (
-            hasattr(args, "llm_autodoc_cleanup_provider")
-            and args.llm_autodoc_cleanup_provider
-        ):
+        if hasattr(args, "llm_autodoc_cleanup_provider") and args.llm_autodoc_cleanup_provider:
             overrides["autodoc_cleanup_provider"] = args.llm_autodoc_cleanup_provider
-        if (
-            hasattr(args, "llm_autodoc_cleanup_model")
-            and args.llm_autodoc_cleanup_model
-        ):
+        if hasattr(args, "llm_autodoc_cleanup_model") and args.llm_autodoc_cleanup_model:
             overrides["autodoc_cleanup_model"] = args.llm_autodoc_cleanup_model
-        if (
-            hasattr(args, "llm_autodoc_cleanup_reasoning_effort")
-            and args.llm_autodoc_cleanup_reasoning_effort
-        ):
-            overrides["autodoc_cleanup_reasoning_effort"] = (
-                args.llm_autodoc_cleanup_reasoning_effort
-            )
+        if hasattr(args, "llm_autodoc_cleanup_reasoning_effort") and args.llm_autodoc_cleanup_reasoning_effort:
+            overrides["autodoc_cleanup_reasoning_effort"] = args.llm_autodoc_cleanup_reasoning_effort
 
         return overrides
 

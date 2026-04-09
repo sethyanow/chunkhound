@@ -32,9 +32,7 @@ class UnixTerminalProvider(BaseTerminalProvider):
             ImportError: If termios module is not available (Windows)
         """
         if not HAS_TERMIOS:
-            raise ImportError(
-                "termios module not available - Unix terminal provider cannot be used on this platform"
-            )
+            raise ImportError("termios module not available - Unix terminal provider cannot be used on this platform")
 
         super().__init__(config)
         self._stdin_fd = None  # Lazy initialization
@@ -110,14 +108,10 @@ class UnixTerminalProvider(BaseTerminalProvider):
         try:
             # Send terminal control sequences to normalize behavior
             if self.config.disable_bracketed_paste:
-                self._write_to_terminal(
-                    TERMINAL_CONTROL_SEQUENCES["disable_bracketed_paste"]
-                )
+                self._write_to_terminal(TERMINAL_CONTROL_SEQUENCES["disable_bracketed_paste"])
 
             if self.config.normalize_cursor_mode:
-                self._write_to_terminal(
-                    TERMINAL_CONTROL_SEQUENCES["normal_cursor_mode"]
-                )
+                self._write_to_terminal(TERMINAL_CONTROL_SEQUENCES["normal_cursor_mode"])
 
             # Set up signal handler for cleanup
             self._setup_signal_handler()
@@ -307,9 +301,7 @@ class UnixTerminalProviderLegacy(UnixTerminalProvider):
         try:
             # Only send essential control sequences
             if self.config.disable_bracketed_paste:
-                self._write_to_terminal(
-                    TERMINAL_CONTROL_SEQUENCES["disable_bracketed_paste"]
-                )
+                self._write_to_terminal(TERMINAL_CONTROL_SEQUENCES["disable_bracketed_paste"])
 
             # Don't normalize cursor mode on legacy systems
             # Set up signal handler

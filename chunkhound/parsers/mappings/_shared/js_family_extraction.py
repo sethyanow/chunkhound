@@ -150,9 +150,7 @@ class JSFamilyExtraction:
 
         return None
 
-    def _extract_enum_constants(
-        self, enum_node: TSNode, source: str
-    ) -> list[dict[str, str]] | None:
+    def _extract_enum_constants(self, enum_node: TSNode, source: str) -> list[dict[str, str]] | None:
         """Extract constants from TypeScript enum declaration.
 
         Args:
@@ -215,9 +213,7 @@ class JSFamilyExtraction:
 
         return constants if constants else None
 
-    def _extract_lexical_constants(
-        self, lexical_node: TSNode, source: str
-    ) -> list[dict[str, str]] | None:
+    def _extract_lexical_constants(self, lexical_node: TSNode, source: str) -> list[dict[str, str]] | None:
         """Extract constants from const declarations.
 
         Args:

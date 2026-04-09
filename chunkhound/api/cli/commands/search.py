@@ -65,9 +65,7 @@ async def search_command(args: argparse.Namespace, config: Config) -> None:
 
     # Create services using unified factory (exactly like MCP)
     try:
-        services = create_services(
-            db_path=db_path, config=config, embedding_manager=embedding_manager
-        )
+        services = create_services(db_path=db_path, config=config, embedding_manager=embedding_manager)
     except Exception as e:
         formatter.error(f"Failed to initialize services: {e}")
         sys.exit(1)
@@ -113,10 +111,7 @@ async def search_command(args: argparse.Namespace, config: Config) -> None:
                 provider_name = default_provider_obj.name
                 model_name = default_provider_obj.model
             except ValueError:
-                raise Exception(
-                    "No default embedding provider configured. "
-                    "Configure a default provider in config."
-                )
+                raise Exception("No default embedding provider configured. Configure a default provider in config.")
 
             # Call service directly with force_strategy
             results, pagination = await services.search_service.search_semantic(
@@ -140,9 +135,7 @@ async def search_command(args: argparse.Namespace, config: Config) -> None:
         sys.exit(1)
 
 
-def _format_search_results(
-    formatter: RichOutputFormatter, result: dict[str, Any], query: str, is_regex: bool
-) -> None:
+def _format_search_results(formatter: RichOutputFormatter, result: dict[str, Any], query: str, is_regex: bool) -> None:
     """Format and display search results.
 
     Args:
@@ -169,9 +162,7 @@ def _format_search_results(
     formatter.info(f"Query: '{query}'")
     start_idx = offset + 1
     end_idx = offset + len(results)
-    formatter.info(
-        f"Results: {len(results)} of {total} (showing {start_idx}-{end_idx})"
-    )
+    formatter.info(f"Results: {len(results)} of {total} (showing {start_idx}-{end_idx})")
 
     # Display each result
     for i, result_item in enumerate(results, 1):
@@ -215,6 +206,4 @@ def _format_search_results(
     has_more = pagination.get("has_more", False)
     if has_more:
         next_offset = pagination.get("next_offset", offset + page_size)
-        formatter.info(
-            f"\nMore results available. Use --offset {next_offset} to see next page."
-        )
+        formatter.info(f"\nMore results available. Use --offset {next_offset} to see next page.")

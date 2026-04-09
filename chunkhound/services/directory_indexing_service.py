@@ -66,9 +66,7 @@ class DirectoryIndexingService:
         if hasattr(self.indexing_coordinator, "progress"):
             self.indexing_coordinator.progress = progress
 
-    async def process_directory(
-        self, target_path: Path, no_embeddings: bool = False
-    ) -> IndexingStats:
+    async def process_directory(self, target_path: Path, no_embeddings: bool = False) -> IndexingStats:
         """
         Main processing pipeline - extracted from run.py.
 
@@ -89,9 +87,7 @@ class DirectoryIndexingService:
             # Directory processing (extracted from run.py:80-82, 253-284)
             logger.info("Phase: file processing")
             self.progress_callback("Starting file processing...")
-            process_result = await self._process_directory_files(
-                target_path, include_patterns, exclude_patterns
-            )
+            process_result = await self._process_directory_files(target_path, include_patterns, exclude_patterns)
 
             # Update stats from processing result
             self._update_stats_from_process_result(stats, process_result)
@@ -148,9 +144,7 @@ class DirectoryIndexingService:
 
         return result
 
-    async def _generate_missing_embeddings(
-        self, exclude_patterns: list[str]
-    ) -> dict[str, Any]:
+    async def _generate_missing_embeddings(self, exclude_patterns: list[str]) -> dict[str, Any]:
         """Extracted from run.py:287-312 - embedding generation workflow."""
         embed_result = await self.indexing_coordinator.generate_missing_embeddings(
             exclude_patterns=exclude_patterns,
@@ -171,13 +165,9 @@ class DirectoryIndexingService:
         except Exception as e:
             logger.warning(f"LSP symbol population failed: {e}")
 
-    def _update_stats_from_process_result(
-        self, stats: IndexingStats, result: dict[str, Any]
-    ) -> None:
+    def _update_stats_from_process_result(self, stats: IndexingStats, result: dict[str, Any]) -> None:
         """Update stats from processing result."""
-        stats.files_processed = result.get(
-            "files_processed", result.get("processed", 0)
-        )
+        stats.files_processed = result.get("files_processed", result.get("processed", 0))
         stats.files_skipped = result.get("skipped", 0)
         stats.files_errors = result.get("errors", 0)
         stats.chunks_created = result.get("total_chunks", 0)

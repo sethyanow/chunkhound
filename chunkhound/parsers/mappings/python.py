@@ -298,12 +298,7 @@ class PythonMapping(BaseMapping):
             child = superclasses_node.child(i)
             if child and child.type == "identifier":
                 superclass_name = self.get_node_text(child, source).strip()
-                if (
-                    superclass_name
-                    and superclass_name != ","
-                    and superclass_name != "("
-                    and superclass_name != ")"
-                ):
+                if superclass_name and superclass_name != "," and superclass_name != "(" and superclass_name != ")":
                     superclasses.append(superclass_name)
             elif child and child.type == "attribute":
                 # Handle qualified names like package.ClassName
@@ -546,9 +541,7 @@ class PythonMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept.
 
         Args:
@@ -640,9 +633,7 @@ class PythonMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         Args:
@@ -775,9 +766,7 @@ class PythonMapping(BaseMapping):
                     # Remove triple quotes and clean up
                     clean_text = comment_text.strip()
                     for quotes in ['"""', "'''", '"', "'"]:
-                        if clean_text.startswith(quotes) and clean_text.endswith(
-                            quotes
-                        ):
+                        if clean_text.startswith(quotes) and clean_text.endswith(quotes):
                             clean_text = clean_text[len(quotes) : -len(quotes)]
                             break
                     metadata["raw_content"] = clean_text.strip()
@@ -833,9 +822,7 @@ class PythonMapping(BaseMapping):
                         value_nodes = self.find_children_by_type(def_node, "assignment")
                         if value_nodes:
                             # Get the full assignment text and extract RHS
-                            assignment_text = self.get_node_text(
-                                value_nodes[0], source
-                            ).strip()
+                            assignment_text = self.get_node_text(value_nodes[0], source).strip()
                             if "=" in assignment_text:
                                 value = assignment_text.split("=", 1)[1].strip()
                             else:
@@ -910,15 +897,9 @@ class PythonMapping(BaseMapping):
         # Normalize: remove parentheses and collapse newlines
         imports_part = imports_part.strip().strip("()")
         imports_part = " ".join(imports_part.split())
-        return [
-            name.split(" as ")[0].strip()
-            for name in imports_part.split(",")
-            if name.strip()
-        ]
+        return [name.split(" as ")[0].strip() for name in imports_part.split(",") if name.strip()]
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve Python imports, supporting multi-import statements.
 
         Handles:
@@ -941,9 +922,7 @@ class PythonMapping(BaseMapping):
         import_text = "\n".join(line.split("#")[0] for line in import_text.split("\n"))
 
         # Handle "from ... import ..."
-        from_match = re.match(
-            r"from\s+(\.*)([a-zA-Z_][\w.]*|)\s+import\s+(.+)", import_text, re.DOTALL
-        )
+        from_match = re.match(r"from\s+(\.*)([a-zA-Z_][\w.]*|)\s+import\s+(.+)", import_text, re.DOTALL)
         if from_match:
             dots, module_part, imports_part = from_match.groups()
             module_part = module_part.strip()
@@ -963,9 +942,7 @@ class PythonMapping(BaseMapping):
             paths: list[Path] = []
             for name in imported_names:
                 full_module = f"{module_part}.{name}" if module_part else name
-                if resolved := self._resolve_module_to_path(
-                    full_module, effective_base
-                ):
+                if resolved := self._resolve_module_to_path(full_module, effective_base):
                     paths.append(resolved)
 
             # Fallback: if not all resolved as submodules, try base module
@@ -979,10 +956,6 @@ class PythonMapping(BaseMapping):
         # Handle "import a, b, c"
         if import_match := re.match(r"import\s+(.+)", import_text):
             modules = self._parse_import_names(import_match.group(1))
-            return [
-                resolved
-                for module in modules
-                if (resolved := self._resolve_module_to_path(module, base_dir))
-            ]
+            return [resolved for module in modules if (resolved := self._resolve_module_to_path(module, base_dir))]
 
         return []

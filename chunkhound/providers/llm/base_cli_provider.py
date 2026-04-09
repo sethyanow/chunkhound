@@ -119,16 +119,11 @@ class BaseCLIProvider(LLMProvider):
             LLMResponse with content and estimated token usage
         """
         try:
-            content = await self._run_cli_command(
-                prompt, system, max_completion_tokens, timeout
-            )
+            content = await self._run_cli_command(prompt, system, max_completion_tokens, timeout)
 
             # Validate content is not empty
             if not content or not content.strip():
-                logger.error(
-                    f"{self.name} returned empty content "
-                    f"(model={self._model}, prompt_length={len(prompt)})"
-                )
+                logger.error(f"{self.name} returned empty content (model={self._model}, prompt_length={len(prompt)})")
                 raise RuntimeError(
                     f"LLM returned empty response from {self.name}. This may "
                     "indicate a CLI error, authentication issue, or model refusal."
@@ -193,19 +188,12 @@ User request: {prompt}
 Respond with JSON only, no additional text."""
 
         try:
-            content = await self._run_cli_command(
-                structured_prompt, system, max_completion_tokens, timeout
-            )
+            content = await self._run_cli_command(structured_prompt, system, max_completion_tokens, timeout)
 
             # Validate content is not empty
             if not content or not content.strip():
-                logger.error(
-                    f"{self.name} structured completion returned empty content"
-                )
-                raise RuntimeError(
-                    f"LLM structured completion returned empty response from "
-                    f"{self.name}"
-                )
+                logger.error(f"{self.name} structured completion returned empty content")
+                raise RuntimeError(f"LLM structured completion returned empty response from {self.name}")
 
             # Track usage
             self._requests_made += 1
@@ -231,9 +219,7 @@ Respond with JSON only, no additional text."""
 
             # Basic schema validation (check required fields if specified)
             if "required" in json_schema:
-                missing = [
-                    field for field in json_schema["required"] if field not in parsed
-                ]
+                missing = [field for field in json_schema["required"] if field not in parsed]
                 if missing:
                     raise ValueError(f"Missing required fields: {missing}")
 

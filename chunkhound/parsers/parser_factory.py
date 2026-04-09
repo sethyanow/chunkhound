@@ -163,9 +163,7 @@ class LanguageConfig:
             lang_func = self.tree_sitter_module.language_typescript
             result = lang_func() if callable(lang_func) else lang_func
             return self._handle_language_result(result)
-        elif self.language_name == "javascript" and hasattr(
-            self.tree_sitter_module, "language_javascript"
-        ):
+        elif self.language_name == "javascript" and hasattr(self.tree_sitter_module, "language_javascript"):
             # Some versions use language_javascript
             lang_func = self.tree_sitter_module.language_javascript
             result = lang_func() if callable(lang_func) else lang_func
@@ -186,12 +184,8 @@ class LanguageConfig:
 LANGUAGE_CONFIGS: dict[Language, LanguageConfig] = {
     # Direct imports (always available - required dependencies)
     Language.PYTHON: LanguageConfig(ts_python, PythonMapping, True, "python"),
-    Language.JAVASCRIPT: LanguageConfig(
-        ts_javascript, JavaScriptMapping, True, "javascript"
-    ),
-    Language.TYPESCRIPT: LanguageConfig(
-        ts_typescript, TypeScriptMapping, True, "typescript"
-    ),
+    Language.JAVASCRIPT: LanguageConfig(ts_javascript, JavaScriptMapping, True, "javascript"),
+    Language.TYPESCRIPT: LanguageConfig(ts_typescript, TypeScriptMapping, True, "typescript"),
     Language.JAVA: LanguageConfig(ts_java, JavaMapping, True, "java"),
     Language.C: LanguageConfig(ts_c, CMapping, True, "c"),
     Language.CPP: LanguageConfig(ts_cpp, CppMapping, True, "cpp"),
@@ -226,19 +220,11 @@ LANGUAGE_CONFIGS: dict[Language, LanguageConfig] = {
     Language.SVELTE: LanguageConfig(
         ts_typescript, SvelteMapping, True, "svelte"
     ),  # Svelte uses TypeScript parser for script sections
-    Language.JSX: LanguageConfig(
-        ts_typescript, JSXMapping, True, "jsx"
-    ),  # JSX uses TSX grammar
-    Language.TSX: LanguageConfig(
-        ts_typescript, TSXMapping, True, "tsx"
-    ),  # TSX uses TS parser with tsx language
+    Language.JSX: LanguageConfig(ts_typescript, JSXMapping, True, "jsx"),  # JSX uses TSX grammar
+    Language.TSX: LanguageConfig(ts_typescript, TSXMapping, True, "tsx"),  # TSX uses TS parser with tsx language
     # Non-tree-sitter languages
-    Language.TEXT: LanguageConfig(
-        None, TextMapping, True, "text"
-    ),  # Text doesn't need tree-sitter
-    Language.PDF: LanguageConfig(
-        None, PDFMapping, True, "pdf"
-    ),  # PDF doesn't need tree-sitter
+    Language.TEXT: LanguageConfig(None, TextMapping, True, "text"),  # Text doesn't need tree-sitter
+    Language.PDF: LanguageConfig(None, PDFMapping, True, "pdf"),  # PDF doesn't need tree-sitter
 }
 
 # File extension to language mapping
@@ -437,9 +423,7 @@ class ParserFactory:
             raise SetupError(
                 parser=config.language_name,
                 missing_dependency=f"tree-sitter-{config.language_name.lower()}",
-                install_command=(
-                    f"pip install tree-sitter-{config.language_name.lower()}"
-                ),
+                install_command=(f"pip install tree-sitter-{config.language_name.lower()}"),
                 original_error="Tree-sitter module not available",
             )
 
@@ -459,9 +443,7 @@ class ParserFactory:
                 detect_embedded_sql,
             )
 
-            parser = self._maybe_wrap_yaml_parser(
-                language, universal_parser, cast_config
-            )
+            parser = self._maybe_wrap_yaml_parser(language, universal_parser, cast_config)
 
             # Cache for future use
             self._parser_cache[cache_key] = parser
@@ -472,9 +454,7 @@ class ParserFactory:
             raise SetupError(
                 parser=config.language_name,
                 missing_dependency=f"tree-sitter-{config.language_name.lower()}",
-                install_command=(
-                    f"pip install tree-sitter-{config.language_name.lower()}"
-                ),
+                install_command=(f"pip install tree-sitter-{config.language_name.lower()}"),
                 original_error=str(e),
             ) from e
 
@@ -534,9 +514,7 @@ class ParserFactory:
             return parser
         return RapidYamlParser(parser, cast_config)
 
-    def _cache_key(
-        self, language: Language, detect_embedded_sql: bool = True
-    ) -> tuple[Language, str]:
+    def _cache_key(self, language: Language, detect_embedded_sql: bool = True) -> tuple[Language, str]:
         if language == Language.YAML:
             mode = os.environ.get("CHUNKHOUND_YAML_ENGINE", "").strip().lower()
             token = f"{mode or 'rapid'}{'_nosql' if not detect_embedded_sql else ''}"
@@ -551,9 +529,7 @@ class ParserFactory:
         Returns:
             Dictionary mapping Language to availability boolean
         """
-        return {
-            language: config.available for language, config in LANGUAGE_CONFIGS.items()
-        }
+        return {language: config.available for language, config in LANGUAGE_CONFIGS.items()}
 
     def get_supported_extensions(self) -> dict[str, Language]:
         """Get all supported file extensions and their associated languages.
@@ -572,9 +548,7 @@ class ParserFactory:
         Returns:
             True if the language is supported and available
         """
-        return LANGUAGE_CONFIGS.get(
-            language, LanguageConfig(None, TextMapping, False, "unknown")
-        ).available
+        return LANGUAGE_CONFIGS.get(language, LanguageConfig(None, TextMapping, False, "unknown")).available
 
     def get_missing_dependencies(self) -> dict[Language, str]:
         """Get a list of missing dependencies for unavailable languages.
@@ -585,9 +559,7 @@ class ParserFactory:
         missing = {}
         for language, config in LANGUAGE_CONFIGS.items():
             if not config.available and language not in (Language.TEXT, Language.PDF):
-                missing[language] = (
-                    f"pip install tree-sitter-{config.language_name.lower()}"
-                )
+                missing[language] = f"pip install tree-sitter-{config.language_name.lower()}"
         return missing
 
     def clear_cache(self) -> None:
@@ -600,9 +572,7 @@ class ParserFactory:
         Returns:
             Dictionary with factory statistics
         """
-        available_count = sum(
-            1 for config in LANGUAGE_CONFIGS.values() if config.available
-        )
+        available_count = sum(1 for config in LANGUAGE_CONFIGS.values() if config.available)
         total_count = len(LANGUAGE_CONFIGS)
         cached_count = len(self._parser_cache)
 
@@ -612,9 +582,7 @@ class ParserFactory:
             "unavailable_languages": total_count - available_count,
             "cached_parsers": cached_count,
             "supported_extensions": len(EXTENSION_TO_LANGUAGE),
-            "availability_ratio": available_count / total_count
-            if total_count > 0
-            else 0.0,
+            "availability_ratio": available_count / total_count if total_count > 0 else 0.0,
         }
 
     def get_mapping_for_file(self, file_path: Path) -> LanguageMapping | None:

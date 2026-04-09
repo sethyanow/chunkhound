@@ -44,10 +44,7 @@ async def calibrate_command(args: argparse.Namespace, config: Config) -> None:
 
         # Model and provider come from config
         # (via --embedding-model and --embedding-provider args)
-        formatter.info(
-            f"Testing provider: {config.embedding.provider}, "
-            f"model: {config.embedding.model}"
-        )
+        formatter.info(f"Testing provider: {config.embedding.provider}, model: {config.embedding.model}")
 
         provider = EmbeddingProviderFactory.create_provider(config.embedding)
 
@@ -114,9 +111,7 @@ async def calibrate_command(args: argparse.Namespace, config: Config) -> None:
             logger.warning(f"Provider shutdown error: {e}")
 
 
-def _display_text_results(
-    formatter: RichOutputFormatter, result: CalibrationResult
-) -> None:
+def _display_text_results(formatter: RichOutputFormatter, result: CalibrationResult) -> None:
     """Display calibration results in human-readable text format.
 
     Args:
@@ -141,14 +136,9 @@ def _display_text_results(
                 f"{r.latency_p95_ms:>6.1f}ms (p95){marker}"
             )
         else:
-            formatter.error(
-                f"  Batch size {r.batch_size:>4}: FAILED - {r.error_message}"
-            )
+            formatter.error(f"  Batch size {r.batch_size:>4}: FAILED - {r.error_message}")
 
-    formatter.success(
-        f"\n✓ Recommended embedding batch size: "
-        f"{result.recommended_embedding_batch_size}"
-    )
+    formatter.success(f"\n✓ Recommended embedding batch size: {result.recommended_embedding_batch_size}")
 
     # Reranking results (if available)
     if result.reranking_results:
@@ -167,14 +157,9 @@ def _display_text_results(
                     f"{r.latency_p95_ms:>6.1f}ms (p95){marker}"
                 )
             else:
-                formatter.error(
-                    f"  Batch size {r.batch_size:>4}: FAILED - {r.error_message}"
-                )
+                formatter.error(f"  Batch size {r.batch_size:>4}: FAILED - {r.error_message}")
 
-        formatter.success(
-            f"\n✓ Recommended reranking batch size: "
-            f"{result.recommended_reranking_batch_size}"
-        )
+        formatter.success(f"\n✓ Recommended reranking batch size: {result.recommended_reranking_batch_size}")
 
     # Configuration suggestion
     formatter.info("\n\nSuggested Configuration:")
@@ -189,9 +174,7 @@ def _display_text_results(
     }
 
     if result.recommended_reranking_batch_size:
-        config_snippet["embedding"]["rerank_batch_size"] = (
-            result.recommended_reranking_batch_size
-        )
+        config_snippet["embedding"]["rerank_batch_size"] = result.recommended_reranking_batch_size
 
     formatter.info("\nAdd to your .chunkhound.json:")
     formatter.info(json.dumps(config_snippet, indent=2))

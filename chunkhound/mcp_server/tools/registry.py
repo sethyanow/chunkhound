@@ -67,9 +67,7 @@ def _python_type_to_json_schema_type(type_hint: Any) -> dict[str, Any]:
             return _python_type_to_json_schema_type(non_none_types[0])
         else:
             # Multiple non-None types - use anyOf
-            return {
-                "anyOf": [_python_type_to_json_schema_type(t) for t in non_none_types]
-            }
+            return {"anyOf": [_python_type_to_json_schema_type(t) for t in non_none_types]}
 
     # Handle Literal types (e.g., Literal["a", "b"])
     if origin is Literal:
@@ -124,9 +122,7 @@ def _extract_param_descriptions_from_docstring(func: Callable) -> dict[str, str]
             continue
 
         # Exit Args section when we hit another section or empty line after args
-        if in_args_section and (
-            stripped.endswith(":") or (not stripped and descriptions)
-        ):
+        if in_args_section and (stripped.endswith(":") or (not stripped and descriptions)):
             in_args_section = False
 
         # Parse parameter descriptions
@@ -171,9 +167,7 @@ def _generate_json_schema_from_signature(func: Callable) -> dict[str, Any]:
             continue
 
         # Get type hint
-        type_hint = (
-            param.annotation if param.annotation != inspect.Parameter.empty else Any
-        )
+        type_hint = param.annotation if param.annotation != inspect.Parameter.empty else Any
 
         # Convert to JSON Schema type
         schema = _python_type_to_json_schema_type(type_hint)

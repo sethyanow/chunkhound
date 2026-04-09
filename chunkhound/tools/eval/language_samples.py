@@ -58,7 +58,7 @@ def get_supported_languages() -> list[Language]:
     """Return all languages that have parser support."""
     langs = {lang for lang in EXTENSION_TO_LANGUAGE.values()}
     # Deterministic ordering by enum value
-    return sorted(langs, key=lambda l: l.value)
+    return sorted(langs, key=lambda lang: lang.value)
 
 
 def parse_languages_arg(arg: str) -> list[Language]:
@@ -114,17 +114,10 @@ def _build_language_sample_source(language: Language, token: str) -> str:
         return f"description: QA evaluation settings\nevaluation_marker: {token}\n"
 
     if language == Language.TOML:
-        return (
-            'description = "Configuration for evaluation benchmarks"\n'
-            f'evaluation_marker = "{token}"\n'
-        )
+        return f'description = "Configuration for evaluation benchmarks"\nevaluation_marker = "{token}"\n'
 
     if language == Language.HCL:
-        return (
-            'resource "chunkhound_evaluation" "qa" {\n'
-            f'  evaluation_marker = "{token}"\n'
-            "}\n"
-        )
+        return f'resource "chunkhound_evaluation" "qa" {{\n  evaluation_marker = "{token}"\n}}\n'
 
     if language == Language.TEXT:
         return (
@@ -134,11 +127,7 @@ def _build_language_sample_source(language: Language, token: str) -> str:
         )
 
     if language == Language.MAKEFILE:
-        return (
-            "# Makefile for QA evaluation\n"
-            "all:\n"
-            f'\t@echo "Running evaluation with marker: {token}"\n'
-        )
+        return f'# Makefile for QA evaluation\nall:\n\t@echo "Running evaluation with marker: {token}"\n'
 
     # Shell / scripting
     if language == Language.BASH:
@@ -287,12 +276,7 @@ def _build_language_sample_source(language: Language, token: str) -> str:
 
     # Rust style (println! in main)
     if language == Language.RUST:
-        return (
-            "fn main() {\n"
-            f'    let marker = "{token}";\n'
-            '    println!("Evaluation marker: {}", marker);\n'
-            "}\n"
-        )
+        return f'fn main() {{\n    let marker = "{token}";\n    println!("Evaluation marker: {{}}", marker);\n}}\n'
 
     # C style (printf)
     if language == Language.C:
@@ -318,18 +302,11 @@ def _build_language_sample_source(language: Language, token: str) -> str:
 
     # Swift style
     if language == Language.SWIFT:
-        return (
-            f'import Foundation\n\nlet marker = "{token}"\n'
-            + '\nprint("Evaluation marker: \\(marker)")\n'
-        )
+        return f'import Foundation\n\nlet marker = "{token}"\n' + '\nprint("Evaluation marker: \\(marker)")\n'
 
     # PHP style
     if language == Language.PHP:
-        return (
-            "<?php\n"
-            f"$marker = '{token}';\n"
-            "echo 'Evaluation marker: ' . $marker . \"\\n\";\n"
-        )
+        return f"<?php\n$marker = '{token}';\necho 'Evaluation marker: ' . $marker . \"\\n\";\n"
 
     # Objective-C style
     if language == Language.OBJC:
@@ -519,17 +496,8 @@ def _build_minimal_pdf_bytes(token: str) -> bytes:
     pdf_text += "2 0 obj\n<< /Type /Pages /Kids [3 0 R] /Count 1 >>\nendobj\n"
     content_stream = f"BT /F1 12 Tf 72 712 Td ({text}) Tj ET"
     stream_len = len(content_stream)
-    pdf_text += (
-        "3 0 obj\n"
-        "<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] "
-        "/Contents 4 0 R >>\nendobj\n"
-    )
-    pdf_text += (
-        f"4 0 obj\n<< /Length {stream_len} >>\n"
-        "stream\n"
-        f"{content_stream}\n"
-        "endstream\nendobj\n"
-    )
+    pdf_text += "3 0 obj\n<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Contents 4 0 R >>\nendobj\n"
+    pdf_text += f"4 0 obj\n<< /Length {stream_len} >>\nstream\n{content_stream}\nendstream\nendobj\n"
     pdf_text += "xref\n0 5\n0000000000 65535 f \n"
     pdf_text += "trailer\n<< /Root 1 0 R /Size 5 >>\n"
     pdf_text += "startxref\n0\n%%EOF\n"
@@ -555,45 +523,23 @@ def build_semantic_query(language: Language) -> str:
     if language == Language.CPP:
         return "C++ program that prints an evaluation marker message to standard output"
     if language == Language.JAVA:
-        return (
-            "Java class with a main method that calls System.out.println to print "
-            "an evaluation marker"
-        )
+        return "Java class with a main method that calls System.out.println to print an evaluation marker"
     if language == Language.CSHARP:
-        return (
-            "C# program whose Main method calls Console.WriteLine to print an "
-            "evaluation marker"
-        )
+        return "C# program whose Main method calls Console.WriteLine to print an evaluation marker"
     if language == Language.GO:
-        return (
-            "Go program whose main function uses fmt.Println to print an "
-            "evaluation marker"
-        )
+        return "Go program whose main function uses fmt.Println to print an evaluation marker"
     if language == Language.RUST:
-        return (
-            "Rust program whose main function uses the println! macro to print an "
-            "evaluation marker"
-        )
+        return "Rust program whose main function uses the println! macro to print an evaluation marker"
     if language == Language.SWIFT:
         return "Swift code that calls print to display an evaluation marker string"
     if language in {Language.JAVASCRIPT, Language.JSX, Language.TSX}:
-        return (
-            "JavaScript code that calls console.log to print an evaluation marker "
-            "to the console"
-        )
+        return "JavaScript code that calls console.log to print an evaluation marker to the console"
     if language == Language.TYPESCRIPT:
-        return (
-            "TypeScript function with a typed string parameter that calls "
-            "console.log to print an evaluation marker"
-        )
+        return "TypeScript function with a typed string parameter that calls console.log to print an evaluation marker"
     if language == Language.MAKEFILE:
-        return (
-            "Makefile with a default target that prints an evaluation marker when run"
-        )
+        return "Makefile with a default target that prints an evaluation marker when run"
     if language == Language.JSON:
-        return (
-            "configuration file defining an evaluation_marker field for automated tests"
-        )
+        return "configuration file defining an evaluation_marker field for automated tests"
     if language == Language.YAML:
         return "YAML configuration that stores an evaluation marker used in QA"
     if language == Language.TOML:
@@ -601,43 +547,25 @@ def build_semantic_query(language: Language) -> str:
     if language == Language.MARKDOWN:
         return "documentation explaining an evaluation marker used during QA"
     if language == Language.TEXT:
-        return (
-            "plain text document that explains the evaluation marker used for testing"
-        )
+        return "plain text document that explains the evaluation marker used for testing"
     if language == Language.HCL:
-        return (
-            "infrastructure configuration resource that includes an evaluation marker"
-        )
+        return "infrastructure configuration resource that includes an evaluation marker"
     if language == Language.VUE:
         return "single-file component that renders an evaluation marker in the template"
     if language == Language.SVELTE:
-        return (
-            "single-file component that displays an evaluation marker in the template"
-        )
+        return "single-file component that displays an evaluation marker in the template"
     if language == Language.MATLAB:
-        return (
-            "MATLAB function named eval_search_language_sample that returns an "
-            "evaluation marker string for tests"
-        )
+        return "MATLAB function named eval_search_language_sample that returns an evaluation marker string for tests"
     if language == Language.PHP:
         return "PHP function that returns an evaluation marker string used in QA"
     if language == Language.HASKELL:
         return "Haskell definition that provides an evaluation marker string for tests"
     if language == Language.GROOVY:
-        return (
-            "Groovy script that defines a marker variable and uses println to "
-            "print the evaluation marker"
-        )
+        return "Groovy script that defines a marker variable and uses println to print the evaluation marker"
     if language == Language.KOTLIN:
-        return (
-            "Kotlin program with a main function that calls println to print an "
-            "evaluation marker"
-        )
+        return "Kotlin program with a main function that calls println to print an evaluation marker"
     if language == Language.OBJC:
-        return (
-            "Objective-C program with an @implementation that uses NSLog to print "
-            "an evaluation marker"
-        )
+        return "Objective-C program with an @implementation that uses NSLog to print an evaluation marker"
     if language == Language.PDF:
         return "PDF document that describes the evaluation marker used in QA benchmarks"
 

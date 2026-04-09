@@ -98,26 +98,20 @@ class DuckDBFileRepository:
                     return existing["id"]
             raise
 
-    def get_file_by_path(
-        self, path: str, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    def get_file_by_path(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path."""
         if self.connection is None:
             raise RuntimeError("No database connection")
 
         try:
             if self._provider:
-                return self._provider._execute_in_db_thread_sync(
-                    "get_file_by_path", path, as_model
-                )
+                return self._provider._execute_in_db_thread_sync("get_file_by_path", path, as_model)
             else:
                 # Fallback for tests
                 # Normalize path to handle both absolute and relative paths
                 from chunkhound.core.utils import normalize_path_for_lookup
 
-                base_dir = (
-                    self._provider.get_base_directory() if self._provider else None
-                )
+                base_dir = self._provider.get_base_directory() if self._provider else None
                 lookup_path = normalize_path_for_lookup(path, base_dir)
                 result = self.connection_manager.connection.execute(
                     """
@@ -156,18 +150,14 @@ class DuckDBFileRepository:
             logger.error(f"Failed to get file by path {path}: {e}")
             return None
 
-    def get_file_by_id(
-        self, file_id: int, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    def get_file_by_id(self, file_id: int, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by ID."""
         if self.connection is None:
             raise RuntimeError("No database connection")
 
         try:
             if self._provider:
-                return self._provider._execute_in_db_thread_sync(
-                    "get_file_by_id_query", file_id, as_model
-                )
+                return self._provider._execute_in_db_thread_sync("get_file_by_id_query", file_id, as_model)
             else:
                 # Fallback for tests
                 result = self.connection_manager.connection.execute(
@@ -255,9 +245,7 @@ class DuckDBFileRepository:
 
                 query = f"UPDATE files SET {', '.join(set_clauses)} WHERE id = ?"
                 if self._provider:
-                    self._provider._execute_in_db_thread_sync(
-                        "update_file", file_id, size_bytes, mtime, content_hash
-                    )
+                    self._provider._execute_in_db_thread_sync("update_file", file_id, size_bytes, mtime, content_hash)
                 else:
                     # Fallback for tests
                     self.connection_manager.connection.execute(query, values)
@@ -277,9 +265,7 @@ class DuckDBFileRepository:
             if not file_record:
                 return False
 
-            file_id = (
-                file_record["id"] if isinstance(file_record, dict) else file_record.id
-            )
+            file_id = file_record["id"] if isinstance(file_record, dict) else file_record.id
 
             # Delete in correct order due to foreign key constraints
             # 1. Delete embeddings first
@@ -304,14 +290,10 @@ class DuckDBFileRepository:
                 )
 
             # 2. Delete chunks
-            self.connection_manager.connection.execute(
-                "DELETE FROM chunks WHERE file_id = ?", [file_id]
-            )
+            self.connection_manager.connection.execute("DELETE FROM chunks WHERE file_id = ?", [file_id])
 
             # 3. Delete file
-            self.connection_manager.connection.execute(
-                "DELETE FROM files WHERE id = ?", [file_id]
-            )
+            self.connection_manager.connection.execute("DELETE FROM files WHERE id = ?", [file_id])
 
             logger.debug(f"File {file_path} and all associated data deleted")
             return True

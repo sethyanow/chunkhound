@@ -8,9 +8,7 @@ from chunkhound.code_mapper.utils import compute_scope_prefix
 from chunkhound.database_factory import DatabaseServices
 
 
-def compute_db_scope_stats(
-    services: DatabaseServices, scope_label: str
-) -> tuple[int, int, set[str]]:
+def compute_db_scope_stats(services: DatabaseServices, scope_label: str) -> tuple[int, int, set[str]]:
     """Compute indexed file/chunk totals and scoped file set for the folder."""
     scope_total_files = 0
     scope_total_chunks = 0
@@ -65,9 +63,7 @@ def compute_unreferenced_scope_files(
             if p and (not prefix or str(p).replace("\\", "/").startswith(prefix))
         }
         unreferenced = [
-            str(p).replace("\\", "/")
-            for p in all_files
-            if p and str(p).replace("\\", "/") not in referenced_set
+            str(p).replace("\\", "/") for p in all_files if p and str(p).replace("\\", "/") not in referenced_set
         ]
         return unreferenced
     except (AttributeError, RuntimeError, TypeError, ValueError) as exc:

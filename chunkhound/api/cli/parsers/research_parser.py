@@ -19,7 +19,10 @@ def add_research_subparser(subparsers: Any) -> argparse.ArgumentParser:
     research_parser = subparsers.add_parser(
         "research",
         help="Perform deep code research",
-        description="Answer complex questions about codebase architecture and patterns. Synthesis budgets scale automatically based on repository size.",
+        description=(
+            "Answer complex questions about codebase architecture and patterns."
+            " Synthesis budgets scale automatically based on repository size."
+        ),
     )
 
     # Required query argument

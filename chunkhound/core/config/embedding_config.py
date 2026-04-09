@@ -65,11 +65,7 @@ def validate_rerank_configuration(
 
     if is_using_reranking:
         # For relative URLs, we need base_url
-        if (
-            rerank_url
-            and not rerank_url.startswith(("http://", "https://"))
-            and not base_url
-        ):
+        if rerank_url and not rerank_url.startswith(("http://", "https://")) and not base_url:
             raise ValueError(RERANK_BASE_URL_REQUIRED)
 
 
@@ -108,27 +104,19 @@ class EmbeddingConfig(BaseSettings):
         description="Embedding model name (uses provider default if not specified)",
     )
 
-    api_key: SecretStr | None = Field(
-        default=None, description="API key for authentication (provider-specific)"
-    )
+    api_key: SecretStr | None = Field(default=None, description="API key for authentication (provider-specific)")
 
-    base_url: str | None = Field(
-        default=None, description="Base URL for the embedding API"
-    )
+    base_url: str | None = Field(default=None, description="Base URL for the embedding API")
 
     # Azure OpenAI Configuration
-    api_version: str | None = Field(
-        default=None, description="Azure OpenAI API version (e.g., '2024-02-01')"
-    )
+    api_version: str | None = Field(default=None, description="Azure OpenAI API version (e.g., '2024-02-01')")
 
     azure_endpoint: str | None = Field(
         default=None,
         description="Azure OpenAI endpoint URL (e.g., 'https://myresource.openai.azure.com')",
     )
 
-    azure_deployment: str | None = Field(
-        default=None, description="Azure OpenAI deployment name"
-    )
+    azure_deployment: str | None = Field(default=None, description="Azure OpenAI deployment name")
 
     rerank_model: str | None = Field(
         default=None,
@@ -158,10 +146,7 @@ class EmbeddingConfig(BaseSettings):
     batch_size: int = Field(default=100, description="Internal batch size")
     rerank_batch_size: int | None = Field(
         default=None,
-        description=(
-            "Max documents per rerank batch "
-            "(overrides model defaults, bounded by model caps)"
-        ),
+        description=("Max documents per rerank batch (overrides model defaults, bounded by model caps)"),
     )
     timeout: int = Field(default=30, description="Internal timeout")
     max_retries: int = Field(default=3, description="Internal max retries")
@@ -212,11 +197,7 @@ class EmbeddingConfig(BaseSettings):
         # TEI format implies a relative /rerank endpoint when no explicit URL is given.
         # Only auto-set when base_url is present so the factory can resolve it to an
         # absolute URL; without base_url there is nothing to resolve against.
-        if (
-            self.rerank_format == "tei"
-            and self.rerank_url is None
-            and self.base_url is not None
-        ):
+        if self.rerank_format == "tei" and self.rerank_url is None and self.base_url is not None:
             self.rerank_url = "/rerank"
         elif (
             self.rerank_format == "tei"
@@ -242,21 +223,15 @@ class EmbeddingConfig(BaseSettings):
             # Validate endpoint format
             if not is_azure_openai_endpoint(self.azure_endpoint):
                 raise ValueError(
-                    "azure_endpoint must be a valid Azure OpenAI endpoint "
-                    "(e.g., 'https://myresource.openai.azure.com')"
+                    "azure_endpoint must be a valid Azure OpenAI endpoint (e.g., 'https://myresource.openai.azure.com')"
                 )
 
             # api_version is required for Azure
             if not self.api_version:
-                raise ValueError(
-                    "api_version is required when using Azure OpenAI "
-                    "(e.g., '2024-02-01')"
-                )
+                raise ValueError("api_version is required when using Azure OpenAI (e.g., '2024-02-01')")
 
             # Validate api_version format (YYYY-MM-DD or YYYY-MM-DD-<suffix>)
-            if not re.fullmatch(
-                r"\d{4}-\d{2}-\d{2}(-[a-zA-Z][a-zA-Z0-9]*)?", self.api_version
-            ):
+            if not re.fullmatch(r"\d{4}-\d{2}-\d{2}(-[a-zA-Z][a-zA-Z0-9]*)?", self.api_version):
                 raise ValueError(
                     f"api_version must be YYYY-MM-DD or YYYY-MM-DD-<suffix> format "
                     f"(e.g., '2024-02-01', '2024-02-01-preview'), "
@@ -372,18 +347,14 @@ class EmbeddingConfig(BaseSettings):
                 if not self.api_key:
                     missing.append("api_key (set CHUNKHOUND_EMBEDDING__API_KEY)")
                 if not self.api_version:
-                    missing.append(
-                        "api_version (set CHUNKHOUND_EMBEDDING__API_VERSION)"
-                    )
+                    missing.append("api_version (set CHUNKHOUND_EMBEDDING__API_VERSION)")
             # For OpenAI provider, only require API key for official endpoints
             elif is_official_openai_endpoint(self.base_url) and not self.api_key:
                 missing.append("api_key (set CHUNKHOUND_EMBEDDING__API_KEY)")
         else:
             # For voyageai with a custom endpoint, API key is optional
             if not self.api_key and not self.base_url:
-                missing.append(
-                    "api_key (set VOYAGE_API_KEY or CHUNKHOUND_EMBEDDING__API_KEY)"
-                )
+                missing.append("api_key (set VOYAGE_API_KEY or CHUNKHOUND_EMBEDDING__API_KEY)")
 
         return missing
 
@@ -458,21 +429,13 @@ class EmbeddingConfig(BaseSettings):
 
         config = {}
 
-        if api_key := _first_env(
-            "CHUNKHOUND_EMBEDDING__API_KEY", "CHUNKHOUND_EMBEDDING_API_KEY"
-        ):
+        if api_key := _first_env("CHUNKHOUND_EMBEDDING__API_KEY", "CHUNKHOUND_EMBEDDING_API_KEY"):
             config["api_key"] = api_key
-        if base_url := _first_env(
-            "CHUNKHOUND_EMBEDDING__BASE_URL", "CHUNKHOUND_EMBEDDING_BASE_URL"
-        ):
+        if base_url := _first_env("CHUNKHOUND_EMBEDDING__BASE_URL", "CHUNKHOUND_EMBEDDING_BASE_URL"):
             config["base_url"] = base_url
-        if provider := _first_env(
-            "CHUNKHOUND_EMBEDDING__PROVIDER", "CHUNKHOUND_EMBEDDING_PROVIDER"
-        ):
+        if provider := _first_env("CHUNKHOUND_EMBEDDING__PROVIDER", "CHUNKHOUND_EMBEDDING_PROVIDER"):
             config["provider"] = provider
-        if model := _first_env(
-            "CHUNKHOUND_EMBEDDING__MODEL", "CHUNKHOUND_EMBEDDING_MODEL"
-        ):
+        if model := _first_env("CHUNKHOUND_EMBEDDING__MODEL", "CHUNKHOUND_EMBEDDING_MODEL"):
             config["model"] = model
 
         # Azure OpenAI configuration
@@ -549,10 +512,7 @@ class EmbeddingConfig(BaseSettings):
 
         if hasattr(args, "azure_deployment") and args.azure_deployment:
             overrides["azure_deployment"] = args.azure_deployment
-        if (
-            hasattr(args, "embedding_azure_deployment")
-            and args.embedding_azure_deployment
-        ):
+        if hasattr(args, "embedding_azure_deployment") and args.embedding_azure_deployment:
             overrides["azure_deployment"] = args.embedding_azure_deployment
 
         # Handle no-embeddings flag (special case - disables embeddings)

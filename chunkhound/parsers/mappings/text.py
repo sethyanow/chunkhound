@@ -54,9 +54,7 @@ class TextMapping(BaseMapping):
         # Plain text doesn't use tree-sitter queries - we'll parse using text analysis
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for text processing
@@ -144,9 +142,7 @@ class TextMapping(BaseMapping):
                     return "text_reference"
                 elif line.startswith(("http://", "https://", "file://", "ftp://")):
                     return "url_reference"
-                elif re.search(
-                    r"\b[\w.-]+\.(txt|md|doc|pdf|html)\b", line, re.IGNORECASE
-                ):
+                elif re.search(r"\b[\w.-]+\.(txt|md|doc|pdf|html)\b", line, re.IGNORECASE):
                     return "file_reference"
 
             return "text_import"
@@ -156,9 +152,7 @@ class TextMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # For text, we return different content based on the concept
@@ -188,9 +182,7 @@ class TextMapping(BaseMapping):
             # Return the entire content for other concepts
             return source
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract text-specific metadata."""
 
         source = content.decode("utf-8")
@@ -218,10 +210,7 @@ class TextMapping(BaseMapping):
                 metadata["has_lists"] = True
 
             # Check for common document patterns
-            if any(
-                pattern in source.lower()
-                for pattern in ["table of contents", "toc", "index"]
-            ):
+            if any(pattern in source.lower() for pattern in ["table of contents", "toc", "index"]):
                 metadata["document_type"] = "structured"
             elif len(headings) > 2:
                 metadata["document_type"] = "hierarchical"
@@ -236,9 +225,7 @@ class TextMapping(BaseMapping):
             metadata["paragraph_count"] = len(paragraphs)
 
             if paragraphs:
-                avg_paragraph_length = sum(len(p.split()) for p in paragraphs) / len(
-                    paragraphs
-                )
+                avg_paragraph_length = sum(len(p.split()) for p in paragraphs) / len(paragraphs)
                 metadata["avg_paragraph_words"] = int(avg_paragraph_length)
 
                 # Analyze paragraph types
@@ -260,11 +247,7 @@ class TextMapping(BaseMapping):
                 metadata["annotation_types"] = list(set(annotations))
 
             # Count potential comment lines
-            comment_lines = sum(
-                1
-                for line in lines
-                if line.strip().startswith(("#", "//", "/*", "<!--"))
-            )
+            comment_lines = sum(1 for line in lines if line.strip().startswith(("#", "//", "/*", "<!--")))
             if comment_lines > 0:
                 metadata["comment_lines"] = comment_lines
 
@@ -276,14 +259,10 @@ class TextMapping(BaseMapping):
                 metadata["has_external_links"] = True
 
             # Look for file references
-            file_refs = re.findall(
-                r"\b[\w.-]+\.(txt|md|doc|pdf|html|json|xml)\b", source, re.IGNORECASE
-            )
+            file_refs = re.findall(r"\b[\w.-]+\.(txt|md|doc|pdf|html|json|xml)\b", source, re.IGNORECASE)
             if file_refs:
                 metadata["file_references"] = len(set(file_refs))
-                metadata["reference_types"] = list(
-                    set(ext.split(".")[-1].lower() for ext in file_refs)
-                )
+                metadata["reference_types"] = list(set(ext.split(".")[-1].lower() for ext in file_refs))
 
         elif concept == UniversalConcept.STRUCTURE:
             # Overall document analysis
@@ -388,15 +367,11 @@ class TextMapping(BaseMapping):
         """Extract annotation types from text."""
         annotations = []
 
-        for match in re.finditer(
-            r"\b(TODO|FIXME|NOTE|WARNING|HACK|BUG|XXX):", text, re.IGNORECASE
-        ):
+        for match in re.finditer(r"\b(TODO|FIXME|NOTE|WARNING|HACK|BUG|XXX):", text, re.IGNORECASE):
             annotations.append(match.group(1).upper())
 
         return annotations
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Data formats don't have imports."""
         return []

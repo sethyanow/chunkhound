@@ -145,9 +145,7 @@ class SqlMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         source = content.decode("utf-8")
@@ -192,9 +190,7 @@ class SqlMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         source = content.decode("utf-8")
@@ -246,9 +242,7 @@ class SqlMapping(BaseMapping):
                     # Extract target table from object_reference
                     obj_ref = self.find_child_by_type(def_node, "object_reference")
                     if obj_ref:
-                        metadata["target_table"] = self.get_node_text(
-                            obj_ref, source
-                        ).strip()
+                        metadata["target_table"] = self.get_node_text(obj_ref, source).strip()
 
                 elif def_node.type == "create_trigger":
                     metadata["kind"] = "trigger"
@@ -288,10 +282,7 @@ class SqlMapping(BaseMapping):
                     comment_type = "block"
                 elif clean_text:
                     upper_text = clean_text.upper()
-                    if any(
-                        prefix in upper_text
-                        for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]
-                    ):
+                    if any(prefix in upper_text for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]):
                         comment_type = "annotation"
 
                 metadata["comment_type"] = comment_type

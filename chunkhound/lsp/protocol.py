@@ -31,15 +31,12 @@ class JsonRpcTransport:
         self,
         process: asyncio.subprocess.Process,
         *,
-        notification_handler: Callable[[str, dict[str, Any] | None], None]
-        | None = None,
+        notification_handler: Callable[[str, dict[str, Any] | None], None] | None = None,
     ) -> None:
         self._process = process
         self._request_id = 0
         self._pending: dict[int, asyncio.Future[dict[str, Any]]] = {}
-        self._notification_handler = (
-            notification_handler or self._default_notification_handler
-        )
+        self._notification_handler = notification_handler or self._default_notification_handler
         self._read_task: asyncio.Task[None] | None = None
         self._closed = False
 
@@ -51,8 +48,7 @@ class JsonRpcTransport:
         env: dict[str, str] | None = None,
         cwd: str | None = None,
         *,
-        notification_handler: Callable[[str, dict[str, Any] | None], None]
-        | None = None,
+        notification_handler: Callable[[str, dict[str, Any] | None], None] | None = None,
     ) -> JsonRpcTransport:
         """Spawn a subprocess and create a transport for it."""
         proc = await asyncio.create_subprocess_exec(
@@ -89,9 +85,7 @@ class JsonRpcTransport:
         if params is not None:
             message["params"] = params
 
-        future: asyncio.Future[dict[str, Any]] = (
-            asyncio.get_running_loop().create_future()
-        )
+        future: asyncio.Future[dict[str, Any]] = asyncio.get_running_loop().create_future()
         self._pending[req_id] = future
 
         await self._write_message(message)
@@ -102,16 +96,12 @@ class JsonRpcTransport:
             return await future
         except asyncio.TimeoutError:
             self._pending.pop(req_id, None)
-            raise LSPTimeoutError(
-                f"Request {method} (id={req_id}) timed out after {timeout}s"
-            ) from None
+            raise LSPTimeoutError(f"Request {method} (id={req_id}) timed out after {timeout}s") from None
         except asyncio.CancelledError:
             self._pending.pop(req_id, None)
             raise
 
-    async def send_notification(
-        self, method: str, params: dict[str, Any] | None = None
-    ) -> None:
+    async def send_notification(self, method: str, params: dict[str, Any] | None = None) -> None:
         """Send a JSON-RPC notification (no response expected)."""
         if self._closed:
             raise LSPTransportError("Transport is closed")
@@ -142,9 +132,7 @@ class JsonRpcTransport:
         # Cancel all pending requests
         for future in self._pending.values():
             if not future.done():
-                future.set_exception(
-                    LSPTransportError("Transport closed while request pending")
-                )
+                future.set_exception(LSPTransportError("Transport closed while request pending"))
         self._pending.clear()
 
         # Terminate process
@@ -204,9 +192,7 @@ class JsonRpcTransport:
         finally:
             for future in list(self._pending.values()):
                 if not future.done():
-                    future.set_exception(
-                        LSPTransportError("Read loop exited unexpectedly")
-                    )
+                    future.set_exception(LSPTransportError("Read loop exited unexpectedly"))
             self._pending.clear()
 
     async def _read_headers(self, stdout: asyncio.StreamReader) -> int | None:
@@ -280,13 +266,9 @@ class JsonRpcTransport:
         try:
             await self._write_message(response)
         except LSPTransportError:
-            logger.warning(
-                "Failed to respond to server request %s (id=%s)", method, req_id
-            )
+            logger.warning("Failed to respond to server request %s (id=%s)", method, req_id)
 
     @staticmethod
-    def _default_notification_handler(
-        method: str, params: dict[str, Any] | None
-    ) -> None:
+    def _default_notification_handler(method: str, params: dict[str, Any] | None) -> None:
         """Default: discard notifications with debug log."""
         logger.debug("LSP notification (discarded): %s", method)

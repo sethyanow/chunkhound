@@ -82,9 +82,7 @@ class SvelteParser:
         self.chunk_splitter = ChunkSplitter(self.cast_config)
 
         # Create TypeScript parser for script sections
-        self.ts_parser = create_parser_for_language(
-            Language.TYPESCRIPT, cast_config, detect_embedded_sql
-        )
+        self.ts_parser = create_parser_for_language(Language.TYPESCRIPT, cast_config, detect_embedded_sql)
 
     def parse_file(self, file_path: Path, file_id: FileId) -> list[Chunk]:
         """Parse a Svelte SFC file.
@@ -123,28 +121,20 @@ class SvelteParser:
         # Parse script sections with TypeScript parser
         for attrs, script_content, start_line in sections["script"]:
             # Parse script content as TypeScript/JavaScript
-            parsed_chunks = self.ts_parser.parse_content(
-                script_content, file_path, file_id
-            )
+            parsed_chunks = self.ts_parser.parse_content(script_content, file_path, file_id)
 
             # Create new chunks with adjusted line numbers and Svelte-specific metadata
             for chunk in parsed_chunks:
                 # Create updated metadata
-                updated_metadata = (
-                    chunk.metadata.copy() if chunk.metadata is not None else {}
-                )
+                updated_metadata = chunk.metadata.copy() if chunk.metadata is not None else {}
                 updated_metadata["svelte_section"] = "script"
                 updated_metadata["is_svelte_sfc"] = True
 
                 # Add script language if detected
                 if attrs:
-                    lang_match = re.search(
-                        r'lang\s*=\s*["\']?(\w+)["\']?', attrs, re.IGNORECASE
-                    )
+                    lang_match = re.search(r'lang\s*=\s*["\']?(\w+)["\']?', attrs, re.IGNORECASE)
                     if lang_match:
-                        updated_metadata["svelte_script_lang"] = lang_match.group(
-                            1
-                        ).lower()
+                        updated_metadata["svelte_script_lang"] = lang_match.group(1).lower()
 
                 # Create new chunk with adjusted line numbers and metadata
                 # Chunks are frozen dataclasses, so we need to create a new one
@@ -176,9 +166,7 @@ class SvelteParser:
 
                 # Split if needed and convert to Chunk
                 for uc in self.chunk_splitter.validate_and_split(uchunk):
-                    template_chunk = universal_to_chunk(
-                        uc, file_path, file_id, Language.SVELTE
-                    )
+                    template_chunk = universal_to_chunk(uc, file_path, file_id, Language.SVELTE)
                     chunks.append(template_chunk)
 
         # Create chunks for style sections (as text blocks)
@@ -199,9 +187,7 @@ class SvelteParser:
 
                 # Split if needed and convert to Chunk
                 for uc in self.chunk_splitter.validate_and_split(uchunk):
-                    style_chunk = universal_to_chunk(
-                        uc, file_path, file_id, Language.SVELTE
-                    )
+                    style_chunk = universal_to_chunk(uc, file_path, file_id, Language.SVELTE)
                     chunks.append(style_chunk)
 
         return chunks

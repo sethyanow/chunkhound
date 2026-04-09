@@ -82,9 +82,7 @@ def _render_search_index(pages: list[DocsitePage]) -> str:
 
 
 def _render_nav_json(groups: list[NavGroup]) -> str:
-    payload: dict[str, Any] = {
-        "groups": [{"title": group.title, "slugs": group.slugs} for group in groups]
-    }
+    payload: dict[str, Any] = {"groups": [{"title": group.title, "slugs": group.slugs} for group in groups]}
     return json.dumps(payload, ensure_ascii=True, indent=2)
 
 

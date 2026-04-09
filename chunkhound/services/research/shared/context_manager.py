@@ -61,9 +61,7 @@ class ContextManager:
                 end_line = chunk.get("end_line", 1)
 
                 # Track line coverage per file
-                file_line_coverage.setdefault(file_path, set()).update(
-                    range(start_line, end_line + 1)
-                )
+                file_line_coverage.setdefault(file_path, set()).update(range(start_line, end_line + 1))
 
                 # Mark as "well covered" if substantial chunk coverage
                 if len(file_line_coverage[file_path]) > WELL_COVERED_LINE_THRESHOLD:
@@ -81,9 +79,7 @@ class ContextManager:
             "file_line_coverage": file_line_coverage,
         }
 
-    def update_global_explored_data(
-        self, global_explored_data: dict[str, Any], node: BFSNode
-    ) -> None:
+    def update_global_explored_data(self, global_explored_data: dict[str, Any], node: BFSNode) -> None:
         """Update global explored data with discoveries from a single node.
 
         This allows sibling nodes and future nodes to detect duplicates across the entire BFS graph,
@@ -116,15 +112,11 @@ class ContextManager:
             file_path = chunk.get("file_path")
             if file_path:
                 expanded_range = self._service._get_chunk_expanded_range(chunk)
-                global_explored_data["chunk_ranges"].setdefault(file_path, []).append(
-                    expanded_range
-                )
+                global_explored_data["chunk_ranges"].setdefault(file_path, []).append(expanded_range)
                 # Store chunk for building exploration gist
                 global_explored_data["chunks"].append(chunk)
 
-    def build_exploration_gist(
-        self, global_explored_data: dict[str, Any]
-    ) -> str | None:
+    def build_exploration_gist(self, global_explored_data: dict[str, Any]) -> str | None:
         """Build markdown tree view of explored files and chunks.
 
         Uses the same format as the final synthesis sources footer for consistency.
@@ -141,9 +133,7 @@ class ContextManager:
             return None  # No exploration yet - skip gist section entirely
 
         # Extract unique files from chunks (we don't need content, just the list)
-        files = {
-            chunk.get("file_path"): "" for chunk in chunks if chunk.get("file_path")
-        }
+        files = {chunk.get("file_path"): "" for chunk in chunks if chunk.get("file_path")}
 
         if not files:
             return None
@@ -237,9 +227,7 @@ class ContextManager:
             # Get expanded range (from stored data or re-compute)
             expanded_range = self._service._get_chunk_expanded_range(chunk)
 
-            is_duplicate = self.is_chunk_duplicate(
-                chunk, expanded_range, global_explored_data
-            )
+            is_duplicate = self.is_chunk_duplicate(chunk, expanded_range, global_explored_data)
 
             if is_duplicate:
                 duplicate_count += 1

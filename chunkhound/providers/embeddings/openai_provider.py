@@ -133,9 +133,7 @@ def _validate_qwen_model_config() -> None:
         # Check all required fields present
         missing_fields = required_fields - set(config.keys())
         if missing_fields:
-            raise ValueError(
-                f"Qwen model '{model_name}' missing required fields: {missing_fields}"
-            )
+            raise ValueError(f"Qwen model '{model_name}' missing required fields: {missing_fields}")
 
         # Validate batch sizes are positive integers
         if config["max_texts_per_batch"] <= 0:
@@ -146,8 +144,7 @@ def _validate_qwen_model_config() -> None:
 
         if config["max_rerank_batch"] <= 0:
             raise ValueError(
-                f"Qwen model '{model_name}' has invalid max_rerank_batch: "
-                f"{config['max_rerank_batch']} (must be > 0)"
+                f"Qwen model '{model_name}' has invalid max_rerank_batch: {config['max_rerank_batch']} (must be > 0)"
             )
 
         # Validate token limits are reasonable (between 1K and 10M)
@@ -228,9 +225,7 @@ class OpenAIEmbeddingProvider:
             azure_deployment: Azure OpenAI deployment name
         """
         if not OPENAI_AVAILABLE:
-            raise ImportError(
-                "OpenAI package not available. Install with: uv pip install openai"
-            )
+            raise ImportError("OpenAI package not available. Install with: uv pip install openai")
 
         # API key and base URL should be provided via config, not env vars
         self._api_key = api_key
@@ -244,9 +239,7 @@ class OpenAIEmbeddingProvider:
         self._rerank_model = rerank_model
         self._rerank_url = rerank_url
         self._rerank_format = rerank_format
-        self._detected_rerank_format: str | None = (
-            None  # Cache for auto-detected format
-        )
+        self._detected_rerank_format: str | None = None  # Cache for auto-detected format
         self._format_detection_lock = asyncio.Lock()  # Protect format detection cache
         self._batch_size = batch_size
         self._timeout = timeout
@@ -309,9 +302,7 @@ class OpenAIEmbeddingProvider:
         self._client = None
         self._client_initialized = False
 
-    def _configure_qwen_batch_sizes(
-        self, model: str, rerank_model: str | None, batch_size: int
-    ) -> None:
+    def _configure_qwen_batch_sizes(self, model: str, rerank_model: str | None, batch_size: int) -> None:
         """Configure Qwen-specific batch sizes if Qwen models detected.
 
         Detects Qwen embedding and reranker models and applies model-specific
@@ -335,9 +326,7 @@ class OpenAIEmbeddingProvider:
 
         # Check if rerank model is a Qwen model
         qwen_rerank_config = None
-        if rerank_model and (
-            "qwen" in rerank_model_lower or rerank_model in QWEN_MODEL_CONFIG
-        ):
+        if rerank_model and ("qwen" in rerank_model_lower or rerank_model in QWEN_MODEL_CONFIG):
             qwen_rerank_config = QWEN_MODEL_CONFIG.get(rerank_model)
             if qwen_rerank_config:
                 logger.info(f"Detected Qwen reranker model: {rerank_model}")
@@ -348,8 +337,7 @@ class OpenAIEmbeddingProvider:
             effective_batch_size = min(batch_size, qwen_config["max_texts_per_batch"])
             if effective_batch_size < batch_size:
                 logger.info(
-                    f"Limiting batch size to {effective_batch_size} "
-                    f"(model max: {qwen_config['max_texts_per_batch']})"
+                    f"Limiting batch size to {effective_batch_size} (model max: {qwen_config['max_texts_per_batch']})"
                 )
             self._batch_size = effective_batch_size
             self._qwen_model_config = qwen_config
@@ -366,9 +354,7 @@ class OpenAIEmbeddingProvider:
             return
 
         if not OPENAI_AVAILABLE or openai is None:
-            raise RuntimeError(
-                "OpenAI library is not available. Install with: pip install openai"
-            )
+            raise RuntimeError("OpenAI library is not available. Install with: pip install openai")
 
         # Check if using Azure OpenAI
         if is_azure_openai_endpoint(self._azure_endpoint):
@@ -405,9 +391,7 @@ class OpenAIEmbeddingProvider:
                 )
                 client_kwargs["http_client"] = http_client
 
-                logger.debug(
-                    f"SSL verification disabled for custom endpoint: {self._base_url}"
-                )
+                logger.debug(f"SSL verification disabled for custom endpoint: {self._base_url}")
 
         # IMPORTANT: Create the client in async context to avoid TaskGroup errors on Ubuntu
         # This ensures the event loop is running when the client initializes its httpx instance
@@ -593,9 +577,7 @@ class OpenAIEmbeddingProvider:
             if len(test_embedding) == self.dims:
                 status["connectivity"] = "ok"
             else:
-                status["errors"].append(
-                    f"Unexpected embedding dimensions: {len(test_embedding)} != {self.dims}"
-                )
+                status["errors"].append(f"Unexpected embedding dimensions: {len(test_embedding)} != {self.dims}")
         except Exception as e:
             status["errors"].append(f"API connectivity test failed: {str(e)}")
 
@@ -614,9 +596,7 @@ class OpenAIEmbeddingProvider:
 
         except Exception as e:
             # CRITICAL: Log EVERY exception that passes through here to trace execution path
-            logger.error(
-                f"[DEBUG-TRACE] Exception caught in OpenAI embed() method: {type(e).__name__}: {str(e)[:200]}"
-            )
+            logger.error(f"[DEBUG-TRACE] Exception caught in OpenAI embed() method: {type(e).__name__}: {str(e)[:200]}")
             self._usage_stats["errors"] += 1
             # Log details of oversized chunks for root cause analysis
             text_sizes = [len(text) for text in validated_texts]
@@ -626,22 +606,19 @@ class OpenAIEmbeddingProvider:
             # Find and log oversized chunks with their content preview
             oversized_chunks = []
             for i, text in enumerate(validated_texts):
-                if (
-                    len(text) > 100000
-                ):  # Chunks over 100k chars are definitely problematic
+                if len(text) > 100000:  # Chunks over 100k chars are definitely problematic
                     preview = text[:200] + "..." if len(text) > 200 else text
-                    oversized_chunks.append(
-                        f"#{i}: {len(text)} chars, starts: {preview}"
-                    )
+                    oversized_chunks.append(f"#{i}: {len(text)} chars, starts: {preview}")
 
             if oversized_chunks:
                 logger.error(
-                    "[OpenAI-Provider] OVERSIZED CHUNKS FOUND:\n"
-                    + "\n".join(oversized_chunks[:3])
+                    "[OpenAI-Provider] OVERSIZED CHUNKS FOUND:\n" + "\n".join(oversized_chunks[:3])
                 )  # Limit to first 3
 
             logger.error(
-                f"[OpenAI-Provider] Failed to generate embeddings (texts: {len(validated_texts)}, total_chars: {total_chars}, max_chars: {max_chars}): {e}"
+                f"[OpenAI-Provider] Failed to generate embeddings"
+                f" (texts: {len(validated_texts)}, total_chars: {total_chars},"
+                f" max_chars: {max_chars}): {e}"
             )
 
             # Add debug logging to trace the error
@@ -649,7 +626,9 @@ class OpenAIEmbeddingProvider:
             try:
                 with open(debug_file, "a") as f:
                     f.write(
-                        f"[{datetime.now().isoformat()}] OPENAI-PROVIDER ERROR: texts={len(validated_texts)}, max_chars={max_chars}, error={e}\n"
+                        f"[{datetime.now().isoformat()}] OPENAI-PROVIDER ERROR:"
+                        f" texts={len(validated_texts)},"
+                        f" max_chars={max_chars}, error={e}\n"
                     )
                     f.flush()
             except OSError:
@@ -662,9 +641,7 @@ class OpenAIEmbeddingProvider:
         embeddings = await self.embed([text])
         return embeddings[0] if embeddings else []
 
-    async def embed_batch(
-        self, texts: list[str], batch_size: int | None = None
-    ) -> list[list[float]]:
+    async def embed_batch(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
         """Generate embeddings in batches with token-aware sizing."""
         if not texts:
             return []
@@ -725,9 +702,7 @@ class OpenAIEmbeddingProvider:
 
         for attempt in range(self._retry_attempts):
             try:
-                logger.debug(
-                    f"Generating embeddings for {len(texts)} texts (attempt {attempt + 1})"
-                )
+                logger.debug(f"Generating embeddings for {len(texts)} texts (attempt {attempt + 1})")
 
                 response = await self._client.embeddings.create(
                     model=self._get_deployment_model(),
@@ -745,9 +720,7 @@ class OpenAIEmbeddingProvider:
                 # Validate all indices were filled (defensive check)
                 if None in embeddings:
                     missing = [i for i, e in enumerate(embeddings) if e is None]
-                    raise RuntimeError(
-                        f"OpenAI API returned incomplete embeddings, missing indices: {missing}"
-                    )
+                    raise RuntimeError(f"OpenAI API returned incomplete embeddings, missing indices: {missing}")
 
                 # Update usage statistics
                 self._usage_stats["requests_made"] += 1
@@ -759,38 +732,21 @@ class OpenAIEmbeddingProvider:
                 return cast(list[list[float]], embeddings)
 
             except Exception as rate_error:
-                if (
-                    openai
-                    and hasattr(openai, "RateLimitError")
-                    and isinstance(rate_error, openai.RateLimitError)
-                ):
-                    logger.warning(
-                        f"Rate limit exceeded, retrying in {self._retry_delay * (attempt + 1)} seconds"
-                    )
+                if openai and hasattr(openai, "RateLimitError") and isinstance(rate_error, openai.RateLimitError):
+                    logger.warning(f"Rate limit exceeded, retrying in {self._retry_delay * (attempt + 1)} seconds")
                     if attempt < self._retry_attempts - 1:
                         await asyncio.sleep(self._retry_delay * (attempt + 1))
                         continue
                     else:
                         raise
-                elif (
-                    openai
-                    and hasattr(openai, "BadRequestError")
-                    and isinstance(rate_error, openai.BadRequestError)
-                ):
+                elif openai and hasattr(openai, "BadRequestError") and isinstance(rate_error, openai.BadRequestError):
                     # Handle token limit exceeded errors
                     error_message = str(rate_error)
-                    if (
-                        "maximum context length" in error_message
-                        and "tokens" in error_message
-                    ) or (
-                        "tokens" in error_message
-                        and "max" in error_message
-                        and "per request" in error_message
+                    if ("maximum context length" in error_message and "tokens" in error_message) or (
+                        "tokens" in error_message and "max" in error_message and "per request" in error_message
                     ):
                         total_tokens = self.estimate_batch_tokens(texts)
-                        token_limit = (
-                            self.get_model_token_limit() - 100
-                        )  # Safety margin
+                        token_limit = self.get_model_token_limit() - 100  # Safety margin
 
                         return await handle_token_limit_error(
                             texts=texts,
@@ -805,9 +761,7 @@ class OpenAIEmbeddingProvider:
                 elif (
                     openai
                     and hasattr(openai, "APITimeoutError")
-                    and isinstance(
-                        rate_error, (openai.APITimeoutError, openai.APIConnectionError)
-                    )
+                    and isinstance(rate_error, (openai.APITimeoutError, openai.APIConnectionError))
                 ):
                     # Log detailed connection error information
                     error_details = {
@@ -820,16 +774,10 @@ class OpenAIEmbeddingProvider:
                         "max_attempts": self._retry_attempts,
                     }
                     if hasattr(rate_error, "response"):
-                        error_details["response_status"] = getattr(
-                            rate_error.response, "status_code", None
-                        )
-                        error_details["response_headers"] = dict(
-                            getattr(rate_error.response, "headers", {})
-                        )
+                        error_details["response_status"] = getattr(rate_error.response, "status_code", None)
+                        error_details["response_headers"] = dict(getattr(rate_error.response, "headers", {}))
 
-                    logger.warning(
-                        f"API connection error, retrying in {self._retry_delay} seconds: {error_details}"
-                    )
+                    logger.warning(f"API connection error, retrying in {self._retry_delay} seconds: {error_details}")
                     if attempt < self._retry_attempts - 1:
                         await asyncio.sleep(self._retry_delay)
                         continue
@@ -838,9 +786,7 @@ class OpenAIEmbeddingProvider:
                 else:
                     raise
 
-        raise RuntimeError(
-            f"Failed to generate embeddings after {self._retry_attempts} attempts"
-        )
+        raise RuntimeError(f"Failed to generate embeddings after {self._retry_attempts} attempts")
 
     def validate_texts(self, texts: list[str]) -> list[str]:
         """Validate and preprocess texts before embedding."""
@@ -890,9 +836,7 @@ class OpenAIEmbeddingProvider:
     def chunk_text_by_tokens(self, text: str, max_tokens: int) -> list[str]:
         """Split text into chunks by token count."""
         if max_tokens <= 0:
-            raise ValidationError(
-                "max_tokens", max_tokens, "max_tokens must be positive"
-            )
+            raise ValidationError("max_tokens", max_tokens, "max_tokens must be positive")
 
         # Use safety margin to ensure we stay well under token limits
         safety_margin = max(200, max_tokens // 5)  # 20% margin, minimum 200 tokens
@@ -988,9 +932,7 @@ class OpenAIEmbeddingProvider:
             response = await self._client.embeddings.create(
                 model=self._get_deployment_model(), input=["test"], timeout=5
             )
-            return (
-                len(response.data) == 1 and len(response.data[0].embedding) == self.dims
-            )
+            return len(response.data) == 1 and len(response.data[0].embedding) == self.dims
         except Exception as e:
             logger.error(f"API key validation failed: {e}")
             return False
@@ -1078,9 +1020,7 @@ class OpenAIEmbeddingProvider:
             return self._detected_rerank_format
         return self._rerank_format
 
-    def _build_rerank_payload(
-        self, query: str, documents: list[str], top_k: int | None, format_to_use: str
-    ) -> dict:
+    def _build_rerank_payload(self, query: str, documents: list[str], top_k: int | None, format_to_use: str) -> dict:
         """Build rerank request payload based on format.
 
         Args:
@@ -1122,9 +1062,7 @@ class OpenAIEmbeddingProvider:
                 }
                 if top_k is not None:
                     payload["top_n"] = top_k
-                logger.debug(
-                    f"Auto-detecting format, trying Cohere first (model: {self._rerank_model})"
-                )
+                logger.debug(f"Auto-detecting format, trying Cohere first (model: {self._rerank_model})")
                 return payload
             else:
                 logger.debug("Auto-detecting format, trying TEI first (no model set)")
@@ -1154,9 +1092,7 @@ class OpenAIEmbeddingProvider:
         except ValueError:
             return False
 
-    async def rerank(
-        self, query: str, documents: list[str], top_k: int | None = None
-    ) -> list[RerankResult]:
+    async def rerank(self, query: str, documents: list[str], top_k: int | None = None) -> list[RerankResult]:
         """Rerank documents using configured rerank model with automatic batch splitting.
 
         Implements batch splitting to prevent OOM errors on large document sets.
@@ -1190,9 +1126,7 @@ class OpenAIEmbeddingProvider:
             if top_k is not None and len(results) > top_k:
                 # Results from _rerank_single_batch are already sorted descending by score
                 results = results[:top_k]
-                logger.debug(
-                    f"Applied client-side top_k filter: {len(results)} results"
-                )
+                logger.debug(f"Applied client-side top_k filter: {len(results)} results")
 
             return results
 
@@ -1211,19 +1145,14 @@ class OpenAIEmbeddingProvider:
             end_idx = min(start_idx + batch_size_limit, len(documents))
             batch_documents = documents[start_idx:end_idx]
 
-            logger.debug(
-                f"Reranking batch {batch_idx + 1}/{num_batches}: "
-                f"documents {start_idx}-{end_idx}"
-            )
+            logger.debug(f"Reranking batch {batch_idx + 1}/{num_batches}: documents {start_idx}-{end_idx}")
 
             # Retry logic for this batch (following VoyageAI pattern)
             batch_results = None
             for attempt in range(self._retry_attempts):
                 try:
                     # Rerank this batch without top_k limit (we'll apply globally)
-                    batch_results = await self._rerank_single_batch(
-                        query, batch_documents, top_k=None
-                    )
+                    batch_results = await self._rerank_single_batch(query, batch_documents, top_k=None)
                     break  # Success - exit retry loop
                 except Exception as e:
                     # Classify error as retryable or not
@@ -1241,16 +1170,13 @@ class OpenAIEmbeddingProvider:
                         # Exponential backoff
                         delay = self._retry_delay * (2**attempt)
                         logger.warning(
-                            f"Batch {batch_idx + 1} failed (attempt {attempt + 1}), "
-                            f"retrying in {delay}s: {e}"
+                            f"Batch {batch_idx + 1} failed (attempt {attempt + 1}), retrying in {delay}s: {e}"
                         )
                         await asyncio.sleep(delay)
                         continue
                     else:
                         # Last attempt or non-retryable error
-                        logger.error(
-                            f"Batch {batch_idx + 1} failed after {attempt + 1} attempts: {e}"
-                        )
+                        logger.error(f"Batch {batch_idx + 1} failed after {attempt + 1} attempts: {e}")
                         # Continue to next batch instead of failing entire operation
                         batch_results = []
                         failed_batches += 1
@@ -1270,9 +1196,7 @@ class OpenAIEmbeddingProvider:
                         continue
 
                     # Create new RerankResult with adjusted index
-                    adjusted_result = RerankResult(
-                        index=result.index + start_idx, score=result.score
-                    )
+                    adjusted_result = RerankResult(index=result.index + start_idx, score=result.score)
                     all_results.append(adjusted_result)
 
         # Warn if any batches failed
@@ -1322,10 +1246,7 @@ class OpenAIEmbeddingProvider:
         await self._ensure_client()
 
         # Validate base_url exists for relative URLs (redundant check for safety)
-        if (
-            not self._rerank_url.startswith(("http://", "https://"))
-            and not self._base_url
-        ):
+        if not self._rerank_url.startswith(("http://", "https://")) and not self._base_url:
             raise ValueError(RERANK_BASE_URL_REQUIRED)
 
         # Build full rerank endpoint URL
@@ -1354,9 +1275,7 @@ class OpenAIEmbeddingProvider:
                 # For custom endpoints, disable SSL verification
                 # These often use self-signed certificates (corporate servers, Ollama)
                 client_kwargs["verify"] = False
-                logger.debug(
-                    f"SSL verification disabled for rerank endpoint: {rerank_endpoint}"
-                )
+                logger.debug(f"SSL verification disabled for rerank endpoint: {rerank_endpoint}")
 
             async with httpx.AsyncClient(**client_kwargs) as client:
                 headers = {"Content-Type": "application/json"}
@@ -1366,9 +1285,7 @@ class OpenAIEmbeddingProvider:
                     headers["Authorization"] = f"Bearer {self._api_key}"
                     logger.debug("Added Authorization header for rerank request")
 
-                response = await client.post(
-                    rerank_endpoint, json=payload, headers=headers
-                )
+                response = await client.post(rerank_endpoint, json=payload, headers=headers)
                 response.raise_for_status()
                 response_data = response.json()
 
@@ -1393,21 +1310,15 @@ class OpenAIEmbeddingProvider:
 
             # Update usage statistics
             self._usage_stats["requests_made"] += 1
-            self._usage_stats["documents_reranked"] = self._usage_stats.get(
-                "documents_reranked", 0
-            ) + len(documents)
+            self._usage_stats["documents_reranked"] = self._usage_stats.get("documents_reranked", 0) + len(documents)
 
-            logger.debug(
-                f"Successfully reranked {len(documents)} documents, got {len(rerank_results)} results"
-            )
+            logger.debug(f"Successfully reranked {len(documents)} documents, got {len(rerank_results)} results")
             return rerank_results
 
         except httpx.ConnectError as e:
             # Connection failed - service not available
             self._usage_stats["errors"] += 1
-            logger.error(
-                f"Failed to connect to rerank service at {rerank_endpoint}: {e}"
-            )
+            logger.error(f"Failed to connect to rerank service at {rerank_endpoint}: {e}")
             raise
         except httpx.TimeoutException as e:
             # Request timed out
@@ -1417,9 +1328,7 @@ class OpenAIEmbeddingProvider:
         except httpx.HTTPStatusError as e:
             # HTTP error response from service
             self._usage_stats["errors"] += 1
-            logger.error(
-                f"Rerank service returned error {e.response.status_code}: {e.response.text}"
-            )
+            logger.error(f"Rerank service returned error {e.response.status_code}: {e.response.text}")
             raise
         except ValueError as e:
             # Invalid response format
@@ -1456,9 +1365,7 @@ class OpenAIEmbeddingProvider:
         """
         # Early validation: check num_documents is reasonable
         if num_documents <= 0:
-            logger.warning(
-                f"num_documents is {num_documents} (zero or negative), returning empty results"
-            )
+            logger.warning(f"num_documents is {num_documents} (zero or negative), returning empty results")
             return []
 
         # Validate response has results
@@ -1480,9 +1387,7 @@ class OpenAIEmbeddingProvider:
         # Try to detect format from first result
         first_result = results[0]
         if not isinstance(first_result, dict):
-            raise ValueError(
-                "Invalid rerank response: results must contain dict objects"
-            )
+            raise ValueError("Invalid rerank response: results must contain dict objects")
 
         # Detect format based on field names
         has_relevance_score = "relevance_score" in first_result
@@ -1503,9 +1408,7 @@ class OpenAIEmbeddingProvider:
             score_field = "score"
             detected_format = "tei"
         else:
-            raise ValueError(
-                "Invalid rerank response: results must have 'relevance_score' or 'score' field"
-            )
+            raise ValueError("Invalid rerank response: results must have 'relevance_score' or 'score' field")
 
         # Cache detected format if in auto mode (thread-safe with async lock)
         if format_hint == "auto" and detected_format:
@@ -1523,9 +1426,7 @@ class OpenAIEmbeddingProvider:
                 continue
 
             if "index" not in result or score_field not in result:
-                logger.warning(
-                    f"Skipping result {i}: missing required fields (index, {score_field})"
-                )
+                logger.warning(f"Skipping result {i}: missing required fields (index, {score_field})")
                 continue
 
             try:
@@ -1538,9 +1439,7 @@ class OpenAIEmbeddingProvider:
                     continue
 
                 if index >= num_documents:
-                    logger.warning(
-                        f"Skipping result {i}: index {index} out of bounds (num_documents={num_documents})"
-                    )
+                    logger.warning(f"Skipping result {i}: index {index} out of bounds (num_documents={num_documents})")
                     continue
 
                 rerank_results.append(RerankResult(index=index, score=score))

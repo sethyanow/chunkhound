@@ -83,9 +83,7 @@ async def research_command(args: argparse.Namespace, config: Config) -> None:
 
     # Create services using unified factory (exactly like MCP)
     try:
-        services = create_services(
-            db_path=db_path, config=config, embedding_manager=embedding_manager
-        )
+        services = create_services(db_path=db_path, config=config, embedding_manager=embedding_manager)
     except Exception as e:
         formatter.error(f"Failed to initialize services: {e}")
         sys.exit(1)
@@ -109,7 +107,8 @@ async def research_command(args: argparse.Namespace, config: Config) -> None:
             print(
                 result.get(
                     "answer",
-                    f"Research incomplete: Unable to analyze '{args.query}'. Try a more specific query or check that relevant code exists.",
+                    f"Research incomplete: Unable to analyze '{args.query}'."
+                    " Try a more specific query or check that relevant code exists.",
                 )
             )
 

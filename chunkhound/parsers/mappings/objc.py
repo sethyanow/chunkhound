@@ -155,9 +155,7 @@ class ObjCMapping(BaseMapping):
                     # Find category name (second identifier)
                     identifiers = self.find_children_by_type(node, "identifier")
                     if len(identifiers) >= 2:
-                        category_name = self.get_node_text(
-                            identifiers[1], source
-                        ).strip()
+                        category_name = self.get_node_text(identifiers[1], source).strip()
                         return f"{class_name}+{category_name}"
 
                 # Check if this is a protocol
@@ -200,9 +198,7 @@ class ObjCMapping(BaseMapping):
                     if child.child_count >= 3:
                         param_identifier = child.child(2)
                         if param_identifier and param_identifier.type == "identifier":
-                            param_name = self.get_node_text(
-                                param_identifier, source
-                            ).strip()
+                            param_name = self.get_node_text(param_identifier, source).strip()
                             if param_name:
                                 parameters.append(param_name)
 
@@ -211,9 +207,7 @@ class ObjCMapping(BaseMapping):
 
         return parameters
 
-    def extract_property_attributes(
-        self, node: TSNode | None, source: str
-    ) -> list[str]:
+    def extract_property_attributes(self, node: TSNode | None, source: str) -> list[str]:
         """Extract property attributes from an @property declaration.
 
         Attributes include: nonatomic, strong, weak, copy, readonly, etc.
@@ -293,9 +287,7 @@ class ObjCMapping(BaseMapping):
             protocol_quals = self.find_child_by_type(node, "protocol_qualifiers")
             if protocol_quals:
                 # Extract identifiers from protocol qualifiers
-                for identifier in self.find_children_by_type(
-                    protocol_quals, "identifier"
-                ):
+                for identifier in self.find_children_by_type(protocol_quals, "identifier"):
                     protocol_name = self.get_node_text(identifier, source).strip()
                     if protocol_name:
                         protocols.append(protocol_name)
@@ -412,9 +404,7 @@ class ObjCMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept.
 
         Args:
@@ -474,9 +464,7 @@ class ObjCMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         Args:
@@ -691,9 +679,7 @@ class ObjCMapping(BaseMapping):
 
         return None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve Objective-C include to file path.
 
         Args:

@@ -49,9 +49,7 @@ from ..utils.tree_progress import TreeProgressDisplay
 P = ParamSpec("P")
 
 
-async def run_code_mapper_overview_hyde(
-    *args: P.args, **kwargs: P.kwargs
-) -> tuple[str, list[CodeMapperPOI]]:
+async def run_code_mapper_overview_hyde(*args: P.args, **kwargs: P.kwargs) -> tuple[str, list[CodeMapperPOI]]:
     """Delegate to pipeline helper (wrapper for test monkeypatching)."""
     return await code_mapper_pipeline.run_code_mapper_overview_hyde(*args, **kwargs)
 
@@ -88,9 +86,7 @@ async def code_mapper_command(args: argparse.Namespace, config: Config) -> None:
     # Code Mapper always writes artifacts; keep the CLI contract explicit.
     out_dir_arg = getattr(args, "out", None)
     if out_dir_arg is None:
-        formatter.error(
-            "Map requires --out so it can write an index and per-topic files."
-        )
+        formatter.error("Map requires --out so it can write an index and per-topic files.")
         sys.exit(2)
 
     llm_manager: LLMManager | None = None
@@ -145,17 +141,12 @@ async def code_mapper_command(args: argparse.Namespace, config: Config) -> None:
             sys.exit(1)
         if not points_of_interest:
             exc = CodeMapperNoPointsError(overview_answer)
-            formatter.error(
-                "Code Mapper could not extract any points of interest from the "
-                "overview."
-            )
+            formatter.error("Code Mapper could not extract any points of interest from the overview.")
             print("\n--- Overview answer ---\n")
             print(exc.overview_answer)
             sys.exit(1)
 
-        meta_bundle.meta.generation_stats["code_mapper_comprehensiveness"] = (
-            run_context.comprehensiveness
-        )
+        meta_bundle.meta.generation_stats["code_mapper_comprehensiveness"] = run_context.comprehensiveness
         overview_doc = render_overview_document(
             meta=meta_bundle.meta,
             scope_label=scope.scope_label,
@@ -274,10 +265,7 @@ async def code_mapper_command(args: argparse.Namespace, config: Config) -> None:
                 log_error=formatter.error,
             )
         except CodeMapperNoPointsError as exc:
-            formatter.error(
-                "Code Mapper could not extract any points of interest from the "
-                "overview."
-            )
+            formatter.error("Code Mapper could not extract any points of interest from the overview.")
             formatter.text_block(exc.overview_answer, title="Overview answer")
             sys.exit(1)
         except code_mapper_pipeline.CodeMapperHyDEError as exc:

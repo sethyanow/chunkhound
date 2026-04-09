@@ -25,12 +25,10 @@ except ImportError:
 # This warning appears in CI environments and doesn't affect functionality
 import warnings
 
-warnings.filterwarnings(
-    "ignore", message=".*swigvarlink.*", category=DeprecationWarning
-)
+warnings.filterwarnings("ignore", message=".*swigvarlink.*", category=DeprecationWarning)
 
-import duckdb
-from loguru import logger
+import duckdb  # noqa: E402
+from loguru import logger  # noqa: E402
 
 
 class DuckDBConnectionManager:
@@ -115,9 +113,7 @@ class DuckDBConnectionManager:
                     self.connection = duckdb.connect(str(self.db_path))
                     logger.info("DuckDB connection successful after WAL cleanup")
                 except Exception as retry_error:
-                    logger.error(
-                        f"Connection failed even after WAL cleanup: {retry_error}"
-                    )
+                    logger.error(f"Connection failed even after WAL cleanup: {retry_error}")
                     raise
             else:
                 # Not a WAL corruption error, re-raise original exception
@@ -160,10 +156,7 @@ class DuckDBConnectionManager:
         try:
             wal_age = time.time() - wal_file.stat().st_mtime
             if wal_age > 86400:  # 24 hours
-                logger.warning(
-                    f"Found stale WAL file (age: {wal_age / 3600:.1f}h), "
-                    "removing preemptively"
-                )
+                logger.warning(f"Found stale WAL file (age: {wal_age / 3600:.1f}h), removing preemptively")
                 self._handle_wal_corruption()
                 return
         except OSError:
@@ -194,9 +187,7 @@ class DuckDBConnectionManager:
         wal_file = db_path.with_suffix(db_path.suffix + ".wal")
 
         if not wal_file.exists():
-            logger.warning(
-                f"WAL corruption detected but no WAL file found at: {wal_file}"
-            )
+            logger.warning(f"WAL corruption detected but no WAL file found at: {wal_file}")
             return
 
         # Get WAL file size for logging
@@ -270,9 +261,7 @@ class DuckDBConnectionManager:
                         logger.debug("Database checkpoint completed before disconnect")
                 else:
                     if not os.environ.get("CHUNKHOUND_MCP_MODE"):
-                        logger.debug(
-                            "Skipping checkpoint before disconnect (already done)"
-                        )
+                        logger.debug("Skipping checkpoint before disconnect (already done)")
             except Exception as e:
                 # Only log errors in non-MCP mode
                 if not os.environ.get("CHUNKHOUND_MCP_MODE"):
@@ -340,9 +329,7 @@ class DuckDBConnectionManager:
             """).fetchone()
 
             if extensions_result:
-                status["extensions"].append(
-                    {"name": extensions_result[0], "loaded": extensions_result[1]}
-                )
+                status["extensions"].append({"name": extensions_result[0], "loaded": extensions_result[1]})
 
             # Check if tables exist
             tables_result = self.connection.execute("""
@@ -369,7 +356,5 @@ class DuckDBConnectionManager:
             "db_path": str(self.db_path),
             "connected": self.is_connected,
             "memory_database": self.is_memory_db,
-            "connection_type": (
-                type(self.connection).__name__ if self.connection else None
-            ),
+            "connection_type": (type(self.connection).__name__ if self.connection else None),
         }

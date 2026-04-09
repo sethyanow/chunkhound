@@ -91,9 +91,7 @@ def filter_chunks_by_elbow(
         scores = [get_unified_score(c) for c in sorted_chunks]
         score_key_display = "unified"
     else:
-        sorted_chunks = sorted(
-            chunks, key=lambda c: c.get(score_key, 0.0), reverse=True
-        )
+        sorted_chunks = sorted(chunks, key=lambda c: c.get(score_key, 0.0), reverse=True)
         scores = [c.get(score_key, 0.0) for c in sorted_chunks]
         score_key_display = score_key
 
@@ -102,9 +100,7 @@ def filter_chunks_by_elbow(
 
     if elbow_idx is None:
         # No clear elbow - return all chunks sorted
-        logger.debug(
-            f"Elbow filter: No elbow detected in {len(chunks)} chunks, keeping all"
-        )
+        logger.debug(f"Elbow filter: No elbow detected in {len(chunks)} chunks, keeping all")
         return sorted_chunks, {
             "method": "passthrough",
             "reason": "no_elbow_detected",

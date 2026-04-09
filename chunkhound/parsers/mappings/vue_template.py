@@ -236,9 +236,7 @@ class VueTemplateMapping(BaseMapping):
             ) @definition
         """
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept.
 
         Args:
@@ -260,27 +258,21 @@ class VueTemplateMapping(BaseMapping):
                 # Handle different directive types
                 if directive in ("v-if", "v-else-if"):
                     if "condition_expr" in captures:
-                        expr_text = self.get_node_text(
-                            captures["condition_expr"], source
-                        ).strip()
+                        expr_text = self.get_node_text(captures["condition_expr"], source).strip()
                         expr = self.get_expression_preview(expr_text, max_length=20)
                     else:
                         expr = "expr"
                     return f"v-if_{expr}"
                 elif directive == "v-for":
                     if "loop_expr" in captures:
-                        expr_text = self.get_node_text(
-                            captures["loop_expr"], source
-                        ).strip()
+                        expr_text = self.get_node_text(captures["loop_expr"], source).strip()
                         expr = self.get_expression_preview(expr_text, max_length=20)
                     else:
                         expr = "expr"
                     return f"v-for_{expr}"
                 elif directive == "v-model":
                     if "model_expr" in captures:
-                        expr_text = self.get_node_text(
-                            captures["model_expr"], source
-                        ).strip()
+                        expr_text = self.get_node_text(captures["model_expr"], source).strip()
                         expr = self.get_expression_preview(expr_text, max_length=20)
                     else:
                         expr = "expr"
@@ -344,9 +336,7 @@ class VueTemplateMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         Args:
@@ -401,9 +391,7 @@ class VueTemplateMapping(BaseMapping):
                 # Extract directive arguments and values
                 if "condition_expr" in captures:
                     expr_node = captures["condition_expr"]
-                    metadata["condition"] = self.get_node_text(
-                        expr_node, source
-                    ).strip()
+                    metadata["condition"] = self.get_node_text(expr_node, source).strip()
 
                 elif "loop_expr" in captures:
                     expr_node = captures["loop_expr"]
@@ -418,59 +406,43 @@ class VueTemplateMapping(BaseMapping):
 
                 elif "model_expr" in captures:
                     expr_node = captures["model_expr"]
-                    metadata["model_binding"] = self.get_node_text(
-                        expr_node, source
-                    ).strip()
+                    metadata["model_binding"] = self.get_node_text(expr_node, source).strip()
 
                 if "model_arg" in captures:
                     arg_node = captures["model_arg"]
-                    metadata["model_modifier"] = self.get_node_text(
-                        arg_node, source
-                    ).strip()
+                    metadata["model_modifier"] = self.get_node_text(arg_node, source).strip()
 
             # Handle event handlers
             if "event_prefix" in captures:
                 metadata["directive_type"] = "event_handler"
                 if "event_name" in captures:
                     event_node = captures["event_name"]
-                    metadata["event_name"] = self.get_node_text(
-                        event_node, source
-                    ).strip()
+                    metadata["event_name"] = self.get_node_text(event_node, source).strip()
                 if "handler_expr" in captures:
                     handler_node = captures["handler_expr"]
-                    metadata["handler_expression"] = self.get_node_text(
-                        handler_node, source
-                    ).strip()
+                    metadata["handler_expression"] = self.get_node_text(handler_node, source).strip()
 
             # Handle property bindings
             if "bind_prefix" in captures:
                 metadata["directive_type"] = "property_binding"
                 if "prop_name" in captures:
                     prop_node = captures["prop_name"]
-                    metadata["property_name"] = self.get_node_text(
-                        prop_node, source
-                    ).strip()
+                    metadata["property_name"] = self.get_node_text(prop_node, source).strip()
                 if "bind_expr" in captures:
                     expr_node = captures["bind_expr"]
-                    metadata["binding_expression"] = self.get_node_text(
-                        expr_node, source
-                    ).strip()
+                    metadata["binding_expression"] = self.get_node_text(expr_node, source).strip()
 
             # Handle interpolations
             if "interpolation_expr" in captures:
                 metadata["directive_type"] = "interpolation"
                 expr_node = captures["interpolation_expr"]
-                metadata["interpolation_expression"] = self.get_node_text(
-                    expr_node, source
-                ).strip()
+                metadata["interpolation_expression"] = self.get_node_text(expr_node, source).strip()
 
             # Handle components
             if "component_name" in captures:
                 metadata["directive_type"] = "component_usage"
                 component_node = captures["component_name"]
-                metadata["component_name"] = self.get_node_text(
-                    component_node, source
-                ).strip()
+                metadata["component_name"] = self.get_node_text(component_node, source).strip()
 
             # Handle slots
             if "slot_name" in captures:

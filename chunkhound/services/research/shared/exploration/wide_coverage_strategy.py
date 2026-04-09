@@ -116,10 +116,7 @@ class WideCoverageStrategy:
 
         # Phase 1.5: Depth exploration (if enabled)
         if self._config.depth_exploration_enabled:
-            logger.info(
-                f"WideCoverageStrategy: Starting depth exploration "
-                f"with {len(current_chunks)} chunks"
-            )
+            logger.info(f"WideCoverageStrategy: Starting depth exploration with {len(current_chunks)} chunks")
             (
                 current_chunks,
                 depth_stats,
@@ -131,16 +128,10 @@ class WideCoverageStrategy:
                 constants_context=constants_context,
             )
             stats["depth"] = depth_stats
-            logger.info(
-                f"WideCoverageStrategy: Depth exploration complete, "
-                f"now have {len(current_chunks)} chunks"
-            )
+            logger.info(f"WideCoverageStrategy: Depth exploration complete, now have {len(current_chunks)} chunks")
 
         # Phase 2: Gap detection (always runs)
-        logger.info(
-            f"WideCoverageStrategy: Starting gap detection "
-            f"with {len(current_chunks)} chunks"
-        )
+        logger.info(f"WideCoverageStrategy: Starting gap detection with {len(current_chunks)} chunks")
         all_chunks, gap_stats = await self._gap_detection.detect_and_fill_gaps(
             root_query=root_query,
             covered_chunks=current_chunks,
@@ -149,25 +140,15 @@ class WideCoverageStrategy:
             constants_context=constants_context,
         )
         stats["gap"] = gap_stats
-        logger.info(
-            f"WideCoverageStrategy: Gap detection complete, "
-            f"now have {len(all_chunks)} chunks"
-        )
+        logger.info(f"WideCoverageStrategy: Gap detection complete, now have {len(all_chunks)} chunks")
 
         # Apply elbow-based filtering to final chunk set
-        filtered_chunks, elbow_stats = filter_chunks_by_elbow(
-            all_chunks, score_key="rerank_score"
-        )
+        filtered_chunks, elbow_stats = filter_chunks_by_elbow(all_chunks, score_key="rerank_score")
         stats["elbow_filter"] = elbow_stats
-        logger.info(
-            f"WideCoverageStrategy: Elbow filter kept "
-            f"{len(filtered_chunks)}/{len(all_chunks)} chunks"
-        )
+        logger.info(f"WideCoverageStrategy: Elbow filter kept {len(filtered_chunks)}/{len(all_chunks)} chunks")
 
         # Read files for filtered chunks (no token budget - elbow already filtered)
-        logger.info(
-            f"WideCoverageStrategy: Reading files for {len(filtered_chunks)} chunks"
-        )
+        logger.info(f"WideCoverageStrategy: Reading files for {len(filtered_chunks)} chunks")
         file_contents = await self._file_reader.read_files_with_budget(
             chunks=filtered_chunks,
             llm_manager=self._llm_manager,
@@ -216,8 +197,7 @@ class WideCoverageStrategy:
         # Phase 1.5: Depth exploration (if enabled)
         if self._config.depth_exploration_enabled:
             logger.info(
-                f"WideCoverageStrategy.explore_raw: Starting depth exploration "
-                f"with {len(current_chunks)} chunks"
+                f"WideCoverageStrategy.explore_raw: Starting depth exploration with {len(current_chunks)} chunks"
             )
             (
                 current_chunks,
@@ -231,15 +211,11 @@ class WideCoverageStrategy:
             )
             stats["depth"] = depth_stats
             logger.info(
-                f"WideCoverageStrategy.explore_raw: Depth exploration complete, "
-                f"now have {len(current_chunks)} chunks"
+                f"WideCoverageStrategy.explore_raw: Depth exploration complete, now have {len(current_chunks)} chunks"
             )
 
         # Phase 2: Gap detection (always runs)
-        logger.info(
-            f"WideCoverageStrategy.explore_raw: Starting gap detection "
-            f"with {len(current_chunks)} chunks"
-        )
+        logger.info(f"WideCoverageStrategy.explore_raw: Starting gap detection with {len(current_chunks)} chunks")
         all_chunks, gap_stats = await self._gap_detection.detect_and_fill_gaps(
             root_query=root_query,
             covered_chunks=current_chunks,
@@ -248,10 +224,7 @@ class WideCoverageStrategy:
             constants_context=constants_context,
         )
         stats["gap"] = gap_stats
-        logger.info(
-            f"WideCoverageStrategy.explore_raw: Gap detection complete, "
-            f"now have {len(all_chunks)} chunks"
-        )
+        logger.info(f"WideCoverageStrategy.explore_raw: Gap detection complete, now have {len(all_chunks)} chunks")
 
         # NO elbow filtering here
         # NO file reading here

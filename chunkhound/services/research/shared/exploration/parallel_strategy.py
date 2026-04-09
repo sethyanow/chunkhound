@@ -101,8 +101,7 @@ class ParallelExplorationStrategy:
             }
 
         logger.info(
-            f"ParallelExplorationStrategy: Starting parallel exploration "
-            f"with {len(initial_chunks)} initial chunks"
+            f"ParallelExplorationStrategy: Starting parallel exploration with {len(initial_chunks)} initial chunks"
         )
 
         # Run both strategies concurrently
@@ -155,12 +154,8 @@ class ParallelExplorationStrategy:
             wide_stats = wide_result[1]
 
         # Fail explicitly if both strategies failed
-        if isinstance(bfs_result, BaseException) and isinstance(
-            wide_result, BaseException
-        ):
-            raise RuntimeError(
-                f"Both exploration strategies failed. BFS: {bfs_result}, Wide: {wide_result}"
-            )
+        if isinstance(bfs_result, BaseException) and isinstance(wide_result, BaseException):
+            raise RuntimeError(f"Both exploration strategies failed. BFS: {bfs_result}, Wide: {wide_result}")
 
         logger.info(
             f"ParallelExplorationStrategy: BFS found {len(bfs_chunks)} chunks, "
@@ -169,9 +164,7 @@ class ParallelExplorationStrategy:
 
         # Merge and dedupe chunks by chunk_id (keep highest score)
         merged_chunks = self._merge_and_dedupe(bfs_chunks, wide_chunks)
-        logger.info(
-            f"ParallelExplorationStrategy: Merged to {len(merged_chunks)} unique chunks"
-        )
+        logger.info(f"ParallelExplorationStrategy: Merged to {len(merged_chunks)} unique chunks")
 
         return merged_chunks, {
             "bfs": bfs_stats,
@@ -229,19 +222,13 @@ class ParallelExplorationStrategy:
             )
 
         # Apply unified elbow detection (score_key=None uses get_unified_score)
-        filtered_chunks, elbow_stats = filter_chunks_by_elbow(
-            merged_chunks, score_key=None
-        )
+        filtered_chunks, elbow_stats = filter_chunks_by_elbow(merged_chunks, score_key=None)
         logger.info(
-            f"ParallelExplorationStrategy: Elbow filter kept "
-            f"{len(filtered_chunks)}/{len(merged_chunks)} chunks"
+            f"ParallelExplorationStrategy: Elbow filter kept {len(filtered_chunks)}/{len(merged_chunks)} chunks"
         )
 
         # Read files for filtered chunks (no token budget - elbow already filtered)
-        logger.info(
-            f"ParallelExplorationStrategy: Reading files for "
-            f"{len(filtered_chunks)} chunks"
-        )
+        logger.info(f"ParallelExplorationStrategy: Reading files for {len(filtered_chunks)} chunks")
         file_contents = await self._file_reader.read_files_with_budget(
             chunks=filtered_chunks,
             llm_manager=self._llm_manager,

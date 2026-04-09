@@ -42,9 +42,7 @@ class ClusteringService:
         self._embedding_provider = embedding_provider
         self._llm_provider = llm_provider
 
-    async def cluster_files(
-        self, files: dict[str, str], n_clusters: int
-    ) -> tuple[list[ClusterGroup], dict[str, int]]:
+    async def cluster_files(self, files: dict[str, str], n_clusters: int) -> tuple[list[ClusterGroup], dict[str, int]]:
         """Cluster files into exactly n_clusters using k-means.
 
         Args:
@@ -70,14 +68,9 @@ class ClusteringService:
         n_clusters = min(n_clusters, len(files))
 
         # Calculate total tokens
-        total_tokens = sum(
-            self._llm_provider.estimate_tokens(content) for content in files.values()
-        )
+        total_tokens = sum(self._llm_provider.estimate_tokens(content) for content in files.values())
 
-        logger.info(
-            f"K-means clustering {len(files)} files ({total_tokens:,} tokens) "
-            f"into {n_clusters} clusters"
-        )
+        logger.info(f"K-means clustering {len(files)} files ({total_tokens:,} tokens) into {n_clusters} clusters")
 
         # Special case: single cluster requested or single file
         if n_clusters == 1 or len(files) == 1:
@@ -119,8 +112,7 @@ class ClusteringService:
             cluster_file_paths = cluster_to_files[cluster_id]
             cluster_files_content = {fp: files[fp] for fp in cluster_file_paths}
             cluster_tokens = sum(
-                self._llm_provider.estimate_tokens(content)
-                for content in cluster_files_content.values()
+                self._llm_provider.estimate_tokens(content) for content in cluster_files_content.values()
             )
 
             cluster_group = ClusterGroup(
@@ -131,10 +123,7 @@ class ClusteringService:
             )
             cluster_groups.append(cluster_group)
 
-            logger.debug(
-                f"Cluster {cluster_id}: {len(cluster_file_paths)} files, "
-                f"{cluster_tokens:,} tokens"
-            )
+            logger.debug(f"Cluster {cluster_id}: {len(cluster_file_paths)} files, {cluster_tokens:,} tokens")
 
         avg_tokens = total_tokens / len(cluster_groups) if cluster_groups else 0
         metadata = {
@@ -144,10 +133,7 @@ class ClusteringService:
             "avg_tokens_per_cluster": int(avg_tokens),
         }
 
-        logger.info(
-            f"K-means complete: {len(cluster_groups)} clusters, "
-            f"avg {int(avg_tokens):,} tokens/cluster"
-        )
+        logger.info(f"K-means complete: {len(cluster_groups)} clusters, avg {int(avg_tokens):,} tokens/cluster")
 
         return cluster_groups, metadata
 
@@ -182,9 +168,7 @@ class ClusteringService:
             raise ValueError("Cannot cluster empty files dictionary")
 
         # Calculate total tokens
-        total_tokens = sum(
-            self._llm_provider.estimate_tokens(content) for content in files.values()
-        )
+        total_tokens = sum(self._llm_provider.estimate_tokens(content) for content in files.values())
 
         logger.info(f"HDBSCAN clustering {len(files)} files ({total_tokens:,} tokens)")
 
@@ -219,9 +203,7 @@ class ClusteringService:
         effective_min_cluster_size = min(min_cluster_size, len(embeddings_array) - 1)
         effective_min_cluster_size = max(2, effective_min_cluster_size)
 
-        logger.debug(
-            f"Running HDBSCAN with min_cluster_size={effective_min_cluster_size}"
-        )
+        logger.debug(f"Running HDBSCAN with min_cluster_size={effective_min_cluster_size}")
 
         clusterer = HDBSCAN(
             min_cluster_size=effective_min_cluster_size,
@@ -239,7 +221,7 @@ class ClusteringService:
 
         # Count native clusters and outliers before reassignment
         unique_labels = set(labels)
-        num_native_clusters = len([l for l in unique_labels if l >= 0])
+        num_native_clusters = len([label for label in unique_labels if label >= 0])
         num_outliers = int(np.sum(labels == -1))
 
         # Reassign outliers to nearest cluster
@@ -255,8 +237,7 @@ class ClusteringService:
             cluster_file_paths = cluster_to_files[cluster_id]
             cluster_files_content = {fp: files[fp] for fp in cluster_file_paths}
             cluster_tokens = sum(
-                self._llm_provider.estimate_tokens(content)
-                for content in cluster_files_content.values()
+                self._llm_provider.estimate_tokens(content) for content in cluster_files_content.values()
             )
 
             cluster_group = ClusterGroup(
@@ -267,10 +248,7 @@ class ClusteringService:
             )
             cluster_groups.append(cluster_group)
 
-            logger.debug(
-                f"Cluster {cluster_id}: {len(cluster_file_paths)} files, "
-                f"{cluster_tokens:,} tokens"
-            )
+            logger.debug(f"Cluster {cluster_id}: {len(cluster_file_paths)} files, {cluster_tokens:,} tokens")
 
         avg_tokens = total_tokens / len(cluster_groups) if cluster_groups else 0
         metadata = {
@@ -330,8 +308,7 @@ class ClusteringService:
         outlier_indices = np.where(outlier_mask)[0]
         for i in outlier_indices:
             distances = {
-                label: float(np.linalg.norm(embeddings[i] - centroid))
-                for label, centroid in centroids.items()
+                label: float(np.linalg.norm(embeddings[i] - centroid)) for label, centroid in centroids.items()
             }
             nearest_label = min(distances, key=distances.get)  # type: ignore[arg-type]
             labels[i] = nearest_label
@@ -382,10 +359,7 @@ class ClusteringService:
             raise ValueError("Cannot cluster empty files dictionary")
 
         # Calculate total tokens and per-file tokens
-        file_tokens: dict[str, int] = {
-            fp: self._llm_provider.estimate_tokens(content)
-            for fp, content in files.items()
-        }
+        file_tokens: dict[str, int] = {fp: self._llm_provider.estimate_tokens(content) for fp, content in files.items()}
         total_tokens = sum(file_tokens.values())
 
         logger.info(
@@ -423,17 +397,13 @@ class ClusteringService:
         embeddings_array = np.array(embeddings)
 
         # Build file_path -> embedding mapping for later operations
-        file_embeddings: dict[str, np.ndarray] = {
-            fp: embeddings_array[i] for i, fp in enumerate(file_paths)
-        }
+        file_embeddings: dict[str, np.ndarray] = {fp: embeddings_array[i] for i, fp in enumerate(file_paths)}
 
         # HDBSCAN clustering
         effective_min_cluster_size = min(min_cluster_size, len(embeddings_array) - 1)
         effective_min_cluster_size = max(2, effective_min_cluster_size)
 
-        logger.debug(
-            f"Running HDBSCAN with min_cluster_size={effective_min_cluster_size}"
-        )
+        logger.debug(f"Running HDBSCAN with min_cluster_size={effective_min_cluster_size}")
 
         clusterer = HDBSCAN(
             min_cluster_size=effective_min_cluster_size,
@@ -487,12 +457,8 @@ class ClusteringService:
             kmeans = KMeans(n_clusters=2, random_state=42, n_init=10)
             split_labels = kmeans.fit_predict(embeddings)
 
-            cluster_0 = [
-                fp for fp, lbl in zip(file_paths_to_split, split_labels) if lbl == 0
-            ]
-            cluster_1 = [
-                fp for fp, lbl in zip(file_paths_to_split, split_labels) if lbl == 1
-            ]
+            cluster_0 = [fp for fp, lbl in zip(file_paths_to_split, split_labels) if lbl == 0]
+            cluster_1 = [fp for fp, lbl in zip(file_paths_to_split, split_labels) if lbl == 1]
 
             # Guard: k-means may return all files in one cluster (identical embeddings)
             # Use deterministic fallback to guarantee splitting for bounded prompts
@@ -561,9 +527,7 @@ class ClusteringService:
             return sum(file_tokens[fp] for fp in cluster_to_files[cluster_id])
 
         def compute_centroid(cluster_id: int) -> np.ndarray:
-            cluster_embeddings = np.array(
-                [file_embeddings[fp] for fp in cluster_to_files[cluster_id]]
-            )
+            cluster_embeddings = np.array([file_embeddings[fp] for fp in cluster_to_files[cluster_id]])
             centroid: np.ndarray = cluster_embeddings.mean(axis=0)
             return centroid
 
@@ -596,9 +560,7 @@ class ClusteringService:
         while len(cluster_to_files) > 1:
             # Find smallest cluster (excluding already-marked unmergeable)
             cluster_tokens_map = {
-                cid: get_cluster_tokens(cid)
-                for cid in cluster_to_files
-                if cid not in unmergeable_clusters
+                cid: get_cluster_tokens(cid) for cid in cluster_to_files if cid not in unmergeable_clusters
             }
 
             if not cluster_tokens_map:
@@ -612,12 +574,8 @@ class ClusteringService:
 
             # Find nearest cluster that respects max_tokens_per_cluster
             # Need full token map for merge validation
-            full_cluster_tokens_map = {
-                cid: get_cluster_tokens(cid) for cid in cluster_to_files
-            }
-            target_id = find_valid_merge_target(
-                smallest_id, smallest_tokens, full_cluster_tokens_map
-            )
+            full_cluster_tokens_map = {cid: get_cluster_tokens(cid) for cid in cluster_to_files}
+            target_id = find_valid_merge_target(smallest_id, smallest_tokens, full_cluster_tokens_map)
 
             if target_id is None:
                 # No valid target - keep cluster as-is
@@ -629,10 +587,7 @@ class ClusteringService:
                 num_unmergeable += 1
                 continue
 
-            logger.debug(
-                f"Merging cluster {smallest_id} ({smallest_tokens:,} tokens) "
-                f"into cluster {target_id}"
-            )
+            logger.debug(f"Merging cluster {smallest_id} ({smallest_tokens:,} tokens) into cluster {target_id}")
 
             # Merge smallest into target
             cluster_to_files[target_id].extend(cluster_to_files[smallest_id])
@@ -654,14 +609,9 @@ class ClusteringService:
             )
             final_cluster_groups.append(cluster_group)
 
-            logger.debug(
-                f"Cluster {new_id}: {len(cluster_file_paths)} files, "
-                f"{cluster_tokens:,} tokens"
-            )
+            logger.debug(f"Cluster {new_id}: {len(cluster_file_paths)} files, {cluster_tokens:,} tokens")
 
-        avg_tokens = (
-            total_tokens / len(final_cluster_groups) if final_cluster_groups else 0
-        )
+        avg_tokens = total_tokens / len(final_cluster_groups) if final_cluster_groups else 0
         metadata = {
             "num_clusters": len(final_cluster_groups),
             "num_native_clusters": num_native_clusters,

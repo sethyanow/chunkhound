@@ -137,9 +137,7 @@ async def run_command(args: argparse.Namespace, config: Config) -> None:
                 )
 
                 # Process directory - service layers will add subtasks to progress_instance
-                stats = await indexing_service.process_directory(
-                    Path(args.path), no_embeddings=args.no_embeddings
-                )
+                stats = await indexing_service.process_directory(Path(args.path), no_embeddings=args.no_embeddings)
             finally:
                 try:
                     await lsp_pool.stop_all()
@@ -163,9 +161,7 @@ async def run_command(args: argparse.Namespace, config: Config) -> None:
 
             # Write JSON file
             output_path.parent.mkdir(parents=True, exist_ok=True)
-            output_path.write_text(
-                json.dumps(diagnostics.to_dict(), indent=2), encoding="utf-8"
-            )
+            output_path.write_text(json.dumps(diagnostics.to_dict(), indent=2), encoding="utf-8")
             formatter.info(f"Performance diagnostics written to: {output_path}")
 
             # Display warnings
@@ -231,18 +227,12 @@ async def run_command(args: argparse.Namespace, config: Config) -> None:
 
             # Respect explicit no-prompts
             if skipped_timeouts and os.environ.get("CHUNKHOUND_NO_PROMPTS") == "1":
-                formatter.info(
-                    f"{len(skipped_timeouts)} files timed out (prompts disabled)."
-                )
+                formatter.info(f"{len(skipped_timeouts)} files timed out (prompts disabled).")
                 return
 
             # Only prompt in interactive TTY and when there are timeouts
             if skipped_timeouts and sys.stdin.isatty():
-                base_dir = (
-                    Path(args.path).resolve()
-                    if hasattr(args, "path")
-                    else Path.cwd().resolve()
-                )
+                base_dir = Path(args.path).resolve() if hasattr(args, "path") else Path.cwd().resolve()
 
                 # Convert to unique relative paths within the project
                 rel_paths: list[str] = []
@@ -257,14 +247,8 @@ async def run_command(args: argparse.Namespace, config: Config) -> None:
                         seen.add(rel)
                         rel_paths.append(rel)
 
-                formatter.info(
-                    f"{len(rel_paths)} timed-out files can be excluded from future runs."
-                )
-                reply = (
-                    input("Add these to indexing.exclude in .chunkhound.json? [y/N]: ")
-                    .strip()
-                    .lower()
-                )
+                formatter.info(f"{len(rel_paths)} timed-out files can be excluded from future runs.")
+                reply = input("Add these to indexing.exclude in .chunkhound.json? [y/N]: ").strip().lower()
                 if reply in ("y", "yes"):
                     local_config_path = base_dir / ".chunkhound.json"
                     # Load or initialize config data
@@ -299,9 +283,7 @@ async def run_command(args: argparse.Namespace, config: Config) -> None:
                             json.dumps(data, indent=2, sort_keys=False) + "\n",
                             encoding="utf-8",
                         )
-                        formatter.success(
-                            f"Added {added} file(s) to indexing.exclude in {local_config_path}"
-                        )
+                        formatter.success(f"Added {added} file(s) to indexing.exclude in {local_config_path}")
                     else:
                         formatter.info("All timed-out files already excluded.")
         except Exception as e:
@@ -330,9 +312,7 @@ def _print_completion_summary(stats, formatter: RichOutputFormatter) -> None:
     formatter.completion_summary(stats_dict, stats.processing_time)
 
 
-def _validate_run_arguments(
-    args: argparse.Namespace, formatter: RichOutputFormatter, config: Any = None
-) -> bool:
+def _validate_run_arguments(args: argparse.Namespace, formatter: RichOutputFormatter, config: Any = None) -> bool:
     """Validate run command arguments.
 
     Args:
@@ -356,11 +336,7 @@ def _validate_run_arguments(
         # Use unified config values if available, fall back to CLI args
         if config and config.embedding:
             provider = config.embedding.provider
-            api_key = (
-                config.embedding.api_key.get_secret_value()
-                if config.embedding.api_key
-                else None
-            )
+            api_key = config.embedding.api_key.get_secret_value() if config.embedding.api_key else None
             base_url = config.embedding.base_url
             model = config.embedding.model
         else:
@@ -374,9 +350,7 @@ def _validate_run_arguments(
             if not provider:
                 formatter.error("No embedding provider configured.")
                 formatter.info("To fix this, you can:")
-                formatter.info(
-                    "  1. Create .chunkhound.json config file with embeddings"
-                )
+                formatter.info("  1. Create .chunkhound.json config file with embeddings")
                 formatter.info("  2. Use --no-embeddings to skip embeddings")
                 return False
         if not validate_provider_args(provider, api_key, base_url, model):
@@ -398,9 +372,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
     Minimal implementation: perform discovery via the coordinator and print
     the discovered files sorted. Later we may reflect change-detection.
     """
-    base_dir = (
-        Path(args.path).resolve() if hasattr(args, "path") else Path.cwd().resolve()
-    )
+    base_dir = Path(args.path).resolve() if hasattr(args, "path") else Path.cwd().resolve()
 
     # Optional debug output about ignore configuration (stderr to avoid breaking JSON piping)
     try:
@@ -439,9 +411,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
     try:
         # Prefer an in-memory DB to keep simulate side-effect free
         # Only override when path is unset or points to a non-existent parent.
-        db_path = Path(
-            getattr(config.database, "path", Path(":memory:")) or Path(":memory:")
-        )
+        db_path = Path(getattr(config.database, "path", Path(":memory:")) or Path(":memory:"))
         if str(db_path) != ":memory":  # typos
             if str(db_path) != ":memory:" and not db_path.parent.exists():
                 # If parent path doesn't exist, switch to in-memory
@@ -471,9 +441,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
     # Resolve patterns using the DirectoryIndexingService helper to keep logic aligned
     from chunkhound.services.directory_indexing_service import DirectoryIndexingService
 
-    svc = DirectoryIndexingService(
-        indexing_coordinator=indexing_coordinator, config=config
-    )
+    svc = DirectoryIndexingService(indexing_coordinator=indexing_coordinator, config=config)
     include_patterns, exclude_patterns = svc._resolve_file_patterns()
 
     # Normalize include patterns and call internal discovery
@@ -550,16 +518,12 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
                 detect_repo_roots as _detect_roots,
             )
 
-            roots = _detect_roots(
-                base_dir, config.indexing.get_effective_config_excludes()
-            )
+            roots = _detect_roots(base_dir, config.indexing.get_effective_config_excludes())
             if not roots:
                 eng = _build_root_engine(
                     root=base_dir,
                     sources=["gitignore"],
-                    chignore_file=getattr(
-                        config.indexing, "chignore_file", ".chignore"
-                    ),
+                    chignore_file=getattr(config.indexing, "chignore_file", ".chignore"),
                     config_exclude=config.indexing.get_effective_config_excludes(),
                 )
                 files = [p for p in files if not eng.matches(p, is_dir=False)]
@@ -627,11 +591,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
         try:
             print(
                 _json.dumps(
-                    {
-                        "files": [
-                            {"path": rel, "size_bytes": size} for rel, size in items
-                        ]
-                    },
+                    {"files": [{"path": rel, "size_bytes": size} for rel, size in items]},
                     indent=2,
                 )
             )
@@ -662,9 +622,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
 
 async def _check_ignores(args: argparse.Namespace, config: Config) -> None:
     """Compare ChunkHound ignore decisions with a sentinel (currently: Git)."""
-    base_dir = (
-        Path(args.path).resolve() if hasattr(args, "path") else Path.cwd().resolve()
-    )
+    base_dir = Path(args.path).resolve() if hasattr(args, "path") else Path.cwd().resolve()
 
     vs = getattr(args, "vs", "git") or "git"
     if vs != "git":

@@ -90,9 +90,7 @@ async def with_timeout(
         raise MCPError(error_message)
 
 
-def format_error_response(
-    error: Exception, include_traceback: bool = False
-) -> dict[str, Any]:
+def format_error_response(error: Exception, include_traceback: bool = False) -> dict[str, Any]:
     """Format exception as standardized error response.
 
     Args:
@@ -191,9 +189,7 @@ async def handle_tool_call(
 
         # Check capability requirements
         tool = TOOL_REGISTRY[tool_name]
-        if tool.requires_embeddings and (
-            not embedding_manager or not embedding_manager.list_providers()
-        ):
+        if tool.requires_embeddings and (not embedding_manager or not embedding_manager.list_providers()):
             raise ValueError(f"Tool {tool_name} requires embedding provider")
         if tool.requires_llm and not llm_manager:
             raise ValueError(f"Tool {tool_name} requires LLM provider")
@@ -318,9 +314,7 @@ def add_common_mcp_arguments(parser: Any) -> None:
 
     # Database arguments
     parser.add_argument("--db", type=str, help="Database path")
-    parser.add_argument(
-        "--database-provider", choices=["duckdb", "lancedb"], help="Database provider"
-    )
+    parser.add_argument("--database-provider", choices=["duckdb", "lancedb"], help="Database provider")
 
     # Embedding arguments
     parser.add_argument(

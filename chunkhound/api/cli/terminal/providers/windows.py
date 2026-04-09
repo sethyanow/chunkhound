@@ -2,7 +2,7 @@
 
 from typing import Any
 
-from ..exceptions import TerminalUnsupportedPlatform
+from ..exceptions import TerminalUnsupportedPlatformError
 from .base import BaseTerminalProvider
 
 
@@ -23,7 +23,7 @@ class WindowsTerminalProvider(BaseTerminalProvider):
 
             self._msvcrt = msvcrt
         except ImportError:
-            raise TerminalUnsupportedPlatform(
+            raise TerminalUnsupportedPlatformError(
                 platform="windows",
                 operation="import_msvcrt",
                 reason="msvcrt module not available",

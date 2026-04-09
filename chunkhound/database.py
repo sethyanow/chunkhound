@@ -106,9 +106,7 @@ class Database:
             # SECTION: Legacy_Auto_Configuration (DEPRECATED)
             # WARNING: Auto-configuration may not set optimal batch sizes
             # MIGRATION: Use create_database_with_dependencies() instead
-            logger.warning(
-                "Using legacy Database initialization - consider using create_database_with_dependencies()"
-            )
+            logger.warning("Using legacy Database initialization - consider using create_database_with_dependencies()")
 
             # Auto-detect configuration if not provided
             if config is None:
@@ -135,9 +133,7 @@ class Database:
                     DatabaseProviderFactory,
                 )
 
-                self._provider = DatabaseProviderFactory.create_provider(
-                    config, embedding_manager
-                )
+                self._provider = DatabaseProviderFactory.create_provider(config, embedding_manager)
 
                 # Register the new provider instance (not a factory)
                 # Using a lambda here caused the registry to store a function, breaking
@@ -179,9 +175,7 @@ class Database:
     # - Proper batching (parse→embed→store workflow)
     # =============================================================================
 
-    async def process_file(
-        self, file_path: Path, skip_embeddings: bool = False
-    ) -> dict[str, Any]:
+    async def process_file(self, file_path: Path, skip_embeddings: bool = False) -> dict[str, Any]:
         """Process a file end-to-end: parse, chunk, and store in database.
 
         # DELEGATION: IndexingCoordinator handles the complex workflow
@@ -205,9 +199,7 @@ class Database:
             # Use centralized file patterns from Language enum
             patterns = Language.get_file_patterns()
 
-        return await self._indexing_coordinator.process_directory(
-            directory, patterns, exclude_patterns
-        )
+        return await self._indexing_coordinator.process_directory(directory, patterns, exclude_patterns)
 
     # =============================================================================
     # Search Methods - Delegate to SearchService
@@ -252,9 +244,7 @@ class Database:
 
         Delegates to provider for actual search.
         """
-        return self._provider.search_regex(
-            pattern=pattern, page_size=page_size, offset=offset, path_filter=path_filter
-        )
+        return self._provider.search_regex(pattern=pattern, page_size=page_size, offset=offset, path_filter=path_filter)
 
     # =============================================================================
     # Database Operations - Delegate to Provider
@@ -278,9 +268,7 @@ class Database:
         Returns:
             Operation result
         """
-        return self._provider._execute_in_db_thread_sync(
-            operation_name, *args, **kwargs
-        )
+        return self._provider._execute_in_db_thread_sync(operation_name, *args, **kwargs)
 
     def get_file_by_path(self, file_path: str) -> dict[str, Any] | None:
         """Get file record by path."""

@@ -58,15 +58,11 @@ class File:
 
         # Size validation
         if self.size_bytes < 0:
-            raise ValidationError(
-                "size_bytes", self.size_bytes, "File size cannot be negative"
-            )
+            raise ValidationError("size_bytes", self.size_bytes, "File size cannot be negative")
 
         # mtime validation
         if self.mtime < 0:
-            raise ValidationError(
-                "mtime", self.mtime, "Modification time cannot be negative"
-            )
+            raise ValidationError("mtime", self.mtime, "Modification time cannot be negative")
 
     @staticmethod
     def _detect_language(file_path: Path) -> Language | None:
@@ -302,10 +298,7 @@ class File:
 
     def __str__(self) -> str:
         """Return string representation of the file."""
-        return (
-            f"File(id={self.id}, path={self.relative_path}, "
-            f"language={self.language.value})"
-        )
+        return f"File(id={self.id}, path={self.relative_path}, language={self.language.value})"
 
     def __repr__(self) -> str:
         """Return detailed string representation of the file."""

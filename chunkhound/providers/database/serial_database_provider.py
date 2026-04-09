@@ -165,13 +165,9 @@ class SerialDatabaseProvider(ABC):
 
             registry_module = importlib.import_module("chunkhound.registry")
             get_registry = getattr(registry_module, "get_registry")
-            create_indexing_coordinator = getattr(
-                registry_module, "create_indexing_coordinator"
-            )
+            create_indexing_coordinator = getattr(registry_module, "create_indexing_coordinator")
             create_search_service = getattr(registry_module, "create_search_service")
-            create_embedding_service = getattr(
-                registry_module, "create_embedding_service"
-            )
+            create_embedding_service = getattr(registry_module, "create_embedding_service")
 
             # Get registry and register self as database provider
             # NOTE: ProviderRegistry.register_provider expects an instance, not a factory.
@@ -182,17 +178,11 @@ class SerialDatabaseProvider(ABC):
             registry.register_provider("database", self, singleton=True)
 
             # Initialize service layer components from registry
-            if (
-                not hasattr(self, "_indexing_coordinator")
-                or self._indexing_coordinator is None
-            ):
+            if not hasattr(self, "_indexing_coordinator") or self._indexing_coordinator is None:
                 self._indexing_coordinator = create_indexing_coordinator()
             if not hasattr(self, "_search_service") or self._search_service is None:
                 self._search_service = create_search_service()
-            if (
-                not hasattr(self, "_embedding_service")
-                or self._embedding_service is None
-            ):
+            if not hasattr(self, "_embedding_service") or self._embedding_service is None:
                 self._embedding_service = create_embedding_service()
 
             logger.debug("Service layer components initialized successfully")
@@ -210,9 +200,7 @@ class SerialDatabaseProvider(ABC):
         """
         logger.info("Database connection established in executor thread")
 
-    def _executor_disconnect(
-        self, conn: Any, state: dict[str, Any], skip_checkpoint: bool
-    ) -> None:
+    def _executor_disconnect(self, conn: Any, state: dict[str, Any], skip_checkpoint: bool) -> None:
         """Default executor method for disconnect - runs in DB thread.
 
         Subclasses should override to add provider-specific cleanup.
@@ -266,9 +254,7 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
-        return self._execute_in_db_thread_sync(
-            "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
-        )
+        return self._execute_in_db_thread_sync("search_regex", pattern, page_size, offset, path_filter, fuzzy_path)
 
     async def search_regex_async(
         self,
@@ -282,13 +268,9 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
-        return await self._execute_in_db_thread(
-            "search_regex", pattern, page_size, offset, path_filter, fuzzy_path
-        )
+        return await self._execute_in_db_thread("search_regex", pattern, page_size, offset, path_filter, fuzzy_path)
 
-    async def execute_query_async(
-        self, query: str, params: list[Any] | None = None
-    ) -> list[dict[str, Any]]:
+    async def execute_query_async(self, query: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         """Async variant of execute_query."""
         return await self._execute_in_db_thread("execute_query", query, params)
 
@@ -321,9 +303,7 @@ class SerialDatabaseProvider(ABC):
             return
         await self._execute_in_db_thread("rollback_transaction")
 
-    async def get_file_by_path_async(
-        self, path: str, as_model: bool = False
-    ) -> dict[str, Any] | File | None:
+    async def get_file_by_path_async(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Async variant of get_file_by_path."""
         return await self._execute_in_db_thread("get_file_by_path", path, as_model)
 
@@ -335,13 +315,9 @@ class SerialDatabaseProvider(ABC):
         """Async variant of insert_file."""
         return await self._execute_in_db_thread("insert_file", file)
 
-    async def get_chunks_by_file_id_async(
-        self, file_id: int, as_model: bool = False
-    ) -> list[dict[str, Any] | Chunk]:
+    async def get_chunks_by_file_id_async(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Async variant of get_chunks_by_file_id."""
-        return await self._execute_in_db_thread(
-            "get_chunks_by_file_id", file_id, as_model
-        )
+        return await self._execute_in_db_thread("get_chunks_by_file_id", file_id, as_model)
 
     async def insert_chunks_batch_async(self, chunks: list[Chunk]) -> list[int]:
         """Async variant of insert_chunks_batch."""
@@ -384,9 +360,7 @@ class SerialDatabaseProvider(ABC):
             return
         await self._execute_in_db_thread("insert_edges_batch", edges)
 
-    def search_chunks_regex(
-        self, pattern: str, file_path: str | None = None
-    ) -> list[dict[str, Any]]:
+    def search_chunks_regex(self, pattern: str, file_path: str | None = None) -> list[dict[str, Any]]:
         """Backward compatibility wrapper for legacy search_chunks_regex calls."""
         results, _ = self.search_regex(
             pattern=pattern,
@@ -450,9 +424,7 @@ class SerialDatabaseProvider(ABC):
 
     # File processing integration
 
-    async def process_file(
-        self, file_path: Path, skip_embeddings: bool = False
-    ) -> dict[str, Any]:
+    async def process_file(self, file_path: Path, skip_embeddings: bool = False) -> dict[str, Any]:
         """Process a file end-to-end: parse, chunk, and store in database.
 
         Delegates to IndexingCoordinator for actual processing.
@@ -468,9 +440,7 @@ class SerialDatabaseProvider(ABC):
             if not self._indexing_coordinator:
                 raise RuntimeError("IndexingCoordinator not initialized")
 
-            return await self._indexing_coordinator.process_file(
-                file_path, skip_embeddings=skip_embeddings
-            )
+            return await self._indexing_coordinator.process_file(file_path, skip_embeddings=skip_embeddings)
 
         except Exception as e:
             logger.error(f"Failed to process file {file_path}: {e}")
@@ -536,18 +506,14 @@ class SerialDatabaseProvider(ABC):
                         continue
 
                     # Delegate to IndexingCoordinator for file processing
-                    result = await self._indexing_coordinator.process_file(
-                        file_path, skip_embeddings=False
-                    )
+                    result = await self._indexing_coordinator.process_file(file_path, skip_embeddings=False)
 
                     if result["status"] == "success":
                         files_processed += 1
                         total_chunks += result.get("chunks", 0)
                         total_embeddings += result.get("embeddings", 0)
                     elif result["status"] == "error":
-                        errors.append(
-                            f"{file_path}: {result.get('error', 'Unknown error')}"
-                        )
+                        errors.append(f"{file_path}: {result.get('error', 'Unknown error')}")
                     # Skip files with status "up_to_date", "skipped", etc.
 
                 except Exception as e:
@@ -583,27 +549,19 @@ class SerialDatabaseProvider(ABC):
 
     def create_schema(self) -> None:
         """Create database schema for files, chunks, and embeddings."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement create_schema"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} must implement create_schema")
 
     def create_indexes(self) -> None:
         """Create database indexes for performance optimization."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement create_indexes"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} must implement create_indexes")
 
     def health_check(self) -> dict[str, Any]:
         """Perform health check and return status information."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement health_check"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} must implement health_check")
 
     def get_connection_info(self) -> dict[str, Any]:
         """Get information about the database connection."""
-        raise NotImplementedError(
-            f"{self.__class__.__name__} must implement get_connection_info"
-        )
+        raise NotImplementedError(f"{self.__class__.__name__} must implement get_connection_info")
 
     def optimize_tables(self) -> None:
         """Optimize tables by compacting fragments and rebuilding indexes."""

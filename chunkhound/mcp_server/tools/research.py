@@ -72,16 +72,10 @@ async def deep_research_impl(
 
     # Validate reranker is configured
     if not embedding_manager or not embedding_manager.list_providers():
-        raise Exception(
-            "No embedding providers available. Code research requires reranking "
-            "support."
-        )
+        raise Exception("No embedding providers available. Code research requires reranking support.")
 
     embedding_provider = embedding_manager.get_provider()
-    if not (
-        hasattr(embedding_provider, "supports_reranking")
-        and embedding_provider.supports_reranking()
-    ):
+    if not (hasattr(embedding_provider, "supports_reranking") and embedding_provider.supports_reranking()):
         raise Exception(
             "Code research requires a provider with reranking support. "
             "Configure a rerank_model in your embedding configuration."

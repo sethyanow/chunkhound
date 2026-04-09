@@ -33,7 +33,7 @@ def _dbg_log(msg: str) -> None:
         pass
 
 
-from chunkhound.parsers.parser_factory import create_parser_for_language
+from chunkhound.parsers.parser_factory import create_parser_for_language  # noqa: E402
 
 
 @dataclass
@@ -218,7 +218,8 @@ def process_file_batch(
             language = detect_language(file_path)
             _dbg_log(
                 f"START file={file_path} size_kb={file_stat.st_size / 1024:.1f} lang={language.value} "
-                f"tmo_s={timeout_s} min_kb={timeout_min_kb} threshold_kb={config_dict.get('config_file_size_threshold_kb')}"
+                f"tmo_s={timeout_s} min_kb={timeout_min_kb}"
+                f" threshold_kb={config_dict.get('config_file_size_threshold_kb')}"
             )
             t0 = perf_counter()
             if language == Language.UNKNOWN:
@@ -234,7 +235,8 @@ def process_file_batch(
                     )
                 )
                 _dbg_log(
-                    f"END   file={file_path} status=skipped reason=unknown_type dur_ms={(perf_counter() - t0) * 1000:.1f}"
+                    f"END   file={file_path} status=skipped"
+                    f" reason=unknown_type dur_ms={(perf_counter() - t0) * 1000:.1f}"
                 )
                 logger.debug("Skipping file with unknown type: {}", file_path)
                 continue
@@ -259,7 +261,9 @@ def process_file_batch(
                         )
                     )
                     _dbg_log(
-                        f"END   file={file_path} status=skipped reason=large_config_file dur_ms={(perf_counter() - t0) * 1000:.1f}"
+                        f"END   file={file_path} status=skipped"
+                        f" reason=large_config_file"
+                        f" dur_ms={(perf_counter() - t0) * 1000:.1f}"
                     )
                     continue
 
@@ -268,13 +272,9 @@ def process_file_batch(
                 detect_sql = bool(config_dict.get("detect_embedded_sql", True))
                 if _timeout_semaphore is not None:
                     with _timeout_semaphore:
-                        status, payload = _parse_file_with_timeout(
-                            file_path, language, timeout_s, detect_sql
-                        )
+                        status, payload = _parse_file_with_timeout(file_path, language, timeout_s, detect_sql)
                 else:
-                    status, payload = _parse_file_with_timeout(
-                        file_path, language, timeout_s, detect_sql
-                    )
+                    status, payload = _parse_file_with_timeout(file_path, language, timeout_s, detect_sql)
                 if status == "timeout":
                     # Defer user notification to final summary; avoid live console noise
                     results.append(
@@ -290,7 +290,8 @@ def process_file_batch(
                         )
                     )
                     _dbg_log(
-                        f"END   file={file_path} status=skipped reason=timeout dur_ms={(perf_counter() - t0) * 1000:.1f}"
+                        f"END   file={file_path} status=skipped"
+                        f" reason=timeout dur_ms={(perf_counter() - t0) * 1000:.1f}"
                     )
                     continue
                 elif status == "error":
@@ -307,7 +308,8 @@ def process_file_batch(
                         )
                     )
                     _dbg_log(
-                        f"END   file={file_path} status=error reason={payload} dur_ms={(perf_counter() - t0) * 1000:.1f}"
+                        f"END   file={file_path} status=error"
+                        f" reason={payload} dur_ms={(perf_counter() - t0) * 1000:.1f}"
                     )
                     continue
                 else:
@@ -316,9 +318,7 @@ def process_file_batch(
                 # No timeout path (original behavior)
                 parser = create_parser_for_language(
                     language,
-                    detect_embedded_sql=bool(
-                        config_dict.get("detect_embedded_sql", True)
-                    ),
+                    detect_embedded_sql=bool(config_dict.get("detect_embedded_sql", True)),
                 )
                 if not parser:
                     results.append(
@@ -350,7 +350,8 @@ def process_file_batch(
                 )
             )
             _dbg_log(
-                f"END   file={file_path} status=success dur_ms={(perf_counter() - t0) * 1000:.1f} chunks={len(chunks_data)}"
+                f"END   file={file_path} status=success"
+                f" dur_ms={(perf_counter() - t0) * 1000:.1f} chunks={len(chunks_data)}"
             )
 
         except Exception as e:

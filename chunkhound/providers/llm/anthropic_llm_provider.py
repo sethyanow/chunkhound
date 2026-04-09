@@ -123,10 +123,7 @@ class AnthropicLLMProvider(LLMProvider):
         # Effort parameter (Opus 4.5 only)
         self._effort = effort
         if effort and model not in EFFORT_SUPPORTED_MODELS:
-            logger.warning(
-                f"Effort parameter is only supported on Opus 4.5. "
-                f"Model {model} will ignore effort={effort}"
-            )
+            logger.warning(f"Effort parameter is only supported on Opus 4.5. Model {model} will ignore effort={effort}")
 
         # Context management settings
         self._context_management_enabled = context_management_enabled
@@ -263,9 +260,7 @@ class AnthropicLLMProvider(LLMProvider):
 
         return headers
 
-    def _build_context_management(
-        self, thinking_active: bool | None = None
-    ) -> dict[str, Any] | None:
+    def _build_context_management(self, thinking_active: bool | None = None) -> dict[str, Any] | None:
         """Build context management configuration if enabled.
 
         Args:
@@ -280,9 +275,7 @@ class AnthropicLLMProvider(LLMProvider):
             return None
 
         # Determine if thinking is actually active for this request
-        is_thinking_active = (
-            thinking_active if thinking_active is not None else self._thinking_enabled
-        )
+        is_thinking_active = thinking_active if thinking_active is not None else self._thinking_enabled
 
         edits: list[dict[str, Any]] = []
 
@@ -339,9 +332,7 @@ class AnthropicLLMProvider(LLMProvider):
         """
         beta_headers = request_kwargs.pop("betas", None)
         if beta_headers:
-            return await self._client.beta.messages.create(
-                betas=beta_headers, **request_kwargs
-            )
+            return await self._client.beta.messages.create(betas=beta_headers, **request_kwargs)
         else:
             return await self._client.messages.create(**request_kwargs)
 
@@ -419,16 +410,12 @@ class AnthropicLLMProvider(LLMProvider):
             if response.usage:
                 self._prompt_tokens += response.usage.input_tokens
                 self._completion_tokens += response.usage.output_tokens
-                self._tokens_used += (
-                    response.usage.input_tokens + response.usage.output_tokens
-                )
+                self._tokens_used += response.usage.input_tokens + response.usage.output_tokens
 
             # Extract response content from content blocks
             content_blocks = response.content
             if not content_blocks:
-                logger.error(
-                    f"Anthropic returned no content blocks (stop_reason={response.stop_reason})"
-                )
+                logger.error(f"Anthropic returned no content blocks (stop_reason={response.stop_reason})")
                 raise RuntimeError(
                     f"LLM returned empty response (stop_reason={response.stop_reason}). "
                     "This may indicate a content filter, API error, or model refusal."
@@ -438,9 +425,7 @@ class AnthropicLLMProvider(LLMProvider):
             content = self._extract_text_from_content(content_blocks)
 
             if not content.strip():
-                logger.warning(
-                    f"Anthropic returned empty text content (stop_reason={response.stop_reason})"
-                )
+                logger.warning(f"Anthropic returned empty text content (stop_reason={response.stop_reason})")
                 raise RuntimeError(
                     f"LLM returned empty text content (stop_reason={response.stop_reason}). "
                     "This may indicate a content filter, API error, or model refusal."
@@ -450,10 +435,7 @@ class AnthropicLLMProvider(LLMProvider):
             if response.stop_reason == "max_tokens":
                 usage_info = ""
                 if response.usage:
-                    usage_info = (
-                        f" (input={response.usage.input_tokens:,}, "
-                        f"output={response.usage.output_tokens:,})"
-                    )
+                    usage_info = f" (input={response.usage.input_tokens:,}, output={response.usage.output_tokens:,})"
 
                 raise RuntimeError(
                     f"LLM response truncated - token limit exceeded{usage_info}. "
@@ -465,10 +447,7 @@ class AnthropicLLMProvider(LLMProvider):
 
             # Warn on unexpected stop reasons
             if response.stop_reason not in ("end_turn", "stop_sequence"):
-                logger.warning(
-                    f"Unexpected stop_reason: {response.stop_reason} "
-                    f"(content_length={len(content)})"
-                )
+                logger.warning(f"Unexpected stop_reason: {response.stop_reason} (content_length={len(content)})")
 
             tokens_used = 0
             if response.usage:
@@ -581,9 +560,7 @@ class AnthropicLLMProvider(LLMProvider):
                 request_kwargs["output_config"] = output_config
 
             # Add context management if enabled
-            context_management = self._build_context_management(
-                thinking_active=thinking_active
-            )
+            context_management = self._build_context_management(thinking_active=thinking_active)
             if context_management:
                 request_kwargs["context_management"] = context_management
 
@@ -594,27 +571,18 @@ class AnthropicLLMProvider(LLMProvider):
             if response.usage:
                 self._prompt_tokens += response.usage.input_tokens
                 self._completion_tokens += response.usage.output_tokens
-                self._tokens_used += (
-                    response.usage.input_tokens + response.usage.output_tokens
-                )
+                self._tokens_used += response.usage.input_tokens + response.usage.output_tokens
 
             # Check for refusal (safety-related)
             if response.stop_reason == "refusal":
-                raise RuntimeError(
-                    "Model refused to generate structured output for safety reasons"
-                )
+                raise RuntimeError("Model refused to generate structured output for safety reasons")
 
             # Check for truncation
             if response.stop_reason == "max_tokens":
                 usage_info = ""
                 if response.usage:
-                    usage_info = (
-                        f" (input={response.usage.input_tokens:,}, "
-                        f"output={response.usage.output_tokens:,})"
-                    )
-                raise RuntimeError(
-                    f"Structured output truncated - increase max_completion_tokens{usage_info}"
-                )
+                    usage_info = f" (input={response.usage.input_tokens:,}, output={response.usage.output_tokens:,})"
+                raise RuntimeError(f"Structured output truncated - increase max_completion_tokens{usage_info}")
 
             # Extract text content from response
             # With structured outputs, the JSON is in the text block
@@ -626,8 +594,7 @@ class AnthropicLLMProvider(LLMProvider):
 
             if not text_content:
                 raise RuntimeError(
-                    "Model did not return text content for structured output. "
-                    f"Stop reason: {response.stop_reason}"
+                    f"Model did not return text content for structured output. Stop reason: {response.stop_reason}"
                 )
 
             # Parse and return JSON
@@ -710,8 +677,7 @@ class AnthropicLLMProvider(LLMProvider):
                     thinking_compatible = False
                     if self._thinking_enabled:
                         logger.debug(
-                            f"Skipping extended thinking - tool_choice={choice_type} "
-                            "is incompatible with thinking"
+                            f"Skipping extended thinking - tool_choice={choice_type} is incompatible with thinking"
                         )
 
             # Add thinking configuration if enabled and compatible
@@ -743,11 +709,7 @@ class AnthropicLLMProvider(LLMProvider):
             if self._context_management_enabled:
                 beta_headers.append(BETA_CONTEXT_MANAGEMENT)
             # Only add interleaved thinking header if thinking is enabled and compatible
-            if (
-                self._interleaved_thinking
-                and self._thinking_enabled
-                and thinking_compatible
-            ):
+            if self._interleaved_thinking and self._thinking_enabled and thinking_compatible:
                 beta_headers.append(BETA_INTERLEAVED_THINKING)
             if beta_headers:
                 request_kwargs["betas"] = beta_headers
@@ -769,9 +731,7 @@ class AnthropicLLMProvider(LLMProvider):
             if response.usage:
                 self._prompt_tokens += response.usage.input_tokens
                 self._completion_tokens += response.usage.output_tokens
-                self._tokens_used += (
-                    response.usage.input_tokens + response.usage.output_tokens
-                )
+                self._tokens_used += response.usage.input_tokens + response.usage.output_tokens
 
             # Extract text content and tool uses
             content_blocks = response.content
@@ -813,9 +773,7 @@ class AnthropicLLMProvider(LLMProvider):
         max_completion_tokens: int = 4096,
     ) -> list[LLMResponse]:
         """Generate completions for multiple prompts concurrently."""
-        tasks = [
-            self.complete(prompt, system, max_completion_tokens) for prompt in prompts
-        ]
+        tasks = [self.complete(prompt, system, max_completion_tokens) for prompt in prompts]
         return await asyncio.gather(*tasks)
 
     def estimate_tokens(self, text: str) -> int:
@@ -956,9 +914,7 @@ class AnthropicLLMProvider(LLMProvider):
             # Create streaming response - use beta endpoint when beta features are enabled
             beta_headers = request_kwargs.pop("betas", None)
             if beta_headers:
-                stream = await self._client.beta.messages.create(
-                    betas=beta_headers, **request_kwargs
-                )
+                stream = await self._client.beta.messages.create(betas=beta_headers, **request_kwargs)
             else:
                 stream = await self._client.messages.create(**request_kwargs)
 
@@ -992,9 +948,7 @@ class AnthropicLLMProvider(LLMProvider):
                     if message and hasattr(message, "usage"):
                         self._prompt_tokens += message.usage.input_tokens
                         self._completion_tokens += message.usage.output_tokens
-                        self._tokens_used += (
-                            message.usage.input_tokens + message.usage.output_tokens
-                        )
+                        self._tokens_used += message.usage.input_tokens + message.usage.output_tokens
 
         except Exception as e:
             logger.error(f"Anthropic streaming completion failed: {e}")

@@ -84,9 +84,7 @@ async def resolve_and_fetch_imports(
             content_text = path.read_text(encoding="utf-8", errors="ignore")
 
             # Resolve imports
-            resolved = await import_resolver.resolve_imports(
-                file_path, content_text, base_dir
-            )
+            resolved = await import_resolver.resolve_imports(file_path, content_text, base_dir)
 
             # Add resolved files (limit to max)
             for resolved_path in resolved[: config.import_resolution_max_files]:
@@ -119,9 +117,7 @@ async def resolve_and_fetch_imports(
             relative_path = str(import_file.relative_to(base_dir))
 
             # Get file record
-            file_record_result = db_services.provider.get_file_by_path(
-                relative_path, as_model=False
-            )
+            file_record_result = db_services.provider.get_file_by_path(relative_path, as_model=False)
 
             if not file_record_result:
                 logger.debug(f"Import file not indexed: {relative_path}")
@@ -129,9 +125,7 @@ async def resolve_and_fetch_imports(
             file_record = cast(dict, file_record_result)
 
             # Fetch all chunks for this file
-            file_chunks_result = db_services.provider.get_chunks_by_file_id(
-                file_record["id"], as_model=False
-            )
+            file_chunks_result = db_services.provider.get_chunks_by_file_id(file_record["id"], as_model=False)
 
             # Add default score for import chunks
             for chunk_result in file_chunks_result:
@@ -143,9 +137,6 @@ async def resolve_and_fetch_imports(
             logger.warning(f"Failed to fetch chunks for import {import_file}: {e}")
             continue
 
-    logger.debug(
-        f"Import resolution: fetched {len(import_chunks)} chunks from "
-        f"{len(import_files)} import files"
-    )
+    logger.debug(f"Import resolution: fetched {len(import_chunks)} chunks from {len(import_files)} import files")
 
     return import_chunks

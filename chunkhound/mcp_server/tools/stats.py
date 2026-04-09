@@ -25,8 +25,7 @@ def _safe_language_breakdown(services: Any) -> list[dict[str, Any]]:
     """Get per-language symbol counts, returning [] if table doesn't exist."""
     try:
         rows = services.provider.execute_query(
-            "SELECT language, COUNT(*) as count FROM symbols "
-            "GROUP BY language ORDER BY count DESC",
+            "SELECT language, COUNT(*) as count FROM symbols GROUP BY language ORDER BY count DESC",
             [],
         )
         return [{"language": row["language"], "count": row["count"]} for row in rows]
@@ -52,9 +51,7 @@ async def get_stats_impl(
         "files": _safe_count(services, "SELECT COUNT(*) as count FROM files"),
         "chunks": _safe_count(services, "SELECT COUNT(*) as count FROM chunks"),
         "symbols": _safe_count(services, "SELECT COUNT(*) as count FROM symbols"),
-        "symbol_edges": _safe_count(
-            services, "SELECT COUNT(*) as count FROM symbol_edges"
-        ),
+        "symbol_edges": _safe_count(services, "SELECT COUNT(*) as count FROM symbol_edges"),
         "languages": _safe_language_breakdown(services),
         "lsp_servers": None,
     }

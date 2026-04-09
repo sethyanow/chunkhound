@@ -44,9 +44,7 @@ class CASTConfig:
 
     max_chunk_size: int = 1200  # Non-whitespace chars
     min_chunk_size: int = 50  # Minimum chunk size to avoid tiny fragments
-    merge_threshold: float = (
-        0.8  # Merge siblings if combined size < threshold * max_size
-    )
+    merge_threshold: float = 0.8  # Merge siblings if combined size < threshold * max_size
     greedy_merge: bool = True  # Greedily merge adjacent sibling nodes
     safe_token_limit: int = 6000  # Conservative limit for embedding models
 
@@ -268,9 +266,7 @@ class ChunkSplitter:
 
         return self._split_by_lines_simple(chunk, lines)
 
-    def _split_by_lines_simple(
-        self, chunk: UniversalChunk, lines: list[str]
-    ) -> list[UniversalChunk]:
+    def _split_by_lines_simple(self, chunk: UniversalChunk, lines: list[str]) -> list[UniversalChunk]:
         """Split chunk by lines for regular code with short lines."""
         mid_point = len(lines) // 2
 
@@ -285,9 +281,7 @@ class ChunkSplitter:
 
         # Ensure valid bounds — chunk2 must start strictly after chunk1 ends
         chunk1_end_line = max(chunk.start_line, min(chunk1_end_line, chunk.end_line))
-        chunk2_start_line = max(
-            chunk1_end_line + 1, min(chunk2_start_line, chunk.end_line)
-        )
+        chunk2_start_line = max(chunk1_end_line + 1, min(chunk2_start_line, chunk.end_line))
 
         # If metadata span is too narrow for two non-overlapping ranges, fall back
         if chunk2_start_line >= chunk.end_line:
@@ -338,9 +332,7 @@ class ChunkSplitter:
         remaining = chunk.content
         part_num = 1
         total_content_length = len(chunk.content)
-        current_pos = (
-            0  # Track position in original content for line number calculation
-        )
+        current_pos = 0  # Track position in original content for line number calculation
 
         while remaining:
             remaining_metrics = ChunkMetrics.from_content(remaining)
@@ -348,11 +340,7 @@ class ChunkSplitter:
                 remaining_metrics.non_whitespace_chars <= self.config.max_chunk_size
                 and estimate_tokens_chunking(remaining) <= self.config.safe_token_limit
             ):
-                chunks.append(
-                    self._create_split_chunk(
-                        chunk, remaining, part_num, current_pos, total_content_length
-                    )
-                )
+                chunks.append(self._create_split_chunk(chunk, remaining, part_num, current_pos, total_content_length))
                 break
 
             # Find best split point within size limit
@@ -368,8 +356,7 @@ class ChunkSplitter:
                     test_metrics = ChunkMetrics.from_content(test_content)
                     if (
                         test_metrics.non_whitespace_chars <= self.config.max_chunk_size
-                        and estimate_tokens_chunking(test_content)
-                        <= self.config.safe_token_limit
+                        and estimate_tokens_chunking(test_content) <= self.config.safe_token_limit
                     ):
                         best_split = pos + 1  # Include the split character
                         break
@@ -381,8 +368,7 @@ class ChunkSplitter:
                 test = ChunkMetrics.from_content(remaining[:best_split])
                 while (
                     test.non_whitespace_chars > self.config.max_chunk_size
-                    or estimate_tokens_chunking(remaining[:best_split])
-                    > self.config.safe_token_limit
+                    or estimate_tokens_chunking(remaining[:best_split]) > self.config.safe_token_limit
                 ) and best_split > self.config.min_chunk_size:
                     best_split = best_split // 2
                     test = ChunkMetrics.from_content(remaining[:best_split])
@@ -393,8 +379,7 @@ class ChunkSplitter:
                     or estimate_tokens_chunking(slice_) > self.config.safe_token_limit
                 ):
                     logger.warning(
-                        "Chunk '{}' exceeds size limits after max splitting "
-                        "(non_ws={}, limit={})",
+                        "Chunk '{}' exceeds size limits after max splitting (non_ws={}, limit={})",
                         chunk.name,
                         test.non_whitespace_chars,
                         self.config.max_chunk_size,
@@ -410,9 +395,7 @@ class ChunkSplitter:
                 )
             )
             remaining = remaining[best_split:]
-            current_pos += (
-                best_split  # Update position tracker for next chunk's line calculation
-            )
+            current_pos += best_split  # Update position tracker for next chunk's line calculation
             part_num += 1
 
         return chunks

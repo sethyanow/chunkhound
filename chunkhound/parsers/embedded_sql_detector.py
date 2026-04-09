@@ -190,9 +190,7 @@ class EmbeddedSqlDetector:
             matches: List to append matches to
         """
         # Extract string content
-        string_content = (
-            node.text.decode("utf-8", errors="replace") if node.text else ""
-        )
+        string_content = node.text.decode("utf-8", errors="replace") if node.text else ""
 
         # Remove string delimiters (quotes)
         cleaned_content = self._clean_string_content(string_content)
@@ -347,29 +345,19 @@ class EmbeddedSqlDetector:
             node_type = current.type
 
             # Check for function-like nodes (exclude call sites)
-            if (
-                "function" in node_type or "method" in node_type
-            ) and "call" not in node_type:
+            if ("function" in node_type or "method" in node_type) and "call" not in node_type:
                 # Tree-sitter places identifier/name children before parameter
                 # lists and bodies across all supported languages.
                 for child in current.children:
                     if "identifier" in child.type or "name" in child.type:
-                        name = (
-                            child.text.decode("utf-8", errors="replace")
-                            if child.text
-                            else "unknown"
-                        )
+                        name = child.text.decode("utf-8", errors="replace") if child.text else "unknown"
                         return f"function:{name}"
 
             # Check for class nodes
             if "class" in node_type:
                 for child in current.children:
                     if "identifier" in child.type or "name" in child.type:
-                        name = (
-                            child.text.decode("utf-8", errors="replace")
-                            if child.text
-                            else "unknown"
-                        )
+                        name = child.text.decode("utf-8", errors="replace") if child.text else "unknown"
                         return f"class:{name}"
 
             current = current.parent

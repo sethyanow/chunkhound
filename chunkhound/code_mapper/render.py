@@ -49,12 +49,8 @@ def render_combined_document(
     lines.append(overview_answer.strip())
     lines.append("")
 
-    arch_sections = [
-        (poi, result) for poi, result in poi_sections if poi.mode == "architectural"
-    ]
-    ops_sections = [
-        (poi, result) for poi, result in poi_sections if poi.mode == "operational"
-    ]
+    arch_sections = [(poi, result) for poi, result in poi_sections if poi.mode == "architectural"]
+    ops_sections = [(poi, result) for poi, result in poi_sections if poi.mode == "operational"]
 
     if arch_sections:
         lines.append("## Architectural Map")
@@ -146,25 +142,19 @@ def render_index_document(
         "This index lists the per-topic Code Mapper sections generated for this scope.",
     ]
     if unref_filename is not None:
-        lines.append(
-            f"- Unreferenced files in scope: [{unref_filename}]({unref_filename})"
-        )
+        lines.append(f"- Unreferenced files in scope: [{unref_filename}]({unref_filename})")
     lines.append("")
     lines.append("## Architectural Map")
     lines.append("")
 
-    for idx, (heading, filename) in enumerate(
-        index_entries_by_mode.get("architectural") or [], start=1
-    ):
+    for idx, (heading, filename) in enumerate(index_entries_by_mode.get("architectural") or [], start=1):
         lines.append(f"{idx}. [{heading}]({filename})")
 
     lines.append("")
     lines.append("## Operational Map")
     lines.append("")
 
-    for idx, (heading, filename) in enumerate(
-        index_entries_by_mode.get("operational") or [], start=1
-    ):
+    for idx, (heading, filename) in enumerate(index_entries_by_mode.get("operational") or [], start=1):
         lines.append(f"{idx}. [{heading}]({filename})")
 
     return "\n".join(lines) + "\n"

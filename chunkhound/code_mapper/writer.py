@@ -60,9 +60,7 @@ def write_code_mapper_outputs(
                 if isinstance(files_stats, dict):
                     files_stats["unreferenced_list_file"] = unref_filename
             except (AttributeError, TypeError) as exc:
-                logger.debug(
-                    f"Code Mapper: failed to attach unreferenced file artifact: {exc}"
-                )
+                logger.debug(f"Code Mapper: failed to attach unreferenced file artifact: {exc}")
 
         topic_files, index_entries_by_mode = build_topic_artifacts(
             scope_label=scope_label,

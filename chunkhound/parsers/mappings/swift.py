@@ -242,9 +242,7 @@ class SwiftMapping(BaseMapping):
             type_params_node = self.find_child_by_type(node, "type_parameters")
             if type_params_node:
                 # Extract type_identifier children
-                for identifier in self.find_children_by_type(
-                    type_params_node, "type_identifier"
-                ):
+                for identifier in self.find_children_by_type(type_params_node, "type_identifier"):
                     param_name = self.get_node_text(identifier, source).strip()
                     if param_name:
                         generic_params.append(param_name)
@@ -289,9 +287,7 @@ class SwiftMapping(BaseMapping):
 
         return param_types
 
-    def extract_extension_protocols(
-        self, node: TSNode | None, source: str
-    ) -> list[str]:
+    def extract_extension_protocols(self, node: TSNode | None, source: str) -> list[str]:
         """Extract protocol names from an extension's conformance list.
 
         Args:
@@ -311,9 +307,7 @@ class SwiftMapping(BaseMapping):
             inheritance_node = self.find_child_by_type(node, "type_inheritance_clause")
             if inheritance_node:
                 # Extract type identifiers
-                for identifier in self.find_children_by_type(
-                    inheritance_node, "type_identifier"
-                ):
+                for identifier in self.find_children_by_type(inheritance_node, "type_identifier"):
                     protocol_name = self.get_node_text(identifier, source).strip()
                     if protocol_name:
                         protocols.append(protocol_name)
@@ -343,9 +337,7 @@ class SwiftMapping(BaseMapping):
             inheritance_node = self.find_child_by_type(node, "type_inheritance_clause")
             if inheritance_node:
                 # Extract all type identifiers
-                for identifier in self.find_children_by_type(
-                    inheritance_node, "type_identifier"
-                ):
+                for identifier in self.find_children_by_type(inheritance_node, "type_identifier"):
                     type_name = self.get_node_text(identifier, source).strip()
                     if type_name:
                         inherited.append(type_name)
@@ -513,9 +505,7 @@ class SwiftMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept.
 
         Args:
@@ -557,9 +547,7 @@ class SwiftMapping(BaseMapping):
                 elif def_node.type == "property_declaration":
                     name_node = self.find_child_by_type(def_node, "pattern_binding")
                     if name_node:
-                        identifier = self.find_child_by_type(
-                            name_node, "simple_identifier"
-                        )
+                        identifier = self.find_child_by_type(name_node, "simple_identifier")
                         if identifier:
                             return self.get_node_text(identifier, source).strip()
 
@@ -591,9 +579,7 @@ class SwiftMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: "UniversalConcept", captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         Args:
@@ -681,9 +667,7 @@ class SwiftMapping(BaseMapping):
                             break
                         elif child.type == "actor":
                             declaration_kind = "actor"
-                            metadata["concurrency"] = (
-                                True  # Mark as concurrency-related
-                            )
+                            metadata["concurrency"] = True  # Mark as concurrency-related
                             break
                         elif child.type == "extension":
                             declaration_kind = "extension"
@@ -798,9 +782,7 @@ class SwiftMapping(BaseMapping):
                 pattern_node = self.find_child_by_type(def_node, "pattern")
                 if pattern_node:
                     # Get the identifier (property name)
-                    identifier = self.find_child_by_type(
-                        pattern_node, "simple_identifier"
-                    )
+                    identifier = self.find_child_by_type(pattern_node, "simple_identifier")
                     if identifier:
                         name = self.get_node_text(identifier, source).strip()
 
@@ -814,9 +796,7 @@ class SwiftMapping(BaseMapping):
                                 "boolean_literal",
                                 "nil",
                             ):
-                                value_text = self.get_node_text(
-                                    value_child, source
-                                ).strip()
+                                value_text = self.get_node_text(value_child, source).strip()
                                 break
 
                         # Truncate to 50 chars if longer
@@ -825,13 +805,9 @@ class SwiftMapping(BaseMapping):
 
                         # Extract type annotation from property_declaration
                         type_text = ""
-                        type_annotation = self.find_child_by_type(
-                            def_node, "type_annotation"
-                        )
+                        type_annotation = self.find_child_by_type(def_node, "type_annotation")
                         if type_annotation:
-                            type_text = self.get_node_text(
-                                type_annotation, source
-                            ).strip()
+                            type_text = self.get_node_text(type_annotation, source).strip()
                             # Remove leading colon
                             if type_text.startswith(":"):
                                 type_text = type_text[1:].strip()
@@ -844,9 +820,7 @@ class SwiftMapping(BaseMapping):
 
         return constants if constants else None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path for Swift.
 
         Swift imports are typically framework imports, not file paths.

@@ -48,10 +48,7 @@ class EmbeddingProviderFactory:
         # Validate configuration completeness
         if not config.is_provider_configured():
             missing = config.get_missing_config()
-            raise ValueError(
-                f"Incomplete configuration for {config.provider} provider. "
-                f"Missing: {', '.join(missing)}"
-            )
+            raise ValueError(f"Incomplete configuration for {config.provider} provider. Missing: {', '.join(missing)}")
 
         # Get provider-specific configuration
         provider_config = config.get_provider_config()
@@ -71,8 +68,7 @@ class EmbeddingProviderFactory:
             from chunkhound.embeddings import create_openai_provider
         except ImportError as e:
             raise ImportError(
-                "Failed to import OpenAI provider. "
-                "Ensure chunkhound.embeddings module is available."
+                "Failed to import OpenAI provider. Ensure chunkhound.embeddings module is available."
             ) from e
 
         # Extract OpenAI-specific parameters
@@ -136,8 +132,7 @@ class EmbeddingProviderFactory:
             )
         except ImportError as e:
             raise ImportError(
-                "Failed to import VoyageAI provider. "
-                "Ensure voyageai package is installed: uv pip install voyageai"
+                "Failed to import VoyageAI provider. Ensure voyageai package is installed: uv pip install voyageai"
             ) from e
 
         # Extract VoyageAI-specific parameters
@@ -178,11 +173,7 @@ class EmbeddingProviderFactory:
             if rerank_batch_size is not None:
                 kwargs["rerank_batch_size"] = rerank_batch_size
             # rerank_url: resolve relative paths against base_url, then forward absolute URLs only
-            if (
-                rerank_url
-                and base_url
-                and not rerank_url.startswith(("http://", "https://"))
-            ):
+            if rerank_url and base_url and not rerank_url.startswith(("http://", "https://")):
                 from urllib.parse import urljoin
 
                 rerank_url = urljoin(base_url.rstrip("/") + "/", rerank_url.lstrip("/"))
@@ -309,9 +300,7 @@ class EmbeddingProviderFactory:
         }
 
         # Check dependencies
-        available, error = EmbeddingProviderFactory.validate_provider_dependencies(
-            provider
-        )
+        available, error = EmbeddingProviderFactory.validate_provider_dependencies(provider)
         info["dependencies_available"] = available
         if error:
             info["error_message"] = error

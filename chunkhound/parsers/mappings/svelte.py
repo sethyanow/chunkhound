@@ -40,15 +40,11 @@ class SvelteMapping(TypeScriptMapping):
         self.language = Language.SVELTE  # Override to SVELTE
 
     # Section extraction patterns
-    SCRIPT_PATTERN = re.compile(
-        r"<script\s*([^>]*)>(.*?)</script>", re.DOTALL | re.IGNORECASE
-    )
+    SCRIPT_PATTERN = re.compile(r"<script\s*([^>]*)>(.*?)</script>", re.DOTALL | re.IGNORECASE)
 
     # Svelte doesn't use <template> tags - the template is implicit
     # Everything outside <script> and <style> is template
-    STYLE_PATTERN = re.compile(
-        r"<style\s*([^>]*)>(.*?)</style>", re.DOTALL | re.IGNORECASE
-    )
+    STYLE_PATTERN = re.compile(r"<style\s*([^>]*)>(.*?)</style>", re.DOTALL | re.IGNORECASE)
 
     def extract_sections(self, content: str) -> dict[str, list[tuple[str, str, int]]]:
         """Extract script, template, and style sections from Svelte component.
@@ -103,9 +99,7 @@ class SvelteMapping(TypeScriptMapping):
                         # Calculate line number for this template part
                         template_start_line = content[:last_end].count("\n") + 1
                         # Preserve raw content for accurate line offsets
-                        sections["template"].append(
-                            ("", template_part, template_start_line)
-                        )
+                        sections["template"].append(("", template_part, template_start_line))
                 last_end = end
 
             # Add remaining content after last excluded range
@@ -113,9 +107,7 @@ class SvelteMapping(TypeScriptMapping):
                 template_part = content[last_end:]
                 if template_part.strip():
                     template_start_line = content[:last_end].count("\n") + 1
-                    sections["template"].append(
-                        ("", template_part, template_start_line)
-                    )
+                    sections["template"].append(("", template_part, template_start_line))
         else:
             # No script or style sections, entire content is template
             if content.strip():

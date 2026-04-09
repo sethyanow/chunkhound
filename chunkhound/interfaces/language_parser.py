@@ -84,9 +84,7 @@ class LanguageParser(Protocol):
         """
         ...
 
-    def parse_content(
-        self, content: str, file_path: Path | None = None
-    ) -> list[dict[str, Any]]:
+    def parse_content(self, content: str, file_path: Path | None = None) -> list[dict[str, Any]]:
         """Parse content string and extract semantic chunks.
 
         Args:

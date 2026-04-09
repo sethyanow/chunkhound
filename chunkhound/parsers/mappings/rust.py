@@ -186,9 +186,7 @@ class RustMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -284,9 +282,7 @@ class RustMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -305,9 +301,7 @@ class RustMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract Rust-specific metadata."""
 
         source = content.decode("utf-8")
@@ -346,9 +340,7 @@ class RustMapping(BaseMapping):
                     metadata["kind"] = "impl"
                     if "impl_type" in captures:
                         impl_type_node = captures["impl_type"]
-                        metadata["impl_type"] = self.get_node_text(
-                            impl_type_node, source
-                        ).strip()
+                        metadata["impl_type"] = self.get_node_text(impl_type_node, source).strip()
 
                     # Check if it's a trait impl
                     if self._is_trait_impl(def_node, source):
@@ -572,13 +564,8 @@ class RustMapping(BaseMapping):
                 found_impl = True
             elif found_impl and text != "for" and child.type == "type_identifier":
                 # This might be the trait name
-                next_child = (
-                    impl_node.child(i + 1) if i + 1 < impl_node.child_count else None
-                )
-                if (
-                    next_child
-                    and self.get_node_text(next_child, source).strip() == "for"
-                ):
+                next_child = impl_node.child(i + 1) if i + 1 < impl_node.child_count else None
+                if next_child and self.get_node_text(next_child, source).strip() == "for":
                     return text
 
         return None
@@ -723,9 +710,7 @@ class RustMapping(BaseMapping):
 
         return [result]
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve Rust use/mod statement to file path."""
 
         # Handle mod declarations: mod foo;
@@ -747,9 +732,7 @@ class RustMapping(BaseMapping):
             return []
 
         # Handle use statements: use crate::foo::bar;
-        use_match = re.search(
-            r"use\s+(?:crate|self|super)::(\w+(?:::\w+)*)", import_text
-        )
+        use_match = re.search(r"use\s+(?:crate|self|super)::(\w+(?:::\w+)*)", import_text)
         if use_match:
             path_parts = use_match.group(1).split("::")
 

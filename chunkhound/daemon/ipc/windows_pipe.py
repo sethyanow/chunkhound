@@ -44,9 +44,7 @@ async def create_client(
 async def is_connectable(host: str, port: int) -> bool:
     """Return True if TCP *host*:*port* accepts connections."""
     try:
-        _, writer = await asyncio.wait_for(
-            asyncio.open_connection(host, port), timeout=1.0
-        )
+        _, writer = await asyncio.wait_for(asyncio.open_connection(host, port), timeout=1.0)
         writer.close()
         try:
             await writer.wait_closed()

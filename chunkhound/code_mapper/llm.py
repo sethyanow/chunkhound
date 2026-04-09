@@ -30,9 +30,7 @@ def build_llm_metadata_and_map_hyde(
     if llm.utility_model:
         llm_meta["utility_model"] = llm.utility_model
     if llm.codex_reasoning_effort_synthesis:
-        llm_meta["codex_reasoning_effort_synthesis"] = (
-            llm.codex_reasoning_effort_synthesis
-        )
+        llm_meta["codex_reasoning_effort_synthesis"] = llm.codex_reasoning_effort_synthesis
     if llm.codex_reasoning_effort_utility:
         llm_meta["codex_reasoning_effort_utility"] = llm.codex_reasoning_effort_utility
 
@@ -42,9 +40,7 @@ def build_llm_metadata_and_map_hyde(
 
     _utility_cfg, synth_cfg = llm.get_provider_configs()
 
-    needs_custom_map_hyde = bool(
-        map_hyde_provider_name or map_hyde_model_name or map_hyde_effort
-    )
+    needs_custom_map_hyde = bool(map_hyde_provider_name or map_hyde_model_name or map_hyde_effort)
 
     if llm_manager is not None and needs_custom_map_hyde:
         try:
@@ -58,16 +54,10 @@ def build_llm_metadata_and_map_hyde(
 
             map_hyde_provider = llm_manager.create_provider_for_config(map_hyde_cfg)
 
-            llm_meta["map_hyde_provider"] = str(
-                map_hyde_cfg.get("provider", map_hyde_provider.name)
-            )
-            llm_meta["map_hyde_model"] = str(
-                map_hyde_cfg.get("model", map_hyde_provider.model)
-            )
+            llm_meta["map_hyde_provider"] = str(map_hyde_cfg.get("provider", map_hyde_provider.name))
+            llm_meta["map_hyde_model"] = str(map_hyde_cfg.get("model", map_hyde_provider.model))
             if "reasoning_effort" in map_hyde_cfg:
-                llm_meta["map_hyde_reasoning_effort"] = str(
-                    map_hyde_cfg["reasoning_effort"]
-                )
+                llm_meta["map_hyde_reasoning_effort"] = str(map_hyde_cfg["reasoning_effort"])
         except (OSError, RuntimeError, TypeError, ValueError) as exc:
             logger.debug(f"Code Mapper: failed to create HyDE planning provider: {exc}")
             map_hyde_provider = None

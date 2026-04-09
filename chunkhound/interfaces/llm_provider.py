@@ -36,8 +36,7 @@ def _normalize_schema_for_structured_outputs(schema: dict[str, Any]) -> dict[str
         existing = result.get("additionalProperties")
         if existing is not None and existing is not False:
             logger.warning(
-                "additionalProperties=%r not supported by structured outputs API, "
-                "forcing to false",
+                "additionalProperties=%r not supported by structured outputs API, forcing to false",
                 existing,
             )
         result["additionalProperties"] = False
@@ -45,8 +44,7 @@ def _normalize_schema_for_structured_outputs(schema: dict[str, Any]) -> dict[str
     # Recursively process $defs (Pydantic's way of defining nested models)
     if "$defs" in result:
         result["$defs"] = {
-            name: _normalize_schema_for_structured_outputs(def_schema)
-            for name, def_schema in result["$defs"].items()
+            name: _normalize_schema_for_structured_outputs(def_schema) for name, def_schema in result["$defs"].items()
         }
 
     # Recursively process properties
@@ -63,17 +61,13 @@ def _normalize_schema_for_structured_outputs(schema: dict[str, Any]) -> dict[str
     # Process prefixItems (Pydantic tuples generate this)
     if "prefixItems" in result:
         result["prefixItems"] = [
-            _normalize_schema_for_structured_outputs(item_schema)
-            for item_schema in result["prefixItems"]
+            _normalize_schema_for_structured_outputs(item_schema) for item_schema in result["prefixItems"]
         ]
 
     # Process anyOf/oneOf/allOf
     for key in ("anyOf", "oneOf", "allOf"):
         if key in result:
-            result[key] = [
-                _normalize_schema_for_structured_outputs(sub_schema)
-                for sub_schema in result[key]
-            ]
+            result[key] = [_normalize_schema_for_structured_outputs(sub_schema) for sub_schema in result[key]]
 
     return result
 
@@ -150,9 +144,7 @@ class LLMProvider(ABC):
         Raises:
             NotImplementedError: If provider doesn't support structured outputs
         """
-        raise NotImplementedError(
-            f"{self.name} provider does not support structured outputs"
-        )
+        raise NotImplementedError(f"{self.name} provider does not support structured outputs")
 
     async def complete_structured_typed(
         self,

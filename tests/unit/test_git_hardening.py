@@ -16,7 +16,7 @@ def test_git_wrapper_sets_sanitized_env(monkeypatch: pytest.MonkeyPatch, tmp_pat
 
     captured = {}
 
-    def fake_run(args, cwd=None, stdout=None, stderr=None, check=None, env=None, timeout=None, text=None):
+    def fake_run(args, cwd=None, stdout=None, stderr=None, check=None, env=None, timeout=None, text=None, capture_output=None):
         captured["args"] = args
         captured["cwd"] = cwd
         captured["env"] = env

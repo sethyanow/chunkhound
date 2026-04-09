@@ -13,9 +13,7 @@ if TYPE_CHECKING:
 
 # Constants
 RELEVANCE_THRESHOLD = 0.5  # Lower threshold for better recall, reranking will filter
-NODE_SIMILARITY_THRESHOLD = (
-    0.2  # Reserved for future similarity-based deduplication (currently uses LLM)
-)
+NODE_SIMILARITY_THRESHOLD = 0.2  # Reserved for future similarity-based deduplication (currently uses LLM)
 MAX_FOLLOWUP_QUESTIONS = 3
 MAX_SYMBOLS_TO_SEARCH = 5  # Top N symbols to search via regex (from spec)
 QUERY_EXPANSION_ENABLED = True  # Enable LLM-powered query expansion for better recall
@@ -48,44 +46,28 @@ LLM_INPUT_TOKENS_MAX = 60_000  # Leaf nodes
 #   - Theoretical placeholders ("provide exact values")
 #   - Incomplete analysis of complex components
 # Consider increasing these values. Quality validation warnings will indicate budget pressure.
-LEAF_ANSWER_TOKENS_BASE = (
-    18_000  # Base budget for leaf nodes (was 30k, reduced for cost)
-)
-LEAF_ANSWER_TOKENS_BONUS = (
-    3_000  # Additional tokens for deeper leaves (was 5k, reduced for cost)
-)
+LEAF_ANSWER_TOKENS_BASE = 18_000  # Base budget for leaf nodes (was 30k, reduced for cost)
+LEAF_ANSWER_TOKENS_BONUS = 3_000  # Additional tokens for deeper leaves (was 5k, reduced for cost)
 
 # Internal synthesis output budget (what LLM generates at internal nodes)
 # NOTE: Reduced from 17.5k/32k to balance cost vs quality. If root synthesis appears rushed or
 # omits critical architectural details, consider increasing INTERNAL_ROOT_TARGET.
 INTERNAL_ROOT_TARGET = 11_000  # Root synthesis target (was 17.5k, reduced for cost)
-INTERNAL_MAX_TOKENS = (
-    19_000  # Maximum for deep internal nodes (was 32k, reduced for cost)
-)
+INTERNAL_MAX_TOKENS = 19_000  # Maximum for deep internal nodes (was 32k, reduced for cost)
 
 # Follow-up question generation output budget (what LLM generates for follow-up questions)
 # NOTE: High budgets needed for reasoning models (o1/o3/GPT-5) which use internal "thinking" tokens
 # WHY: Reasoning models consume 5-15k tokens for internal reasoning before producing 100-500 tokens of output
 # The actual generated questions are concise, but the model needs reasoning budget to evaluate relevance
-FOLLOWUP_OUTPUT_TOKENS_MIN = (
-    8_000  # Root/shallow nodes: simpler questions, less reasoning needed
-)
-FOLLOWUP_OUTPUT_TOKENS_MAX = (
-    15_000  # Deep nodes: complex synthesis requires more reasoning depth
-)
+FOLLOWUP_OUTPUT_TOKENS_MIN = 8_000  # Root/shallow nodes: simpler questions, less reasoning needed
+FOLLOWUP_OUTPUT_TOKENS_MAX = 15_000  # Deep nodes: complex synthesis requires more reasoning depth
 
 # Utility operation output budgets (for reasoning models like o1/o3/GPT-5)
 # These operations use utility provider and don't vary by depth
 # WHY: Each utility operation produces small output but requires reasoning budget for quality
-QUERY_EXPANSION_TOKENS = (
-    10_000  # Generate 2 queries (~200 output + ~8k reasoning to ensure diversity)
-)
-QUESTION_SYNTHESIS_TOKENS = (
-    15_000  # Synthesize to 1-3 questions (~500 output + ~12k reasoning for quality)
-)
-QUESTION_FILTERING_TOKENS = (
-    5_000  # Filter by relevance (~50 output + ~4k reasoning for accuracy)
-)
+QUERY_EXPANSION_TOKENS = 10_000  # Generate 2 queries (~200 output + ~8k reasoning to ensure diversity)
+QUESTION_SYNTHESIS_TOKENS = 15_000  # Synthesize to 1-3 questions (~500 output + ~12k reasoning for quality)
+QUESTION_FILTERING_TOKENS = 5_000  # Filter by relevance (~50 output + ~4k reasoning for accuracy)
 
 # Legacy constants (used when ENABLE_ADAPTIVE_BUDGETS = False)
 TOKEN_BUDGET_PER_FILE = 4000
@@ -96,9 +78,7 @@ MAX_LEAF_ANSWER_TOKENS = 400
 MAX_SYNTHESIS_TOKENS = 600
 
 # Single-pass synthesis constants (new architecture)
-SINGLE_PASS_MAX_TOKENS = (
-    150_000  # Total budget for single-pass synthesis (input + output)
-)
+SINGLE_PASS_MAX_TOKENS = 150_000  # Total budget for single-pass synthesis (input + output)
 OUTPUT_TOKENS_WITH_REASONING = 30_000  # Fixed output budget for reasoning models (18k output + 12k reasoning buffer)
 SINGLE_PASS_OVERHEAD_TOKENS = 5_000  # Prompt template and overhead
 SINGLE_PASS_TIMEOUT_SECONDS = 600  # 10 minutes timeout for large synthesis calls
@@ -122,9 +102,7 @@ REQUIRE_CITATIONS = True  # Validate file:line format
 
 # Map-reduce synthesis constants
 MAX_TOKENS_PER_CLUSTER = 30_000  # Token budget per cluster for parallel synthesis
-CLUSTER_OUTPUT_TOKEN_BUDGET = (
-    15_000  # Fallback/minimum output budget per cluster (elbow detection may override)
-)
+CLUSTER_OUTPUT_TOKEN_BUDGET = 15_000  # Fallback/minimum output budget per cluster (elbow detection may override)
 
 # Fact extraction
 FACT_EXTRACTION_TOKENS = 8_000  # Output budget per cluster
@@ -141,9 +119,7 @@ FACTS_TIER_INDEXED = 100  # 51-100: Compact with file index
 
 # Pre-compiled regex patterns for citation processing
 _CITATION_PATTERN = re.compile(r"\[\d+\]")  # Matches [N] citations
-_CITATION_SEQUENCE_PATTERN = re.compile(
-    r"(?:\[\d+\])+"
-)  # Matches sequences like [1][2][3]
+_CITATION_SEQUENCE_PATTERN = re.compile(r"(?:\[\d+\])+")  # Matches sequences like [1][2][3]
 
 # Smart boundary detection for context-aware file reading
 ENABLE_SMART_BOUNDARIES = True  # Expand to natural code boundaries (functions/classes)
@@ -151,9 +127,7 @@ MAX_BOUNDARY_EXPANSION_LINES = 300  # Maximum lines to expand for complete funct
 
 # File-level reranking for synthesis budget allocation
 # Prevents file diversity collapse where deep BFS exploration causes score accumulation in few files
-MAX_CHUNKS_PER_FILE_REPR = (
-    5  # Top chunks to include in file representative document for reranking
-)
+MAX_CHUNKS_PER_FILE_REPR = 5  # Top chunks to include in file representative document for reranking
 MAX_TOKENS_PER_FILE_REPR = 2000  # Token limit for file representative document
 
 
@@ -166,17 +140,11 @@ class BFSNode:
     depth: int = 0
     children: list["BFSNode"] = field(default_factory=list)
     chunks: list[dict[str, Any]] = field(default_factory=list)
-    file_contents: dict[str, str] = field(
-        default_factory=dict
-    )  # Full file contents for synthesis
+    file_contents: dict[str, str] = field(default_factory=dict)  # Full file contents for synthesis
     answer: str | None = None
     node_id: int = 0
-    unanswered_aspects: list[str] = field(
-        default_factory=list
-    )  # Questions we couldn't answer
-    token_budgets: dict[str, int] = field(
-        default_factory=dict
-    )  # Adaptive token budgets for this node
+    unanswered_aspects: list[str] = field(default_factory=list)  # Questions we couldn't answer
+    token_budgets: dict[str, int] = field(default_factory=dict)  # Adaptive token budgets for this node
     task_id: int | None = None  # Progress task ID for TUI display
 
     # Termination tracking

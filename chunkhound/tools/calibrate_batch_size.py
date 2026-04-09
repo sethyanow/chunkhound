@@ -128,9 +128,7 @@ class BatchSizeCalibrator:
         Returns:
             Calibration results with recommended batch sizes
         """
-        logger.info(
-            f"Starting calibration for {self.provider.name} ({self.provider.model})"
-        )
+        logger.info(f"Starting calibration for {self.provider.name} ({self.provider.model})")
 
         # Test embedding batch sizes
         logger.info("Calibrating embedding batch sizes...")
@@ -157,10 +155,7 @@ class BatchSizeCalibrator:
             recommended_reranking_batch_size=recommended_reranking,
         )
 
-        logger.info(
-            f"Calibration complete. "
-            f"Recommended embedding batch size: {recommended_embedding}"
-        )
+        logger.info(f"Calibration complete. Recommended embedding batch size: {recommended_embedding}")
         if recommended_reranking:
             logger.info(f"Recommended reranking batch size: {recommended_reranking}")
 
@@ -171,9 +166,7 @@ class BatchSizeCalibrator:
         results = []
 
         # Generate test documents
-        test_docs = self._generate_test_documents(
-            self.config.test_document_count, self.config.test_document_length
-        )
+        test_docs = self._generate_test_documents(self.config.test_document_count, self.config.test_document_length)
 
         for batch_size in self.config.embedding_batch_sizes:
             logger.info(f"Testing embedding batch size: {batch_size}")
@@ -204,15 +197,13 @@ class BatchSizeCalibrator:
                     batch_size=batch_size,
                     throughput_docs_per_sec=throughput,
                     latency_p50_ms=avg_batch_latency,  # Approximation: uses average
-                    latency_p95_ms=avg_batch_latency
-                    * 1.2,  # Approximation: assumes 20% overhead for slower batches
+                    latency_p95_ms=avg_batch_latency * 1.2,  # Approximation: assumes 20% overhead for slower batches
                     total_duration_sec=avg_duration,
                     success=True,
                 )
 
                 logger.info(
-                    f"  Batch size {batch_size}: {throughput:.1f} docs/sec, "
-                    f"{avg_batch_latency:.1f}ms avg latency"
+                    f"  Batch size {batch_size}: {throughput:.1f} docs/sec, {avg_batch_latency:.1f}ms avg latency"
                 )
 
             except Exception as e:
@@ -236,9 +227,7 @@ class BatchSizeCalibrator:
         results = []
 
         # Generate test documents and query
-        test_docs = self._generate_test_documents(
-            self.config.test_document_count, self.config.test_document_length
-        )
+        test_docs = self._generate_test_documents(self.config.test_document_count, self.config.test_document_length)
         query = "test query for reranking calibration"
 
         for batch_size in self.config.reranking_batch_sizes:
@@ -252,9 +241,7 @@ class BatchSizeCalibrator:
                 # Measurement runs
                 durations = []
                 for _ in range(self.config.num_test_runs):
-                    duration = await self._run_reranking_batch(
-                        query, test_docs, batch_size
-                    )
+                    duration = await self._run_reranking_batch(query, test_docs, batch_size)
                     durations.append(duration)
 
                 # Calculate metrics
@@ -275,8 +262,7 @@ class BatchSizeCalibrator:
                 )
 
                 logger.info(
-                    f"  Batch size {batch_size}: {throughput:.1f} docs/sec, "
-                    f"{avg_batch_latency:.1f}ms avg latency"
+                    f"  Batch size {batch_size}: {throughput:.1f} docs/sec, {avg_batch_latency:.1f}ms avg latency"
                 )
 
             except Exception as e:
@@ -295,9 +281,7 @@ class BatchSizeCalibrator:
 
         return results
 
-    async def _run_embedding_batch(
-        self, documents: list[str], batch_size: int
-    ) -> float:
+    async def _run_embedding_batch(self, documents: list[str], batch_size: int) -> float:
         """Run embedding on documents with specified batch size.
 
         Args:
@@ -317,9 +301,7 @@ class BatchSizeCalibrator:
         duration = time.perf_counter() - start_time
         return duration
 
-    async def _run_reranking_batch(
-        self, query: str, documents: list[str], batch_size: int
-    ) -> float:
+    async def _run_reranking_batch(self, query: str, documents: list[str], batch_size: int) -> float:
         """Run reranking on documents with specified batch size.
 
         IMPORTANT: Tests actual batch performance by calling rerank() with
@@ -360,9 +342,7 @@ class BatchSizeCalibrator:
         for i in range(count):
             # Vary length slightly for realism
             length = avg_length + (i % 50) - 25
-            words = [
-                f"word{j % 100}" if j % 3 else f"function_{j}" for j in range(length)
-            ]
+            words = [f"word{j % 100}" if j % 3 else f"function_{j}" for j in range(length)]
             doc = " ".join(words)
             docs.append(doc)
 
@@ -396,19 +376,14 @@ class BatchSizeCalibrator:
 
         for i in range(1, len(successful)):
             current = successful[i]
-            improvement = (
-                current.throughput_docs_per_sec - best_throughput
-            ) / best_throughput
+            improvement = (current.throughput_docs_per_sec - best_throughput) / best_throughput
 
             if improvement > 0.15:  # 15% threshold for "significant" improvement
                 best_batch_size = current.batch_size
                 best_throughput = current.throughput_docs_per_sec
             else:
                 # Diminishing returns - stop here
-                logger.info(
-                    f"Found throughput knee at batch size {best_batch_size} "
-                    f"({best_throughput:.1f} docs/sec)"
-                )
+                logger.info(f"Found throughput knee at batch size {best_batch_size} ({best_throughput:.1f} docs/sec)")
                 break
 
         return best_batch_size

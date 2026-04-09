@@ -79,9 +79,7 @@ class ImportResolverService:
             [Path('/project/src/utils.py')]  # pathlib is external, skipped
         """
         # Extract imports using ImportContextService
-        import_statements = self._import_context_service.get_file_imports(
-            file_path, content
-        )
+        import_statements = self._import_context_service.get_file_imports(file_path, content)
 
         if not import_statements:
             logger.debug(f"No imports found in {file_path}")
@@ -111,9 +109,7 @@ class ImportResolverService:
                     continue
 
                 # Call language-specific resolver (supports multi-import)
-                paths_for_import = mapping.resolve_import_paths(
-                    import_text, base_dir, source_file
-                )
+                paths_for_import = mapping.resolve_import_paths(import_text, base_dir, source_file)
 
                 # Cache result (including empty list for external imports)
                 self._resolution_cache[cache_key] = paths_for_import
@@ -121,25 +117,16 @@ class ImportResolverService:
                 # Add to results if resolved (skip empty)
                 if paths_for_import:
                     resolved_paths.extend(paths_for_import)
-                    logger.debug(
-                        f"Resolved import '{import_text}' -> {paths_for_import}"
-                    )
+                    logger.debug(f"Resolved import '{import_text}' -> {paths_for_import}")
                 else:
-                    logger.debug(
-                        f"Skipped external/unresolvable import: '{import_text}'"
-                    )
+                    logger.debug(f"Skipped external/unresolvable import: '{import_text}'")
 
             except Exception as e:
-                logger.warning(
-                    f"Failed to resolve import '{import_text}' in {file_path}: {e}"
-                )
+                logger.warning(f"Failed to resolve import '{import_text}' in {file_path}: {e}")
                 # Cache empty list to avoid retrying failed resolutions
                 self._resolution_cache[(file_path, import_text)] = []
 
-        logger.debug(
-            f"Resolved {len(resolved_paths)}/{len(import_statements)} imports "
-            f"in {file_path}"
-        )
+        logger.debug(f"Resolved {len(resolved_paths)}/{len(import_statements)} imports in {file_path}")
         return resolved_paths
 
     def clear_cache(self) -> None:
@@ -155,6 +142,5 @@ class ImportResolverService:
         self._resolution_cache.clear()
 
         logger.debug(
-            f"Cleared import resolver caches "
-            f"(imports: {import_cache_size}, resolutions: {resolution_cache_size})"
+            f"Cleared import resolver caches (imports: {import_cache_size}, resolutions: {resolution_cache_size})"
         )

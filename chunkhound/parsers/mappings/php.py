@@ -225,9 +225,7 @@ class PHPMapping(BaseMapping):
         # other unknown concepts.
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name from captures for this concept.
 
         Args:
@@ -314,9 +312,7 @@ class PHPMapping(BaseMapping):
         # For STRUCTURE or any unknown concept
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract content from captures for this concept.
 
         Args:
@@ -423,9 +419,7 @@ class PHPMapping(BaseMapping):
                         if child and child.type == "function_call_expression":
                             name_node = self.find_child_by_type(child, "name")
                             if name_node:
-                                func_name = self.get_node_text(
-                                    name_node, source
-                                ).strip()
+                                func_name = self.get_node_text(name_node, source).strip()
                                 if func_name == "define":
                                     metadata["kind"] = "define"
                                     break
@@ -461,9 +455,7 @@ class PHPMapping(BaseMapping):
 
     # PHP-specific helper methods for detailed metadata extraction
 
-    def _extract_parameters(
-        self, func_node: TSNode, source: str
-    ) -> list[dict[str, str]]:
+    def _extract_parameters(self, func_node: TSNode, source: str) -> list[dict[str, str]]:
         """Extract parameter names and types from a PHP function/method node.
 
         Args:
@@ -491,18 +483,14 @@ class PHPMapping(BaseMapping):
                 # Extract parameter name (variable_name starts with $)
                 for param_child in child.children:
                     if param_child.type == "variable_name":
-                        param_info["name"] = self.get_node_text(
-                            param_child, source
-                        ).strip()
+                        param_info["name"] = self.get_node_text(param_child, source).strip()
                     elif param_child.type in (
                         "primitive_type",
                         "named_type",
                         "optional_type",
                     ):
                         # Type hint
-                        param_info["type"] = self.get_node_text(
-                            param_child, source
-                        ).strip()
+                        param_info["type"] = self.get_node_text(param_child, source).strip()
 
                 if param_info:
                     parameters.append(param_info)
@@ -700,9 +688,7 @@ class PHPMapping(BaseMapping):
                                 "boolean",
                                 "null",
                             ):
-                                value_text = self.get_node_text(
-                                    value_child, source
-                                ).strip()
+                                value_text = self.get_node_text(value_child, source).strip()
                                 break
 
                         # Truncate to 50 chars if longer
@@ -726,39 +712,27 @@ class PHPMapping(BaseMapping):
                             if args_node:
                                 # Get the first two arguments (name and value)
                                 arg_nodes = [
-                                    n
-                                    for n in args_node.children
-                                    if n.type != "," and n.type != "(" and n.type != ")"
+                                    n for n in args_node.children if n.type != "," and n.type != "(" and n.type != ")"
                                 ]
 
                                 if len(arg_nodes) >= 2:
                                     # First argument is the constant name (usually a string)
-                                    const_name_text = self.get_node_text(
-                                        arg_nodes[0], source
-                                    ).strip()
+                                    const_name_text = self.get_node_text(arg_nodes[0], source).strip()
                                     # Remove quotes from string
                                     const_name = const_name_text.strip("\"'")
 
                                     # Second argument is the value
-                                    const_value = self.get_node_text(
-                                        arg_nodes[1], source
-                                    ).strip()
+                                    const_value = self.get_node_text(arg_nodes[1], source).strip()
 
                                     # Truncate to 50 chars if longer
                                     if len(const_value) > MAX_CONSTANT_VALUE_LENGTH:
-                                        const_value = const_value[
-                                            :MAX_CONSTANT_VALUE_LENGTH
-                                        ]
+                                        const_value = const_value[:MAX_CONSTANT_VALUE_LENGTH]
 
-                                    constants.append(
-                                        {"name": const_name, "value": const_value}
-                                    )
+                                    constants.append({"name": const_name, "value": const_value})
 
         return constants if constants else None
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path for PHP.
 
         Attempts to resolve relative require/include statements.
@@ -771,9 +745,7 @@ class PHPMapping(BaseMapping):
         Returns:
             Path to the imported file (empty list if not found)
         """
-        match = re.search(
-            r'(?:require|include)(?:_once)?\s*\(\s*[\'"](.+?)[\'"]\s*\)', import_text
-        )
+        match = re.search(r'(?:require|include)(?:_once)?\s*\(\s*[\'"](.+?)[\'"]\s*\)', import_text)
         if not match:
             return []
 

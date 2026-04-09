@@ -55,9 +55,7 @@ class SimpleEventHandler(FileSystemEventHandler):
             self._root = root_path.resolve()
         else:
             try:
-                self._root = (
-                    config.target_dir if config and config.target_dir else Path.cwd()
-                ).resolve()
+                self._root = (config.target_dir if config and config.target_dir else Path.cwd()).resolve()
             except Exception:
                 self._root = Path.cwd().resolve()
 
@@ -194,9 +192,7 @@ class SimpleEventHandler(FileSystemEventHandler):
                 sources = self.config.indexing.resolve_ignore_sources()
                 cfg_ex = self.config.indexing.get_effective_config_excludes()
                 chf = self.config.indexing.chignore_file
-                overlay = bool(
-                    getattr(self.config.indexing, "workspace_gitignore_nonrepo", False)
-                )
+                overlay = bool(getattr(self.config.indexing, "workspace_gitignore_nonrepo", False))
                 self._engine = build_repo_aware_ignore_engine(
                     self._root,
                     sources,
@@ -209,9 +205,7 @@ class SimpleEventHandler(FileSystemEventHandler):
 
         # Exclude via engine
         try:
-            if self._engine is not None and self._engine.matches(
-                file_path, is_dir=False
-            ):
+            if self._engine is not None and self._engine.matches(file_path, is_dir=False):
                 return False
         except Exception:
             pass
@@ -226,9 +220,7 @@ class SimpleEventHandler(FileSystemEventHandler):
 
             from chunkhound.utils.file_patterns import should_include_file
 
-            return should_include_file(
-                file_path, self._root, self._include_patterns, self._pattern_cache
-            )
+            return should_include_file(file_path, self._root, self._include_patterns, self._pattern_cache)
         except Exception:
             from chunkhound.core.types.common import Language
 
@@ -263,9 +255,7 @@ class SimpleEventHandler(FileSystemEventHandler):
         """Queue an event for async processing."""
         try:
             if self.loop and not self.loop.is_closed() and self.event_queue is not None:
-                future = asyncio.run_coroutine_threadsafe(
-                    self.event_queue.put((event_type, file_path)), self.loop
-                )
+                future = asyncio.run_coroutine_threadsafe(self.event_queue.put((event_type, file_path)), self.loop)
                 future.result(timeout=5.0)  # More tolerance for queue operations
         except Exception as e:
             logger.warning(f"Failed to queue {event_type} event for {file_path}: {e}")
@@ -298,9 +288,7 @@ class RealtimeIndexingService:
         self._lsp_population = lsp_population
 
         # Priority queue ensures deletes run before embed/lsp follow-ups (ch-zn5)
-        self.file_queue: asyncio.PriorityQueue[tuple[str, Path]] = (
-            asyncio.PriorityQueue()
-        )
+        self.file_queue: asyncio.PriorityQueue[tuple[str, Path]] = asyncio.PriorityQueue()
 
         # NEW: Async queue for events from watchdog (thread-safe via asyncio)
         self.event_queue: asyncio.Queue = asyncio.Queue(maxsize=1000)
@@ -314,9 +302,7 @@ class RealtimeIndexingService:
         self._debounce_delay = 0.5  # 500ms delay from research
         self._debounce_tasks: set[asyncio.Task] = set()  # Track active debounce tasks
 
-        self._recent_file_events: dict[
-            str, tuple[str, float]
-        ] = {}  # Layer 3: event dedup
+        self._recent_file_events: dict[str, tuple[str, float]] = {}  # Layer 3: event dedup
 
         # Background scan state
         self.scan_iterator: Iterator | None = None
@@ -338,9 +324,7 @@ class RealtimeIndexingService:
 
         # Monitoring readiness coordination
         self.monitoring_ready = asyncio.Event()  # Signals when monitoring is ready
-        self._monitoring_ready_time: float | None = (
-            None  # Track when monitoring became ready
-        )
+        self._monitoring_ready_time: float | None = None  # Track when monitoring became ready
 
         # File indexing completion tracking (test-only infrastructure — production
         # callers should not use wait_for_file_indexed / wait_for_file_removed)
@@ -383,9 +367,7 @@ class RealtimeIndexingService:
         self.process_task = asyncio.create_task(self._process_loop())
 
         # Setup watchdog, falling back to polling on failure
-        self._watchdog_setup_task = asyncio.create_task(
-            self._setup_watchdog(watch_path, loop)
-        )
+        self._watchdog_setup_task = asyncio.create_task(self._setup_watchdog(watch_path, loop))
 
         # Wait for monitoring to be confirmed ready
         monitoring_ok = await self.wait_for_monitoring_ready(timeout=10.0)
@@ -453,9 +435,7 @@ class RealtimeIndexingService:
         async with self._file_condition:
             self._file_condition.notify_all()
 
-    async def _setup_watchdog(
-        self, watch_path: Path, loop: asyncio.AbstractEventLoop
-    ) -> None:
+    async def _setup_watchdog(self, watch_path: Path, loop: asyncio.AbstractEventLoop) -> None:
         """Setup watchdog, falling back to polling on failure."""
         # Skip watchdog entirely if force_polling is enabled (e.g., Windows CI)
         if self._force_polling:
@@ -504,9 +484,7 @@ class RealtimeIndexingService:
             pass
         return count
 
-    def _start_fs_monitor(
-        self, watch_path: Path, loop: asyncio.AbstractEventLoop
-    ) -> None:
+    def _start_fs_monitor(self, watch_path: Path, loop: asyncio.AbstractEventLoop) -> None:
         """Start filesystem monitoring, choosing recursive vs non-recursive."""
         # Deadline covers the entire setup (schedule + start + thread alive check).
         # On Windows, observer thread startup can be noticeably slower.
@@ -519,9 +497,7 @@ class RealtimeIndexingService:
         dir_count = self._count_dirs_bounded(watch_path, self._MAX_RECURSIVE_DIRS)
         use_recursive = dir_count <= self._MAX_RECURSIVE_DIRS
 
-        self.event_handler = SimpleEventHandler(
-            self.event_queue, self.config, loop, root_path=watch_path
-        )
+        self.event_handler = SimpleEventHandler(self.event_queue, self.config, loop, root_path=watch_path)
         self.observer = Observer()
 
         if not use_recursive:
@@ -530,9 +506,7 @@ class RealtimeIndexingService:
                 f"Directory tree too deep ({dir_count}+ dirs > {self._MAX_RECURSIVE_DIRS}) "
                 f"for recursive watchdog — falling back to polling"
             )
-            raise RuntimeError(
-                f"Too many directories ({dir_count}+) for recursive watchdog"
-            )
+            raise RuntimeError(f"Too many directories ({dir_count}+) for recursive watchdog")
 
         self.observer.schedule(
             self.event_handler,
@@ -552,9 +526,7 @@ class RealtimeIndexingService:
 
     async def _add_subdirectories_progressively(self, root_path: Path) -> None:
         """No longer needed - using recursive monitoring."""
-        logger.debug(
-            "Progressive directory addition skipped (using recursive monitoring)"
-        )
+        logger.debug("Progressive directory addition skipped (using recursive monitoring)")
 
     async def _polling_monitor(self, watch_path: Path) -> None:
         """Simple polling monitor for large directories."""
@@ -564,9 +536,7 @@ class RealtimeIndexingService:
         known_files: dict[Path, int] = {}
 
         # Create a simple event handler for shouldIndex check once
-        simple_handler = SimpleEventHandler(
-            None, self.config, None, root_path=watch_path
-        )
+        simple_handler = SimpleEventHandler(None, self.config, None, root_path=watch_path)
 
         # Use a shorter interval during the first few seconds to ensure
         # freshly created files are detected quickly after startup/fallback.
@@ -596,8 +566,7 @@ class RealtimeIndexingService:
                                     await asyncio.sleep(0)
                                     if files_checked > 5000:
                                         logger.warning(
-                                            f"Polling checked {files_checked} files,"
-                                            " skipping rest",
+                                            f"Polling checked {files_checked} files, skipping rest",
                                         )
                                         break
                             except (OSError, PermissionError):
@@ -684,9 +653,7 @@ class RealtimeIndexingService:
                 else:
                     # Schedule debounced processing
                     self._pending_debounce[file_str] = current_time
-                    task = asyncio.create_task(
-                        self._debounced_add_file(file_path, priority)
-                    )
+                    task = asyncio.create_task(self._debounced_add_file(file_path, priority))
                     self._debounce_tasks.add(task)
                     task.add_done_callback(self._debounce_tasks.discard)
                     self._debug(f"queued (debounced) {file_path} priority={priority}")
@@ -716,9 +683,7 @@ class RealtimeIndexingService:
             try:
                 # Get event from async queue with timeout
                 try:
-                    event_type, file_path = await asyncio.wait_for(
-                        self.event_queue.get(), timeout=1.0
-                    )
+                    event_type, file_path = await asyncio.wait_for(self.event_queue.get(), timeout=1.0)
                 except asyncio.TimeoutError:
                     # Normal timeout, continue to check if task should stop
                     continue
@@ -729,16 +694,15 @@ class RealtimeIndexingService:
                 current_time = time.time()
 
                 if file_key in self._recent_file_events:
-                    last_event_type, last_event_time = self._recent_file_events[
-                        file_key
-                    ]
+                    last_event_type, last_event_time = self._recent_file_events[file_key]
                     if (
                         last_event_type == event_type
-                        and (current_time - last_event_time)
-                        < self._EVENT_DEDUP_WINDOW_SECONDS
+                        and (current_time - last_event_time) < self._EVENT_DEDUP_WINDOW_SECONDS
                     ):
                         logger.debug(
-                            f"Suppressing duplicate {event_type} event for {file_path} (within {self._EVENT_DEDUP_WINDOW_SECONDS}s window)"
+                            f"Suppressing duplicate {event_type} event for"
+                            f" {file_path} (within"
+                            f" {self._EVENT_DEDUP_WINDOW_SECONDS}s window)"
                         )
                         self._debug(f"suppressed duplicate {event_type}: {file_path}")
                         self.event_queue.task_done()
@@ -750,11 +714,7 @@ class RealtimeIndexingService:
                 # Cleanup old entries to keep dict bounded (max 1000 files)
                 if len(self._recent_file_events) > 1000:
                     cutoff = current_time - self._EVENT_HISTORY_RETENTION_SECONDS
-                    self._recent_file_events = {
-                        k: v
-                        for k, v in self._recent_file_events.items()
-                        if v[1] > cutoff
-                    }
+                    self._recent_file_events = {k: v for k, v in self._recent_file_events.items() if v[1] > cutoff}
 
                 if event_type in ("created", "modified"):
                     # Use existing add_file method for deduplication and priority
@@ -840,9 +800,7 @@ class RealtimeIndexingService:
                     logger.debug(f"Queueing cleanup for deleted file: {file_path}")
                     await self.add_file(Path(file_path), priority="delete")
 
-            logger.info(
-                f"Queued {len(search_results)} files for cleanup from deleted directory: {dir_path}"
-            )
+            logger.info(f"Queued {len(search_results)} files for cleanup from deleted directory: {dir_path}")
 
         except Exception as e:
             logger.error(f"Error cleaning up deleted directory {dir_path}: {e}")
@@ -853,23 +811,15 @@ class RealtimeIndexingService:
             # Get all supported files in the new directory
             supported_files = []
             for file_path in dir_path.rglob("*"):
-                if (
-                    file_path.is_file()
-                    and self.event_handler
-                    and self.event_handler._should_index(file_path)
-                ):
+                if file_path.is_file() and self.event_handler and self.event_handler._should_index(file_path):
                     supported_files.append(file_path)
 
             # Add files to processing queue
             for file_path in supported_files:
                 await self.add_file(file_path, priority="change")
 
-            logger.debug(
-                f"Queued {len(supported_files)} files from new directory: {dir_path}"
-            )
-            self._debug(
-                f"queued {len(supported_files)} files from new directory: {dir_path}"
-            )
+            logger.debug(f"Queued {len(supported_files)} files from new directory: {dir_path}")
+            self._debug(f"queued {len(supported_files)} files from new directory: {dir_path}")
 
         except Exception as e:
             logger.error(f"Error indexing new directory {dir_path}: {e}")
@@ -891,9 +841,7 @@ class RealtimeIndexingService:
                 # DB writes from _consume_events — ch-zn5).
                 if priority == "delete":
                     try:
-                        await self.services.provider.delete_file_completely_async(
-                            str(file_path)
-                        )
+                        await self.services.provider.delete_file_completely_async(str(file_path))
                         self._debug(f"deleted file from database: {file_path}")
                         normalized = normalize_file_path(file_path)
                         async with self._file_condition:
@@ -923,9 +871,7 @@ class RealtimeIndexingService:
                     try:
                         await self.services.indexing_coordinator.generate_missing_embeddings()
                     except Exception as e:
-                        logger.warning(
-                            f"Embedding generation failed in realtime (embed pass): {e}"
-                        )
+                        logger.warning(f"Embedding generation failed in realtime (embed pass): {e}")
                     continue
 
                 # LSP population pass: extract symbols from file after tree-sitter indexing.
@@ -938,27 +884,19 @@ class RealtimeIndexingService:
 
                             rows = await self.services.provider.execute_query_async(
                                 "SELECT id FROM files WHERE path = ?",
-                                [str(file_path.relative_to(self.watch_path))]
-                                if self.watch_path
-                                else [str(file_path)],
+                                [str(file_path.relative_to(self.watch_path))] if self.watch_path else [str(file_path)],
                             )
                             if rows:
                                 file_id = rows[0]["id"]
                                 lang = Language.from_file_extension(file_path).value
-                                rel_path = (
-                                    file_path.relative_to(self.watch_path)
-                                    if self.watch_path
-                                    else file_path
-                                )
+                                rel_path = file_path.relative_to(self.watch_path) if self.watch_path else file_path
                                 await self._lsp_population.populate_file(
                                     file_path=rel_path,
                                     file_id=file_id,
                                     language=lang,
                                 )
                         except Exception as e:
-                            logger.warning(
-                                f"LSP population failed for {file_path}: {e}"
-                            )
+                            logger.warning(f"LSP population failed for {file_path}: {e}")
                     continue
 
                 # Skip embeddings for initial and change events to keep loop responsive.
@@ -989,14 +927,8 @@ class RealtimeIndexingService:
 
                 # Record processing summary into MCP debug log
                 try:
-                    chunks = (
-                        result.get("chunks", None) if isinstance(result, dict) else None
-                    )
-                    embeds = (
-                        result.get("embeddings", None)
-                        if isinstance(result, dict)
-                        else None
-                    )
+                    chunks = result.get("chunks", None) if isinstance(result, dict) else None
+                    embeds = result.get("embeddings", None) if isinstance(result, dict) else None
                     self._debug(
                         f"processed {file_path} priority={priority} "
                         f"skip_embeddings={skip_embeddings} chunks={chunks} embeddings={embeds}"
@@ -1045,9 +977,7 @@ class RealtimeIndexingService:
             logger.warning(f"Monitoring not ready after {timeout}s")
             return False
 
-    async def wait_for_file_indexed(
-        self, path: Path | str, timeout: float = 10.0
-    ) -> bool:
+    async def wait_for_file_indexed(self, path: Path | str, timeout: float = 10.0) -> bool:
         """Wait for a file to be indexed.
 
         Call reset_file_tracking(path) BEFORE triggering the file change
@@ -1058,9 +988,7 @@ class RealtimeIndexingService:
         async def _wait() -> None:
             async with self._file_condition:
                 await self._file_condition.wait_for(
-                    lambda: normalized in self._indexed_files
-                    or normalized in self.failed_files
-                    or self._stopping
+                    lambda: normalized in self._indexed_files or normalized in self.failed_files or self._stopping
                 )
 
         try:
@@ -1069,9 +997,7 @@ class RealtimeIndexingService:
         except asyncio.TimeoutError:
             return False
 
-    async def wait_for_file_removed(
-        self, path: Path | str, timeout: float = 10.0
-    ) -> bool:
+    async def wait_for_file_removed(self, path: Path | str, timeout: float = 10.0) -> bool:
         """Wait for a file to be removed from the index.
 
         Call reset_file_tracking(path) BEFORE triggering the file change.
@@ -1081,9 +1007,7 @@ class RealtimeIndexingService:
         async def _wait() -> None:
             async with self._file_condition:
                 await self._file_condition.wait_for(
-                    lambda: normalized in self._removed_files
-                    or normalized in self.failed_files
-                    or self._stopping
+                    lambda: normalized in self._removed_files or normalized in self.failed_files or self._stopping
                 )
 
         try:

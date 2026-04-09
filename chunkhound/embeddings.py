@@ -64,9 +64,7 @@ class EmbeddingProvider(Protocol):
         """Return True if this provider supports reranking."""
         ...
 
-    async def rerank(
-        self, query: str, documents: list[str], top_k: int | None = None
-    ) -> list[RerankResult]:
+    async def rerank(self, query: str, documents: list[str], top_k: int | None = None) -> list[RerankResult]:
         """Rerank documents by relevance to query.
 
         Args:
@@ -103,9 +101,7 @@ class EmbeddingManager:
         self._providers: dict[str, InterfaceEmbeddingProvider] = {}
         self._default_provider: str | None = None
 
-    def register_provider(
-        self, provider: InterfaceEmbeddingProvider, set_default: bool = False
-    ) -> None:
+    def register_provider(self, provider: InterfaceEmbeddingProvider, set_default: bool = False) -> None:
         """Register an embedding provider.
 
         Args:
@@ -113,9 +109,7 @@ class EmbeddingManager:
             set_default: Whether to set this as the default provider
         """
         self._providers[provider.name] = provider
-        logger.info(
-            f"Registered embedding provider: {provider.name} (model: {provider.model})"
-        )
+        logger.info(f"Registered embedding provider: {provider.name} (model: {provider.model})")
 
         if set_default or self._default_provider is None:
             self._default_provider = provider.name

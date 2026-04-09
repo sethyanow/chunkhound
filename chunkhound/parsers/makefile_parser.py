@@ -120,10 +120,7 @@ class MakefileChunkSplitter(ChunkSplitter):
         for rule_chunk in result:
             metrics = ChunkMetrics.from_content(rule_chunk.content)
             tokens = estimate_tokens_chunking(rule_chunk.content)
-            if (
-                metrics.non_whitespace_chars > self.config.max_chunk_size
-                or tokens > self.config.safe_token_limit
-            ):
+            if metrics.non_whitespace_chars > self.config.max_chunk_size or tokens > self.config.safe_token_limit:
                 # Single recipe line exceeds limit - use emergency split
                 validated_result.extend(self._emergency_split(rule_chunk))
             else:
@@ -190,14 +187,10 @@ class MakefileParser(UniversalParser):
     to handle oversized rules with target/recipe coherence.
     """
 
-    def __init__(
-        self, cast_config: CASTConfig | None = None, detect_embedded_sql: bool = True
-    ):
+    def __init__(self, cast_config: CASTConfig | None = None, detect_embedded_sql: bool = True):
         engine = self._create_makefile_engine()
         mapping = MakefileMapping()
-        super().__init__(
-            engine, mapping, cast_config, detect_embedded_sql=detect_embedded_sql
-        )
+        super().__init__(engine, mapping, cast_config, detect_embedded_sql=detect_embedded_sql)
         # Override with Makefile-aware chunk splitter
         self.chunk_splitter = MakefileChunkSplitter(self.cast_config)
 

@@ -80,9 +80,7 @@ def find_elbow_kneedle(sorted_scores: list[float]) -> int | None:
 
     # Validate elbow is significant (distance > 1% of normalized range)
     if distances[elbow_idx] < 0.01:
-        logger.debug(
-            f"Kneedle: Elbow not significant (distance={distances[elbow_idx]:.4f} < 0.01)"
-        )
+        logger.debug(f"Kneedle: Elbow not significant (distance={distances[elbow_idx]:.4f} < 0.01)")
         return None  # Elbow not significant enough
 
     logger.debug(
@@ -140,10 +138,7 @@ def compute_elbow_threshold(chunks_or_scores: list[dict] | list[float]) -> float
     elbow_idx = find_elbow_kneedle(sorted_scores)
     if elbow_idx is not None and elbow_idx < len(sorted_scores):
         threshold = float(sorted_scores[elbow_idx])
-        logger.debug(
-            f"Elbow threshold: {threshold:.3f} (Kneedle at index {elbow_idx} "
-            f"of {len(scores)} scores)"
-        )
+        logger.debug(f"Elbow threshold: {threshold:.3f} (Kneedle at index {elbow_idx} of {len(scores)} scores)")
         return threshold
 
     # Fallback to median if Kneedle fails

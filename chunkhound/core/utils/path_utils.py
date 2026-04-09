@@ -46,9 +46,7 @@ def get_relative_path_safe(path: Path, base_dir: Path) -> Path:
         return path.relative_to(base_dir)
 
 
-def normalize_path_for_lookup(
-    input_path: str | Path, base_dir: Path | None = None
-) -> str:
+def normalize_path_for_lookup(input_path: str | Path, base_dir: Path | None = None) -> str:
     """Normalize path for database lookup operations.
 
     Converts absolute paths to relative paths using base directory,

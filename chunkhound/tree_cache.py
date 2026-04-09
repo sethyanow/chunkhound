@@ -75,9 +75,7 @@ class TreeCache:
         self._evictions = 0
         self._invalidations = 0
 
-        logger.debug(
-            f"TreeCache initialized: max_entries={max_entries}, max_memory_mb={max_memory_mb}"
-        )
+        logger.debug(f"TreeCache initialized: max_entries={max_entries}, max_memory_mb={max_memory_mb}")
 
     def get(self, file_path: Path) -> Any | None:
         """Get cached syntax tree for file.
@@ -240,9 +238,7 @@ class TreeCache:
         """
         with self._lock:
             total_requests = self._hits + self._misses
-            hit_rate = (
-                (self._hits / total_requests * 100) if total_requests > 0 else 0.0
-            )
+            hit_rate = (self._hits / total_requests * 100) if total_requests > 0 else 0.0
 
             return {
                 "entries": len(self._cache),
@@ -253,9 +249,7 @@ class TreeCache:
                 "evictions": self._evictions,
                 "invalidations": self._invalidations,
                 "total_requests": total_requests,
-                "estimated_memory_mb": round(
-                    sum(entry.size for entry in self._cache.values()) / 1024 / 1024, 2
-                ),
+                "estimated_memory_mb": round(sum(entry.size for entry in self._cache.values()) / 1024 / 1024, 2),
                 "max_memory_mb": round(self.max_memory_bytes / 1024 / 1024, 2),
             }
 
@@ -333,9 +327,7 @@ def get_default_cache() -> TreeCache:
     return _default_cache
 
 
-def configure_default_cache(
-    max_entries: int = 1000, max_memory_mb: int = 500
-) -> TreeCache:
+def configure_default_cache(max_entries: int = 1000, max_memory_mb: int = 500) -> TreeCache:
     """Configure the default global tree cache.
 
     Args:

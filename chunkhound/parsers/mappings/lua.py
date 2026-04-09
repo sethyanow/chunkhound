@@ -156,9 +156,7 @@ class LuaMapping(BaseMapping):
         # All cases handled above
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -182,9 +180,7 @@ class LuaMapping(BaseMapping):
                                 if subchild.type == "variable_list":
                                     for var in subchild.children:
                                         if var.type == "identifier":
-                                            return self.get_node_text(
-                                                var, source
-                                            ).strip()
+                                            return self.get_node_text(var, source).strip()
 
             return "unnamed_definition"
 
@@ -221,9 +217,7 @@ class LuaMapping(BaseMapping):
                     return f"require_{module_name}"
 
                 # Try dofile/loadfile
-                match = re.search(
-                    r'(?:dofile|loadfile)\s*[\(\s]*["\']([^"\']+)["\']', def_text
-                )
+                match = re.search(r'(?:dofile|loadfile)\s*[\(\s]*["\']([^"\']+)["\']', def_text)
                 if match:
                     file_name = match.group(1)
                     if "/" in file_name:
@@ -238,9 +232,7 @@ class LuaMapping(BaseMapping):
         # All cases handled above
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Convert bytes to string for processing
@@ -259,9 +251,7 @@ class LuaMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract Lua-specific metadata."""
 
         source = content.decode("utf-8")
@@ -322,14 +312,10 @@ class LuaMapping(BaseMapping):
                     metadata["module"] = match.group(1)
                     metadata["import_type"] = "require"
                 else:
-                    match = re.search(
-                        r'(?:dofile|loadfile)\s*[\(\s]*["\']([^"\']+)["\']', import_text
-                    )
+                    match = re.search(r'(?:dofile|loadfile)\s*[\(\s]*["\']([^"\']+)["\']', import_text)
                     if match:
                         metadata["file"] = match.group(1)
-                        metadata["import_type"] = (
-                            "dofile" if "dofile" in import_text else "loadfile"
-                        )
+                        metadata["import_type"] = "dofile" if "dofile" in import_text else "loadfile"
 
         elif concept == UniversalConcept.COMMENT:
             if "definition" in captures:
@@ -345,10 +331,7 @@ class LuaMapping(BaseMapping):
 
                 if clean_text:
                     upper_text = clean_text.upper()
-                    if any(
-                        prefix in upper_text
-                        for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]
-                    ):
+                    if any(prefix in upper_text for prefix in ["TODO:", "FIXME:", "HACK:", "NOTE:", "WARNING:"]):
                         comment_type = "annotation"
                         is_doc = True
                     elif clean_text.startswith("#!/"):
@@ -404,9 +387,7 @@ class LuaMapping(BaseMapping):
 
         return cleaned.strip()
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path from Lua require/dofile/loadfile.
 
         Args:
@@ -433,9 +414,7 @@ class LuaMapping(BaseMapping):
                 return [full_path]
 
         # dofile/loadfile with direct path
-        match = re.search(
-            r'(?:dofile|loadfile)\s*[\(\s]*["\']([^"\']+)["\']', import_text
-        )
+        match = re.search(r'(?:dofile|loadfile)\s*[\(\s]*["\']([^"\']+)["\']', import_text)
         if match:
             path = match.group(1)
 
@@ -492,9 +471,7 @@ class LuaMapping(BaseMapping):
                             if name and re.match(r"^_?[A-Z][A-Z0-9_]*$", name):
                                 value = ""
                                 if expr_list:
-                                    value = self.get_node_text(
-                                        expr_list, source
-                                    ).strip()
+                                    value = self.get_node_text(expr_list, source).strip()
                                     if len(value) > MAX_CONSTANT_VALUE_LENGTH:
                                         value = value[:MAX_CONSTANT_VALUE_LENGTH]
                                 return [{"name": name, "value": value}]

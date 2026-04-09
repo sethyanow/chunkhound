@@ -108,9 +108,9 @@ def _render_index_metadata(index: CodeMapperIndex) -> list[str]:
         generator_mode = generation_stats.get("generator_mode")
         if generator_mode:
             lines.append(f"- Generator mode: {generator_mode}")
-        comprehensiveness = generation_stats.get(
-            "autodoc_comprehensiveness"
-        ) or generation_stats.get("code_mapper_comprehensiveness")
+        comprehensiveness = generation_stats.get("autodoc_comprehensiveness") or generation_stats.get(
+            "code_mapper_comprehensiveness"
+        )
         if comprehensiveness:
             lines.append(f"- Comprehensiveness: {comprehensiveness}")
         total_calls = generation_stats.get("total_research_calls")

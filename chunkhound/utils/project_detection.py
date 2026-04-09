@@ -91,9 +91,7 @@ def get_project_database_path() -> Path:
         Path to database file in project root
     """
     # Check environment variable first
-    db_path_env = os.environ.get("CHUNKHOUND_DATABASE__PATH") or os.environ.get(
-        "CHUNKHOUND_DB_PATH"
-    )
+    db_path_env = os.environ.get("CHUNKHOUND_DATABASE__PATH") or os.environ.get("CHUNKHOUND_DB_PATH")
     if db_path_env:
         return Path(db_path_env)
 

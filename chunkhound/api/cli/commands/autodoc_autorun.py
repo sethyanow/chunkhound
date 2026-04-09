@@ -58,11 +58,7 @@ def _build_auto_map_plan(
 def _resolve_map_out_dir(*, args: Namespace, output_dir: Path) -> Path:
     map_out_dir_arg = getattr(args, "map_out_dir", None)
     default_plan = _build_auto_map_plan(output_dir=output_dir)
-    map_out_dir_hint = (
-        Path(map_out_dir_arg).expanduser()
-        if map_out_dir_arg is not None
-        else default_plan.map_out_dir
-    )
+    map_out_dir_hint = Path(map_out_dir_arg).expanduser() if map_out_dir_arg is not None else default_plan.map_out_dir
 
     map_out_dir = Path(map_out_dir_arg).expanduser() if map_out_dir_arg else None
     if map_out_dir is None:
@@ -78,11 +74,7 @@ def _resolve_map_out_dir(*, args: Namespace, output_dir: Path) -> Path:
 
 def _resolve_map_comprehensiveness(*, args: Namespace) -> str:
     map_comprehensiveness_arg = getattr(args, "map_comprehensiveness", None)
-    comprehensiveness = (
-        map_comprehensiveness_arg
-        if isinstance(map_comprehensiveness_arg, str)
-        else None
-    )
+    comprehensiveness = map_comprehensiveness_arg if isinstance(map_comprehensiveness_arg, str) else None
     if comprehensiveness is None:
         return prompts.prompt_choice(
             "Code Mapper comprehensiveness",
@@ -107,9 +99,7 @@ def _resolve_map_audience(*, args: Namespace) -> str:
 
 def _resolve_map_context(*, args: Namespace) -> Path | None:
     map_context_arg = getattr(args, "map_context", None)
-    map_context: Path | None = (
-        Path(map_context_arg).expanduser() if map_context_arg is not None else None
-    )
+    map_context: Path | None = Path(map_context_arg).expanduser() if map_context_arg is not None else None
     if map_context is None:
         raw = prompts.prompt_text(
             "Optional Code Mapper context file (--map-context, leave blank for none)",
@@ -260,10 +250,7 @@ def _autorun_prereq_failure_exit(*, details: list[str], exit_code: int) -> None:
         infos=(
             "To fix:",
             "- Run `chunkhound index <directory>` to create the database.",
-            (
-                "- Configure embeddings with reranking support "
-                "(e.g. set `embedding.rerank_model`)."
-            ),
+            ("- Configure embeddings with reranking support (e.g. set `embedding.rerank_model`)."),
             "- Configure an LLM provider (e.g. `CHUNKHOUND_LLM_API_KEY`).",
         ),
     )
@@ -285,11 +272,7 @@ def confirm_autorun_and_validate_prereqs(
     )
     warning_suffix = ""
     if not preflight_ok:
-        warning_suffix = (
-            "\n\n"
-            "Note: Code Mapper prerequisites appear missing "
-            f"({', '.join(missing)})."
-        )
+        warning_suffix = f"\n\nNote: Code Mapper prerequisites appear missing ({', '.join(missing)})."
 
     if not prompts.prompt_yes_no(
         f"{question}{warning_suffix}",
@@ -302,9 +285,7 @@ def confirm_autorun_and_validate_prereqs(
         config_path=config_path,
     )
     if not preflight_ok:
-        _autorun_prereq_failure_exit(
-            details=details, exit_code=prereq_failure_exit_code
-        )
+        _autorun_prereq_failure_exit(details=details, exit_code=prereq_failure_exit_code)
 
 
 async def run_code_mapper_for_autodoc(
@@ -416,9 +397,7 @@ async def ensure_map_dir(
                 "No `map-in` provided. Generate the codemap first by running "
                 "`chunkhound map`, then continue with AutoDoc?"
             ),
-            decline_error=(
-                "Missing required input: map-in (Code Mapper outputs directory)."
-            ),
+            decline_error=("Missing required input: map-in (Code Mapper outputs directory)."),
             decline_exit_code=2,
         )
 
@@ -455,8 +434,7 @@ def resolve_allow_delete_topics_dir(
         )
 
     if not prompts.prompt_yes_no(
-        "Output directory already contains generated topic pages at "
-        f"{topics_dir}. Delete and re-generate them?",
+        f"Output directory already contains generated topic pages at {topics_dir}. Delete and re-generate them?",
         default=False,
     ):
         raise AutoDocCLIExitError(exit_code=2, errors=("Aborted.",))

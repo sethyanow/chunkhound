@@ -5,15 +5,11 @@ import re
 _SOURCES_HEADING_RE = re.compile(r"^##\s+Sources\s*$", re.IGNORECASE)
 _REFERENCES_HEADING_RE = re.compile(r"^##\s+References\s*$", re.IGNORECASE)
 _TREE_LINE_RE = re.compile(r"^(?P<prefix>.*?)[├└]──\s+(?P<content>.+)$")
-_FILE_LINE_RE = re.compile(
-    r"^\[(?P<ref>\d+)\]\s+(?P<name>.+?)(?:\s+\((?P<details>.+)\))?$"
-)
+_FILE_LINE_RE = re.compile(r"^\[(?P<ref>\d+)\]\s+(?P<name>.+?)(?:\s+\((?P<details>.+)\))?$")
 _CITATION_RE = re.compile(r"\[(?P<ref>\d+)\]")
 _PLAIN_CITATION_RE = re.compile(r"(?<!\[)\[(?P<ref>\d+)\](?!\])")
 _FLAT_REFERENCE_RE = re.compile(r"^\s*-\s*\[(?P<ref>\d+)\]\s+")
-_FLAT_REFERENCE_LINE_RE = re.compile(
-    r"^(?P<prefix>\s*-\s+)\[(?P<ref>\d+)\](?P<rest>.*)$"
-)
+_FLAT_REFERENCE_LINE_RE = re.compile(r"^(?P<prefix>\s*-\s+)\[(?P<ref>\d+)\](?P<rest>.*)$")
 
 
 def _linkify_citations(markdown: str) -> str:
@@ -88,9 +84,7 @@ def strip_references_section(markdown: str) -> str:
     for line in lines:
         heading = line.strip()
         if heading.startswith("## "):
-            if _SOURCES_HEADING_RE.match(heading) or _REFERENCES_HEADING_RE.match(
-                heading
-            ):
+            if _SOURCES_HEADING_RE.match(heading) or _REFERENCES_HEADING_RE.match(heading):
                 while output_lines and not output_lines[-1].strip():
                     output_lines.pop()
                 if output_lines and output_lines[-1].strip() == "---":
@@ -148,9 +142,7 @@ def build_references_section(flat_items: list[str]) -> str:
     return "\n".join(lines).strip()
 
 
-def _select_flat_references_for_cleaned_body(
-    cleaned_body: str, sources_block: str
-) -> list[str]:
+def _select_flat_references_for_cleaned_body(cleaned_body: str, sources_block: str) -> list[str]:
     flat_items = flatten_sources_block(sources_block)
     if not flat_items:
         raise ValueError(

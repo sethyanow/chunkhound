@@ -88,12 +88,8 @@ class HclMapping(BaseMapping):
         # No explicit import concept in HCL
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
-        node = captures.get("definition") or (
-            list(captures.values())[0] if captures else None
-        )
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
+        node = captures.get("definition") or (list(captures.values())[0] if captures else None)
         if node is None:
             return f"unnamed_{concept.value}"
 
@@ -116,11 +112,7 @@ class HclMapping(BaseMapping):
         if node.type == "object_elem":
             src = self._decode(content)
             inner_key_node = captures.get("inner_key")
-            inner_key_raw = (
-                self.get_node_text(inner_key_node, src).strip()
-                if inner_key_node
-                else ""
-            )
+            inner_key_raw = self.get_node_text(inner_key_node, src).strip() if inner_key_node else ""
             inner_key = self.clean_string_literal(inner_key_raw)
 
             # Find nearest attribute ancestor to get the attribute key
@@ -149,23 +141,15 @@ class HclMapping(BaseMapping):
 
         return f"unnamed_{concept.value}"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
-        node = captures.get("definition") or (
-            list(captures.values())[0] if captures else None
-        )
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
+        node = captures.get("definition") or (list(captures.values())[0] if captures else None)
         if node is None:
             return ""
         start, end = node.start_byte, node.end_byte
         return content[start:end].decode("utf-8", errors="replace")
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
-        node = captures.get("definition") or (
-            list(captures.values())[0] if captures else None
-        )
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
+        node = captures.get("definition") or (list(captures.values())[0] if captures else None)
         meta: dict[str, Any] = {
             "concept": concept.value,
             "language": self.language.value,

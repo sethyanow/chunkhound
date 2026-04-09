@@ -73,13 +73,10 @@ def _ensure_mp_start_method() -> None:
     if current != desired:
         try:
             multiprocessing.set_start_method(desired, force=True)
-            logger.debug(
-                f"Set multiprocessing start method to '{desired}' (was {current})"
-            )
+            logger.debug(f"Set multiprocessing start method to '{desired}' (was {current})")
         except RuntimeError:
             logger.debug(
-                f"Multiprocessing start method remains"
-                f" '{multiprocessing.get_start_method()}'; desired '{desired}'"
+                f"Multiprocessing start method remains '{multiprocessing.get_start_method()}'; desired '{desired}'"
             )
     _mp_configured = True
 
@@ -120,15 +117,11 @@ def _mem_available_bytes() -> int:
 # RATIONALE: Balance parallelism overhead vs throughput for different workload sizes
 
 # File parsing batch sizes
-SMALL_FILE_COUNT_THRESHOLD = (
-    100  # Below this: use minimal workers (overhead not worth it)
-)
+SMALL_FILE_COUNT_THRESHOLD = 100  # Below this: use minimal workers (overhead not worth it)
 MEDIUM_FILE_COUNT_THRESHOLD = 1000  # Above this: scale up for enterprise monorepos
 MAX_WORKERS_SMALL_BATCH = 4  # Worker cap for small file batches
 MAX_WORKERS_MEDIUM_BATCH = 8  # Worker cap for medium file batches (original behavior)
-MAX_WORKERS_LARGE_BATCH = (
-    16  # Worker cap for large file batches (prevents resource exhaustion)
-)
+MAX_WORKERS_LARGE_BATCH = 16  # Worker cap for large file batches (prevents resource exhaustion)
 
 # Fallback CPU count when os.cpu_count() returns None
 DEFAULT_CPU_COUNT = 4
@@ -201,9 +194,7 @@ class IndexingCoordinator(BaseService):
 
         # Per-run cache for repo-aware ignore engines to avoid repeated tree scans
         # Key: (root, tuple(sources), chignore_file, tuple(cfg_excludes))
-        self._ignore_engine_cache: dict[
-            tuple[str, tuple[str, ...], str, tuple[str, ...]], object
-        ] = {}
+        self._ignore_engine_cache: dict[tuple[str, tuple[str, ...], str, tuple[str, ...]], object] = {}
 
         # Per-run cache for repo root detection to avoid repeated directory walks
         # Key: (root_path, tuple(sorted(cfg_excludes))) -> list[Path]
@@ -302,9 +293,7 @@ class IndexingCoordinator(BaseService):
                         continue
                     # Skip overly broad wildcards that would match everything
                     if pat in ("*", "**/*", "**/**", "**"):
-                        logger.debug(
-                            f"Skipping overly broad global gitignore pattern: {pat}"
-                        )
+                        logger.debug(f"Skipping overly broad global gitignore pattern: {pat}")
                         continue
                     safe_pats.append(pat)
                 if safe_pats:
@@ -409,9 +398,7 @@ class IndexingCoordinator(BaseService):
         total_bytes = 0
         for ch in sample:
             code = getattr(ch, "code", "") or ""
-            total_bytes += (
-                len(code.encode("utf-8", errors="ignore")) + 256
-            )  # overhead estimate
+            total_bytes += len(code.encode("utf-8", errors="ignore")) + 256  # overhead estimate
         avg = max(512, total_bytes // len(sample))
 
         # Compute batch size and clamp
@@ -458,9 +445,7 @@ class IndexingCoordinator(BaseService):
             del self._file_locks[file_key]
             logger.debug(f"Cleaned up lock for deleted file: {file_key}")
 
-    async def process_file(
-        self, file_path: Path, skip_embeddings: bool = False
-    ) -> dict[str, Any]:
+    async def process_file(self, file_path: Path, skip_embeddings: bool = False) -> dict[str, Any]:
         """Process a single file through the complete indexing pipeline.
 
         Uses the same parallel batch processing path as process_directory,
@@ -536,9 +521,7 @@ class IndexingCoordinator(BaseService):
                             logger.warning(f"[IndexCoord] {embedding_error}")
                     except Exception as e:
                         embedding_error = str(e)
-                        logger.error(
-                            f"Failed to generate embeddings for {file_path}: {e}"
-                        )
+                        logger.error(f"Failed to generate embeddings for {file_path}: {e}")
                         # Don't fail the entire operation if embeddings fail
                         # File chunks are already committed and searchable via regex
 
@@ -556,9 +539,7 @@ class IndexingCoordinator(BaseService):
                 return_dict["file_id"] = file_id
 
             if return_dict.get("status") == "error":
-                logger.warning(
-                    f"Store error for {file_path}: {return_dict.get('errors')}"
-                )
+                logger.warning(f"Store error for {file_path}: {return_dict.get('errors')}")
             return return_dict
 
     async def _process_files_in_batches(
@@ -597,19 +578,14 @@ class IndexingCoordinator(BaseService):
         timeout_s_probe = 0.0
         try:
             if self.config and getattr(self.config, "indexing", None):
-                timeout_s_probe = float(
-                    getattr(self.config.indexing, "per_file_timeout_seconds", 0.0)
-                    or 0.0
-                )
+                timeout_s_probe = float(getattr(self.config.indexing, "per_file_timeout_seconds", 0.0) or 0.0)
         except Exception:
             timeout_s_probe = 0.0
 
         min_timeout_kb = 128
         try:
             if self.config and getattr(self.config, "indexing", None):
-                min_timeout_kb = int(
-                    getattr(self.config.indexing, "per_file_timeout_min_size_kb", 128)
-                )
+                min_timeout_kb = int(getattr(self.config.indexing, "per_file_timeout_min_size_kb", 128))
         except Exception:
             min_timeout_kb = 128
 
@@ -617,30 +593,28 @@ class IndexingCoordinator(BaseService):
         max_concurrent = 0
         try:
             if self.config and getattr(self.config, "indexing", None):
-                max_concurrent = int(
-                    getattr(self.config.indexing, "max_concurrent", 0) or 0
-                )
+                max_concurrent = int(getattr(self.config.indexing, "max_concurrent", 0) or 0)
         except Exception:
             max_concurrent = 0
 
-        detect_embedded_sql = getattr(
-            getattr(self.config, "indexing", None), "detect_embedded_sql", True
-        )
+        detect_embedded_sql = getattr(getattr(self.config, "indexing", None), "detect_embedded_sql", True)
 
         # Default behavior:
         # - If timeouts are enabled and no explicit max_concurrent given,
         #   auto-scale to cpu_count (clamped to a safe upper bound).
         # - Otherwise, use heuristic based on file count with existing caps.
-        SAFE_MAX = 32
+        safe_max = 32
         if timeout_s_probe > 0 and max_concurrent <= 0:
-            num_workers = max(1, min(cpu_count, SAFE_MAX))
+            num_workers = max(1, min(cpu_count, safe_max))
         else:
             num_workers = _calculate_worker_count(file_count, cpu_count)
             if max_concurrent > 0:
                 num_workers = max(1, min(num_workers, max_concurrent))
 
         logger.debug(
-            f"Parsing {file_count} files with {num_workers} workers (timeout={timeout_s_probe}s, max_concurrent={max_concurrent or 'auto'})"
+            f"Parsing {file_count} files with {num_workers} workers"
+            f" (timeout={timeout_s_probe}s,"
+            f" max_concurrent={max_concurrent or 'auto'})"
         )
 
         # Fast path for single-file processing: avoid creating a ProcessPoolExecutor
@@ -689,9 +663,9 @@ class IndexingCoordinator(BaseService):
         target_batches = max(num_workers * dynamic_factor, 1)
         # Compute base size from target_batches then clamp to [MIN_BATCH, file_count]
         # Use smaller minimum when timeouts are enabled to surface progress more frequently
-        MIN_BATCH = 16 if timeout_s_probe > 0 else 128
+        min_batch = 16 if timeout_s_probe > 0 else 128
         base = max(1, math.ceil(len(files) / target_batches))
-        batch_size = min(len(files), max(MIN_BATCH, base))
+        batch_size = min(len(files), max(min_batch, base))
         # Additional clamp: target ~60s worst-case batch wall time when timeouts are enabled
         if timeout_s_probe > 0:
             target_secs = 60.0
@@ -704,9 +678,7 @@ class IndexingCoordinator(BaseService):
                 norm.append(item)
             else:
                 norm.append((item, None))
-        file_batches = [
-            norm[i : i + batch_size] for i in range(0, len(norm), batch_size)
-        ]
+        file_batches = [norm[i : i + batch_size] for i in range(0, len(norm), batch_size)]
 
         # Process batches in parallel using ProcessPoolExecutor
         _ensure_mp_start_method()
@@ -723,10 +695,7 @@ class IndexingCoordinator(BaseService):
                 "max_concurrent_timeouts": min(num_workers * 2, 32),
                 "detect_embedded_sql": detect_embedded_sql,
             }
-            futures = [
-                loop.run_in_executor(executor, process_file_batch, batch, config_dict)
-                for batch in file_batches
-            ]
+            futures = [loop.run_in_executor(executor, process_file_batch, batch, config_dict) for batch in file_batches]
 
             # Consume results as they complete to stream progress
             all_results: list[ParsedFileResult] = []
@@ -874,9 +843,7 @@ class IndexingCoordinator(BaseService):
                 result.append(chunk)
 
         if split_count > 0:
-            logger.warning(
-                f"Emergency split {split_count} oversized chunks before persistence"
-            )
+            logger.warning(f"Emergency split {split_count} oversized chunks before persistence")
         return result
 
     async def _store_parsed_results(
@@ -925,15 +892,11 @@ class IndexingCoordinator(BaseService):
         for result in results:
             # Handle errors
             if result.status == "error":
-                stats["errors"].append(
-                    {"file": str(result.file_path), "error": result.error}
-                )
+                stats["errors"].append({"file": str(result.file_path), "error": result.error})
                 if file_task is not None and self.progress:
                     self.progress.advance(file_task, 1)
                     if cumulative_counters is not None:
-                        cumulative_counters["errors"] = (
-                            cumulative_counters.get("errors", 0) + 1
-                        )
+                        cumulative_counters["errors"] = cumulative_counters.get("errors", 0) + 1
                         stored = cumulative_counters.get("stored", 0)
                         skipped = cumulative_counters.get("skipped", 0)
                         errs = cumulative_counters.get("errors", 0)
@@ -952,9 +915,7 @@ class IndexingCoordinator(BaseService):
                 if file_task is not None and self.progress:
                     self.progress.advance(file_task, 1)
                     if cumulative_counters is not None:
-                        cumulative_counters["skipped"] = (
-                            cumulative_counters.get("skipped", 0) + 1
-                        )
+                        cumulative_counters["skipped"] = cumulative_counters.get("skipped", 0) + 1
                         stored = cumulative_counters.get("stored", 0)
                         skipped = cumulative_counters.get("skipped", 0)
                         errs = cumulative_counters.get("errors", 0)
@@ -983,45 +944,28 @@ class IndexingCoordinator(BaseService):
                 file_ids.append(file_id)
 
                 # Convert result chunks to Chunk models using from_dict()
-                new_chunk_models = [
-                    Chunk.from_dict({**chunk_data, "file_id": file_id})
-                    for chunk_data in result.chunks
-                ]
+                new_chunk_models = [Chunk.from_dict({**chunk_data, "file_id": file_id}) for chunk_data in result.chunks]
 
                 if is_existing:
-                    existing_chunks = await self._db.get_chunks_by_file_id_async(
-                        file_id, as_model=True
-                    )
+                    existing_chunks = await self._db.get_chunks_by_file_id_async(file_id, as_model=True)
                 else:
                     existing_chunks = []
 
                 if existing_chunks:
                     # Smart diff to preserve embeddings
-                    chunk_diff = self._chunk_cache.diff_chunks(
-                        new_chunk_models, existing_chunks
-                    )
+                    chunk_diff = self._chunk_cache.diff_chunks(new_chunk_models, existing_chunks)
 
                     # Delete modified/removed chunks
                     chunks_to_delete = chunk_diff.deleted + chunk_diff.modified
                     if chunks_to_delete:
-                        chunk_ids_to_delete = [
-                            chunk.id
-                            for chunk in chunks_to_delete
-                            if chunk.id is not None
-                        ]
+                        chunk_ids_to_delete = [chunk.id for chunk in chunks_to_delete if chunk.id is not None]
                         if chunk_ids_to_delete:
-                            await self._db.delete_chunks_batch_async(
-                                chunk_ids_to_delete
-                            )
+                            await self._db.delete_chunks_batch_async(chunk_ids_to_delete)
 
                     # Store new/modified chunks (pass models directly)
                     chunks_to_store = chunk_diff.added + chunk_diff.modified
                     chunks_to_store = self._validate_chunk_sizes(chunks_to_store)
-                    ids = (
-                        await self._db.insert_chunks_batch_async(chunks_to_store)
-                        if chunks_to_store
-                        else []
-                    )
+                    ids = await self._db.insert_chunks_batch_async(chunks_to_store) if chunks_to_store else []
                 else:
                     # New file or existing file with no chunks — store all
                     new_chunk_models = self._validate_chunk_sizes(new_chunk_models)
@@ -1039,9 +983,7 @@ class IndexingCoordinator(BaseService):
                 if file_task is not None and self.progress:
                     self.progress.advance(file_task, 1)
                     if cumulative_counters is not None:
-                        cumulative_counters["stored"] = (
-                            cumulative_counters.get("stored", 0) + 1
-                        )
+                        cumulative_counters["stored"] = cumulative_counters.get("stored", 0) + 1
                         base = int(cumulative_counters.get("chunks", 0))
                         display_chunks = base + stats["total_chunks"]
                         stored = cumulative_counters.get("stored", 0)
@@ -1058,9 +1000,7 @@ class IndexingCoordinator(BaseService):
                 if file_task is not None and self.progress:
                     self.progress.advance(file_task, 1)
                     if cumulative_counters is not None:
-                        cumulative_counters["errors"] = (
-                            cumulative_counters.get("errors", 0) + 1
-                        )
+                        cumulative_counters["errors"] = cumulative_counters.get("errors", 0) + 1
                         stored = cumulative_counters.get("stored", 0)
                         skipped = cumulative_counters.get("skipped", 0)
                         errs = cumulative_counters.get("errors", 0)
@@ -1073,12 +1013,8 @@ class IndexingCoordinator(BaseService):
 
         # Update external cumulative counters
         if cumulative_counters is not None:
-            cumulative_counters["chunks"] = (
-                cumulative_counters.get("chunks", 0) + stats["total_chunks"]
-            )
-            cumulative_counters["files"] = (
-                cumulative_counters.get("files", 0) + stats["total_files"]
-            )
+            cumulative_counters["chunks"] = cumulative_counters.get("chunks", 0) + stats["total_chunks"]
+            cumulative_counters["files"] = cumulative_counters.get("files", 0) + stats["total_files"]
 
         # Expose file_id for single-file callers via the stats dict
         if len(results) == 1 and file_ids and file_ids[0] is not None:
@@ -1123,9 +1059,7 @@ class IndexingCoordinator(BaseService):
                     do_cleanup = bool(getattr(self.config.indexing, "cleanup", True))
                 if do_cleanup:
                     _t2 = _t.perf_counter() if _t0 is not None else None
-                    cleaned_files = self._cleanup_orphaned_files(
-                        directory, files, exclude_patterns
-                    )
+                    cleaned_files = self._cleanup_orphaned_files(directory, files, exclude_patterns)
                     _t3 = _t.perf_counter() if _t0 is not None else None
                 else:
                     logger.debug("Skipping orphaned file cleanup (cleanup disabled)")
@@ -1140,9 +1074,7 @@ class IndexingCoordinator(BaseService):
             force_reindex = False
             try:
                 if self.config and getattr(self.config, "indexing", None):
-                    force_reindex = bool(
-                        getattr(self.config.indexing, "force_reindex", False)
-                    )
+                    force_reindex = bool(getattr(self.config.indexing, "force_reindex", False))
             except Exception:
                 force_reindex = False
 
@@ -1152,9 +1084,7 @@ class IndexingCoordinator(BaseService):
                 _t4 = _t.perf_counter() if _t0 is not None else None
                 change_task: TaskID | None = None
                 if self.progress:
-                    change_task = self.progress.add_task(
-                        "  └─ Scanning changes", total=len(files), speed="", info=""
-                    )
+                    change_task = self.progress.add_task("  └─ Scanning changes", total=len(files), speed="", info="")
 
                 debug_skip = bool(os.getenv("CHUNKHOUND_DEBUG_SKIP"))
                 reasons = {"not_found": 0, "size": 0, "mtime": 0, "ok": 0, "error": 0}
@@ -1162,10 +1092,7 @@ class IndexingCoordinator(BaseService):
                 mtime_eps = 0.01
                 try:
                     if self.config and getattr(self.config, "indexing", None):
-                        mtime_eps = float(
-                            getattr(self.config.indexing, "mtime_epsilon_seconds", 0.01)
-                            or 0.01
-                        )
+                        mtime_eps = float(getattr(self.config.indexing, "mtime_epsilon_seconds", 0.01) or 0.01)
                 except Exception:
                     mtime_eps = 0.01
 
@@ -1191,11 +1118,7 @@ class IndexingCoordinator(BaseService):
                         sz = r.get("size") if isinstance(r, dict) else None
                         mt = r.get("modified_time") if isinstance(r, dict) else None
                         try:
-                            mtv = (
-                                float(mt.timestamp())
-                                if hasattr(mt, "timestamp")
-                                else float(mt)
-                            )
+                            mtv = float(mt.timestamp()) if hasattr(mt, "timestamp") else float(mt)
                         except Exception:
                             mtv = None
                         ch = r.get("content_hash") if isinstance(r, dict) else None
@@ -1214,33 +1137,15 @@ class IndexingCoordinator(BaseService):
                         if db_tuple is None:
                             # Fallback for providers without execute_query() (e.g., fake or limited providers)
                             try:
-                                rec = await self._db.get_file_by_path_async(
-                                    rel, as_model=False
-                                )
+                                rec = await self._db.get_file_by_path_async(rel, as_model=False)
                                 if rec:
-                                    sz = (
-                                        rec.get("size")
-                                        if isinstance(rec, dict)
-                                        else None
-                                    )
-                                    mt = (
-                                        rec.get("modified_time")
-                                        if isinstance(rec, dict)
-                                        else None
-                                    )
+                                    sz = rec.get("size") if isinstance(rec, dict) else None
+                                    mt = rec.get("modified_time") if isinstance(rec, dict) else None
                                     try:
-                                        mtv = (
-                                            float(mt.timestamp())
-                                            if hasattr(mt, "timestamp")
-                                            else float(mt)
-                                        )
+                                        mtv = float(mt.timestamp()) if hasattr(mt, "timestamp") else float(mt)
                                     except Exception:
                                         mtv = None
-                                    ch = (
-                                        rec.get("content_hash")
-                                        if isinstance(rec, dict)
-                                        else None
-                                    )
+                                    ch = rec.get("content_hash") if isinstance(rec, dict) else None
                                     db_tuple = (
                                         int(sz) if sz is not None else None,
                                         mtv,
@@ -1258,11 +1163,7 @@ class IndexingCoordinator(BaseService):
                             db_size, stored_mtime, db_hash = db_tuple
                             db_size = int(db_size) if db_size is not None else -1
                             same_size = db_size == int(st.st_size)
-                            smt = (
-                                float(stored_mtime)
-                                if stored_mtime is not None
-                                else -1.0
-                            )
+                            smt = float(stored_mtime) if stored_mtime is not None else -1.0
                             same_mtime = abs(smt - float(st.st_mtime)) <= mtime_eps
                             if same_size and same_mtime:
                                 # Fast skip - trust filesystem metadata (mtime+size match)
@@ -1344,12 +1245,7 @@ class IndexingCoordinator(BaseService):
             }
 
             async def _on_batch_store(batch: list[ParsedFileResult]) -> None:
-                nonlocal \
-                    agg_total_files, \
-                    agg_total_chunks, \
-                    agg_errors, \
-                    agg_skipped, \
-                    agg_skipped_timeout
+                nonlocal agg_total_files, agg_total_chunks, agg_errors, agg_skipped, agg_skipped_timeout
                 # Update skip counters from parse results
                 for r in batch:
                     if r.status == "skipped":
@@ -1383,9 +1279,7 @@ class IndexingCoordinator(BaseService):
                     self.progress.update(parse_task, completed=task.total)
 
             # Optimize tables after parsing/chunking (only if fragmentation warrants it)
-            if agg_total_chunks > 0 and self._db.should_optimize(
-                operation="post-chunking"
-            ):
+            if agg_total_chunks > 0 and self._db.should_optimize(operation="post-chunking"):
                 logger.debug("Optimizing database after chunking phase...")
                 self._db.optimize_tables()
 
@@ -1393,33 +1287,19 @@ class IndexingCoordinator(BaseService):
             if _t0 is not None:
                 try:
                     self._startup_profile = {
-                        "discovery_ms": round(
-                            ((_t1 - _t0) if (_t1 and _t0) else 0.0) * 1000.0, 3
-                        ),
+                        "discovery_ms": round(((_t1 - _t0) if (_t1 and _t0) else 0.0) * 1000.0, 3),
                         "cleanup_ms": round(
-                            (
-                                (_t3 - _t2)
-                                if (_t3 is not None and _t2 is not None)
-                                else 0.0
-                            )
-                            * 1000.0,
+                            ((_t3 - _t2) if (_t3 is not None and _t2 is not None) else 0.0) * 1000.0,
                             3,
                         ),
                         "change_scan_ms": round(
-                            (
-                                (_t5 - _t4)
-                                if (_t5 is not None and _t4 is not None)
-                                else 0.0
-                            )
-                            * 1000.0,
+                            ((_t5 - _t4) if (_t5 is not None and _t4 is not None) else 0.0) * 1000.0,
                             3,
                         ),
                         "files_discovered": len(files),
                         "orphaned_cleaned": cleaned_files,
                         "files_after_change_scan": len(files_to_process),
-                        "parallel_used": bool(
-                            getattr(self, "_profile_parallel_used", False)
-                        ),
+                        "parallel_used": bool(getattr(self, "_profile_parallel_used", False)),
                     }
                 except Exception:
                     pass
@@ -1652,21 +1532,15 @@ class IndexingCoordinator(BaseService):
                 metrics_collector=metrics_collector,
             )
 
-            result = await embedding_service.generate_missing_embeddings(
-                exclude_patterns=exclude_patterns
-            )
+            result = await embedding_service.generate_missing_embeddings(exclude_patterns=exclude_patterns)
             self.finalize_optimization()
             return result
 
         except Exception as e:
-            logger.error(
-                f"[IndexCoord-Missing] Failed to generate missing embeddings: {e}"
-            )
+            logger.error(f"[IndexCoord-Missing] Failed to generate missing embeddings: {e}")
             return {"status": "error", "error": str(e), "generated": 0}
 
-    async def _generate_embeddings(
-        self, chunk_ids: list[int], chunks: list[dict[str, Any]], connection=None
-    ) -> int:
+    async def _generate_embeddings(self, chunk_ids: list[int], chunks: list[dict[str, Any]], connection=None) -> int:
         """Generate embeddings for chunks."""
         if not self._embedding_provider:
             return 0
@@ -1708,14 +1582,10 @@ class IndexingCoordinator(BaseService):
 
             # Log metrics for empty chunks
             if empty_count > 0:
-                logger.debug(
-                    f"Filtered {empty_count} empty text chunks before embedding generation"
-                )
+                logger.debug(f"Filtered {empty_count} empty text chunks before embedding generation")
 
             if not valid_chunk_data:
-                logger.debug(
-                    "No valid chunks with text content for embedding generation"
-                )
+                logger.debug("No valid chunks with text content for embedding generation")
                 return 0
 
             # Extract data for embedding generation
@@ -1743,15 +1613,12 @@ class IndexingCoordinator(BaseService):
             # from a previous operation. Try insertion, and if we get a transaction error,
             # clean up and retry once.
             try:
-                result = self._db.insert_embeddings_batch(
-                    embeddings_data, connection=connection
-                )
+                result = self._db.insert_embeddings_batch(embeddings_data, connection=connection)
                 return result
             except Exception as e:
                 if "transaction is aborted" in str(e).lower():
                     logger.warning(
-                        "[IndexCoord] Transaction aborted during embedding insertion, "
-                        "attempting recovery and retry"
+                        "[IndexCoord] Transaction aborted during embedding insertion, attempting recovery and retry"
                     )
                     # Try to clean up the aborted transaction
                     try:
@@ -1760,13 +1627,8 @@ class IndexingCoordinator(BaseService):
                         pass  # Ignore errors during cleanup
 
                     # Retry the insertion with a fresh transaction
-                    result = self._db.insert_embeddings_batch(
-                        embeddings_data, connection=connection
-                    )
-                    logger.info(
-                        f"[IndexCoord] Successfully inserted {result} embeddings after "
-                        f"transaction recovery"
-                    )
+                    result = self._db.insert_embeddings_batch(embeddings_data, connection=connection)
+                    logger.info(f"[IndexCoord] Successfully inserted {result} embeddings after transaction recovery")
                     return result
                 else:
                     # Not a transaction error, re-raise
@@ -1781,9 +1643,7 @@ class IndexingCoordinator(BaseService):
             )
             return 0
 
-    async def _generate_embeddings_batch(
-        self, file_chunks: list[tuple[int, dict[str, Any]]]
-    ) -> int:
+    async def _generate_embeddings_batch(self, file_chunks: list[tuple[int, dict[str, Any]]]) -> int:
         """Generate embeddings for chunks in optimized batches."""
         if not self._embedding_provider or not file_chunks:
             return 0
@@ -1866,9 +1726,7 @@ class IndexingCoordinator(BaseService):
                             if target_dir in rel_path.parts:
                                 should_skip = True
                                 break
-                        elif fnmatch(str(rel_path), pattern) or fnmatch(
-                            item.name, pattern
-                        ):
+                        elif fnmatch(str(rel_path), pattern) or fnmatch(item.name, pattern):
                             should_skip = True
                             break
                     if not should_skip:
@@ -1882,9 +1740,7 @@ class IndexingCoordinator(BaseService):
 
         # Check if parallel mode is beneficial
         # Use config value if available, otherwise use default of 4
-        min_dirs_threshold = (
-            self.config.indexing.min_dirs_for_parallel if self.config else 4
-        )
+        min_dirs_threshold = self.config.indexing.min_dirs_for_parallel if self.config else 4
         if len(top_level_items) < min_dirs_threshold:
             logger.info(
                 f"Using sequential discovery: {len(top_level_items)} top-level dirs "
@@ -1907,8 +1763,7 @@ class IndexingCoordinator(BaseService):
 
         if detect_repo_roots is not None:
             prune_gitfile_roots = (
-                self.config is not None
-                and "gitignore" in self.config.indexing.resolve_ignore_sources()
+                self.config is not None and "gitignore" in self.config.indexing.resolve_ignore_sources()
             )
             try:
                 precomputed_roots = detect_repo_roots(
@@ -1917,18 +1772,14 @@ class IndexingCoordinator(BaseService):
                     prune_ignored_gitfile_roots=prune_gitfile_roots,
                 )
             except Exception as e:
-                logger.debug(
-                    "Failed to precompute repo roots for parallel discovery: %s", e
-                )
+                logger.debug("Failed to precompute repo roots for parallel discovery: %s", e)
                 precomputed_roots = []
 
         # Determine number of workers for directory discovery
         # Scale based on number of subtrees and available cores
         # Use config value if available, otherwise use default of 16
         max_workers = self.config.indexing.max_discovery_workers if self.config else 16
-        num_workers = min(
-            os.cpu_count() or DEFAULT_CPU_COUNT, len(top_level_items), max_workers
-        )
+        num_workers = min(os.cpu_count() or DEFAULT_CPU_COUNT, len(top_level_items), max_workers)
 
         logger.info(
             f"Using parallel discovery: {len(top_level_items)} top-level dirs, "
@@ -1973,16 +1824,12 @@ class IndexingCoordinator(BaseService):
                             "root": directory,
                             "sources": (
                                 self.config.indexing.resolve_ignore_sources()
-                                if getattr(self, "config", None)
-                                and getattr(self.config, "indexing", None)
+                                if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                                 else ["config"]
                             ),
                             "chf": (
-                                getattr(
-                                    self.config.indexing, "chignore_file", ".chignore"
-                                )
-                                if getattr(self, "config", None)
-                                and getattr(self.config, "indexing", None)
+                                getattr(self.config.indexing, "chignore_file", ".chignore")
+                                if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                                 else ".chignore"
                             ),  # deprecated; ignored
                             "cfg": list(effective_excludes),
@@ -2000,9 +1847,7 @@ class IndexingCoordinator(BaseService):
         for files, errors in subtree_results:
             all_errors.extend(errors)
         if all_errors:
-            logger.error(
-                f"Parallel discovery encountered {len(all_errors)} worker errors:"
-            )
+            logger.error(f"Parallel discovery encountered {len(all_errors)} worker errors:")
             for error in all_errors[:5]:  # Log first 5 errors
                 logger.error(f"  - {error}")
             if len(all_errors) > 5:
@@ -2015,21 +1860,18 @@ class IndexingCoordinator(BaseService):
             root=directory,
             sources=(
                 self.config.indexing.resolve_ignore_sources()
-                if getattr(self, "config", None)
-                and getattr(self.config, "indexing", None)
+                if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                 else ["config"]
             ),
             chf=(
                 getattr(self.config.indexing, "chignore_file", ".chignore")
-                if getattr(self, "config", None)
-                and getattr(self.config, "indexing", None)
+                if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                 else ".chignore"
             ),  # deprecated; ignored
             cfg=list(effective_excludes),
             backend=(
                 getattr(self.config.indexing, "gitignore_backend", "python")
-                if getattr(self, "config", None)
-                and getattr(self.config, "indexing", None)
+                if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                 else "python"
             ),
         )
@@ -2112,28 +1954,17 @@ class IndexingCoordinator(BaseService):
         # Prepare IgnoreEngine parameters (defer heavy engine build unless sequential path is taken)
         engine_args = None
         ignore_engine_obj = None
-        if (
-            getattr(self, "config", None) is not None
-            and getattr(self.config, "indexing", None) is not None
-        ):
+        if getattr(self, "config", None) is not None and getattr(self.config, "indexing", None) is not None:
             # Resolve ignore sources/config with backward-compatible fallbacks
             _idx = getattr(self, "config", None)
             _idx = getattr(_idx, "indexing", None)
-            if _idx is not None and callable(
-                getattr(_idx, "resolve_ignore_sources", None)
-            ):
+            if _idx is not None and callable(getattr(_idx, "resolve_ignore_sources", None)):
                 sources = _idx.resolve_ignore_sources()
             else:
                 # Default to gitignore-only semantics when unspecified
                 sources = ["gitignore"]
-            chf = (
-                getattr(_idx, "chignore_file", ".chignore")
-                if _idx is not None
-                else ".chignore"
-            )
-            if _idx is not None and callable(
-                getattr(_idx, "get_effective_config_excludes", None)
-            ):
+            chf = getattr(_idx, "chignore_file", ".chignore") if _idx is not None else ".chignore"
+            if _idx is not None and callable(getattr(_idx, "get_effective_config_excludes", None)):
                 cfg_excludes = _idx.get_effective_config_excludes()
             else:
                 from chunkhound.core.config.indexing_config import (
@@ -2152,12 +1983,8 @@ class IndexingCoordinator(BaseService):
                         # If DB path is a directory, exclude the whole subtree; if file, exclude the file
                         if dbp_res.is_dir():
                             rp = rel.as_posix()
-                            cfg_excludes.extend(
-                                [rp, f"{rp}/**"]
-                            )  # idempotent later by validator
-                            exclude_patterns.extend(
-                                [rp, f"{rp}/**"]
-                            )  # local excludes too
+                            cfg_excludes.extend([rp, f"{rp}/**"])  # idempotent later by validator
+                            exclude_patterns.extend([rp, f"{rp}/**"])  # local excludes too
                         else:
                             cfg_excludes.append(rel.as_posix())
                             exclude_patterns.append(rel.as_posix())
@@ -2165,11 +1992,7 @@ class IndexingCoordinator(BaseService):
                         pass
             except Exception:
                 pass
-            backend = (
-                getattr(_idx, "gitignore_backend", "python")
-                if _idx is not None
-                else "python"
-            )
+            backend = getattr(_idx, "gitignore_backend", "python") if _idx is not None else "python"
             engine_args = {
                 "mode": "repo_aware",
                 "root": directory.resolve(),
@@ -2177,9 +2000,7 @@ class IndexingCoordinator(BaseService):
                 "chf": chf,
                 "cfg": list(cfg_excludes),
                 "backend": backend,
-                "workspace_nonrepo_overlay": bool(
-                    getattr(_idx, "workspace_gitignore_nonrepo", False)
-                )
+                "workspace_nonrepo_overlay": bool(getattr(_idx, "workspace_gitignore_nonrepo", False))
                 if _idx is not None
                 else False,
             }
@@ -2217,8 +2038,7 @@ class IndexingCoordinator(BaseService):
         try:
             _disc_backend = (
                 getattr(self.config.indexing, "discovery_backend", "auto")
-                if getattr(self, "config", None)
-                and getattr(self.config, "indexing", None)
+                if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                 else "auto"
             )
         except Exception:
@@ -2230,8 +2050,7 @@ class IndexingCoordinator(BaseService):
             try:
                 eff = (
                     self.config.indexing.get_effective_config_excludes()
-                    if getattr(self, "config", None)
-                    and getattr(self.config, "indexing", None)
+                    if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                     else []
                 )
                 repo_roots = self._get_or_detect_repo_roots(directory, eff)
@@ -2245,17 +2064,11 @@ class IndexingCoordinator(BaseService):
             try:
                 for item in directory.iterdir():
                     try:
-                        if any(
-                            item.resolve().is_relative_to(rr.resolve())
-                            for rr in repo_roots
-                        ):
+                        if any(item.resolve().is_relative_to(rr.resolve()) for rr in repo_roots):
                             continue
                     except Exception:
                         try:
-                            _ = [
-                                item.resolve().relative_to(rr.resolve())
-                                for rr in repo_roots
-                            ]
+                            _ = [item.resolve().relative_to(rr.resolve()) for rr in repo_roots]
                             # if any succeeded, it's in a repo
                             inside = False
                             for rr in repo_roots:
@@ -2304,9 +2117,7 @@ class IndexingCoordinator(BaseService):
                 exclude_patterns,
                 fallback_to_python=(not git_only_mode),
             )
-            logger.debug(
-                f"Git discovery returned: {len(files_git) if files_git is not None else 'None'} files"
-            )
+            logger.debug(f"Git discovery returned: {len(files_git) if files_git is not None else 'None'} files")
             # If Git enumeration succeeded (not None), return the result.
             # An empty list means git ran but no files matched after
             # include/exclude filtering — that is a legitimate result.
@@ -2314,11 +2125,7 @@ class IndexingCoordinator(BaseService):
             # to parallel/sequential discovery.
             if files_git is not None:
                 repo_detected = bool(getattr(self, "_git_repo_roots_detected", False))
-                if (
-                    files_git
-                    or (not git_only_mode)
-                    or (git_only_mode and not repo_detected)
-                ):
+                if files_git or (not git_only_mode) or (git_only_mode and not repo_detected):
                     try:
                         setattr(self, "_profile_parallel_used", False)
                     except Exception:
@@ -2430,9 +2237,7 @@ class IndexingCoordinator(BaseService):
         try:
             _idx = getattr(self, "config", None)
             _idx = getattr(_idx, "indexing", None)
-            if _idx is not None and callable(
-                getattr(_idx, "get_effective_config_excludes", None)
-            ):
+            if _idx is not None and callable(getattr(_idx, "get_effective_config_excludes", None)):
                 effective_excludes = list(_idx.get_effective_config_excludes())
             else:
                 from chunkhound.core.config.indexing_config import (
@@ -2459,9 +2264,7 @@ class IndexingCoordinator(BaseService):
                     if dbp_res.is_dir():
                         rp = rel.as_posix()
                         effective_excludes.extend([rp, f"{rp}/**"])  # safe duplicates
-                        exclude_patterns_local.extend(
-                            [rp, f"{rp}/**"]
-                        )  # local excludes too
+                        exclude_patterns_local.extend([rp, f"{rp}/**"])  # local excludes too
                     else:
                         effective_excludes.append(rel.as_posix())
                         exclude_patterns_local.append(rel.as_posix())
@@ -2555,9 +2358,7 @@ class IndexingCoordinator(BaseService):
         if fallback_to_python:
             try:
                 # Build a fast set of immediate children to prune, but do a general prune inside walker too
-                parent_gitignores: dict[Path, list[str]] = {
-                    directory: _load_gi(directory, directory)
-                }
+                parent_gitignores: dict[Path, list[str]] = {directory: _load_gi(directory, directory)}
                 # Build a repo-aware engine so we can control whether the workspace (non-repo)
                 # side honors the CH root .gitignore (root-only) or ignores it entirely.
                 try:
@@ -2569,8 +2370,7 @@ class IndexingCoordinator(BaseService):
                                 False,
                             )
                         )
-                        if getattr(self, "config", None)
-                        and getattr(self.config, "indexing", None)
+                        if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                         else False
                     )
                 except Exception:
@@ -2581,9 +2381,7 @@ class IndexingCoordinator(BaseService):
                     try:
                         gi = directory / ".gitignore"
                         if gi.exists():
-                            for raw in gi.read_text(
-                                encoding="utf-8", errors="ignore"
-                            ).splitlines():
+                            for raw in gi.read_text(encoding="utf-8", errors="ignore").splitlines():
                                 if not raw or raw.lstrip().startswith("#"):
                                     continue
                                 ln = raw.strip()
@@ -2599,21 +2397,18 @@ class IndexingCoordinator(BaseService):
                     root=directory,
                     sources=(
                         self.config.indexing.resolve_ignore_sources()
-                        if getattr(self, "config", None)
-                        and getattr(self.config, "indexing", None)
+                        if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                         else ["config"]
                     ),
                     chf=(
                         getattr(self.config.indexing, "chignore_file", ".chignore")
-                        if getattr(self, "config", None)
-                        and getattr(self.config, "indexing", None)
+                        if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                         else ".chignore"
                     ),
                     cfg=list(effective_excludes),
                     backend=(
                         getattr(self.config.indexing, "gitignore_backend", "python")
-                        if getattr(self, "config", None)
-                        and getattr(self.config, "indexing", None)
+                        if getattr(self, "config", None) and getattr(self.config, "indexing", None)
                         else "python"
                     ),
                     overlay=wr_only,
@@ -2643,11 +2438,7 @@ class IndexingCoordinator(BaseService):
                         if not inside_repo:
                             # Overlay prefix shortcut (best-effort) for non-repo files
                             try:
-                                rel = (
-                                    fp.resolve()
-                                    .relative_to(directory.resolve())
-                                    .as_posix()
-                                )
+                                rel = fp.resolve().relative_to(directory.resolve()).as_posix()
                             except Exception:
                                 rel = fp.name
                             if overlay_prefixes:
@@ -2846,10 +2637,7 @@ class IndexingCoordinator(BaseService):
         try:
             # Create set of relative paths for fast lookup
             base_dir = self._base_directory
-            current_file_paths = {
-                file_path.relative_to(base_dir).as_posix()
-                for file_path in current_files
-            }
+            current_file_paths = {file_path.relative_to(base_dir).as_posix() for file_path in current_files}
 
             # Get all files in database (stored as relative paths)
             query = """

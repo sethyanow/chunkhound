@@ -122,9 +122,7 @@ async def search_impl(
         type_filter: Optional type signature substring filter
     """
     if type not in ("semantic", "regex", "symbols", "structural"):
-        raise ValueError(
-            f"Invalid search type: '{type}'. Must be 'semantic', 'regex', 'symbols', or 'structural'."
-        )
+        raise ValueError(f"Invalid search type: '{type}'. Must be 'semantic', 'regex', 'symbols', or 'structural'.")
 
     page_size = max(1, min(page_size, 100))
     offset = max(0, offset)
@@ -190,9 +188,7 @@ async def search_impl(
 
     native_results = _convert_paths_to_native(results)
 
-    response = cast(
-        SearchResponse, {"results": native_results, "pagination": pagination}
-    )
+    response = cast(SearchResponse, {"results": native_results, "pagination": pagination})
     return limit_response_size(response)
 
 
@@ -329,9 +325,7 @@ async def _search_structural(
                 "page_size": page_size,
                 "has_more": total > offset + page_size,
                 "total": total,
-                "next_offset": offset + page_size
-                if total > offset + page_size
-                else None,
+                "next_offset": offset + page_size if total > offset + page_size else None,
             },
         },
     )
@@ -358,8 +352,5 @@ def _apply_type_filter(
     return [
         r
         for r in results
-        if any(
-            fp == r["file_path"] and rs <= r["end_line"] and re >= r["start_line"]
-            for fp, rs, re in match_set
-        )
+        if any(fp == r["file_path"] and rs <= r["end_line"] and re >= r["start_line"] for fp, rs, re in match_set)
     ]

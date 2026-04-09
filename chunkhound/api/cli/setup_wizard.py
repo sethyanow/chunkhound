@@ -48,9 +48,7 @@ def console_print(message: str, style: str = None) -> None:
 
 
 # Browser opening helper
-def _open_url_on_empty_input(
-    url: str, provider_name: str, formatter: RichOutputFormatter
-) -> bool:
+def _open_url_on_empty_input(url: str, provider_name: str, formatter: RichOutputFormatter) -> bool:
     """Open URL in browser when user provides empty input.
 
     Args:
@@ -224,9 +222,7 @@ async def _rich_confirm_interactive(question: str, default: bool = True) -> bool
                 raise
 
 
-async def _rich_text_interactive(
-    question: str, default: str = "", validate=None, password: bool = False
-) -> str:
+async def _rich_text_interactive(question: str, default: str = "", validate=None, password: bool = False) -> str:
     """Interactive text input with arrow key support."""
     from .keyboard import KeyboardInput
     from .utils.text_input import TextInputState, create_text_input_display
@@ -303,9 +299,7 @@ async def rich_text(question: str, default: str = "", validate=None) -> str:
 
         # Show debug info if requested
         if os.getenv("CHUNKHOUND_DEBUG"):
-            console_print(
-                f"Debug: Rich mode failed - {type(e).__name__}: {e}", "yellow"
-            )
+            console_print(f"Debug: Rich mode failed - {type(e).__name__}: {e}", "yellow")
 
         # Fallback to standard input with readline pre-fill when possible
         console_print("Using standard input mode...", "dim")
@@ -314,8 +308,7 @@ async def rich_text(question: str, default: str = "", validate=None) -> str:
             """Handle input in fallback mode with proper pre-fill support."""
             # Check if this looks like a sensitive value (API key, token, etc.)
             is_sensitive = default and (
-                len(default) > 20
-                or any(default.startswith(p) for p in ["sk-", "pa-", "xai-", "key-"])
+                len(default) > 20 or any(default.startswith(p) for p in ["sk-", "pa-", "xai-", "key-"])
             )
 
             if default and is_sensitive:
@@ -325,10 +318,7 @@ async def rich_text(question: str, default: str = "", validate=None) -> str:
                 except ImportError:
                     # readline not available (Windows), use clear messaging
                     console_print("API key detected from environment variable", "dim")
-                    result = input(
-                        f"{question} (press Enter to use detected key, "
-                        "or enter new key): "
-                    )
+                    result = input(f"{question} (press Enter to use detected key, or enter new key): ")
                     return result if result.strip() else default
             elif default:
                 # For non-sensitive defaults, use Rich's normal behavior
@@ -355,9 +345,7 @@ async def rich_text(question: str, default: str = "", validate=None) -> str:
                 console_print("Invalid input", "red")
 
 
-async def rich_select(
-    question: str, choices: list[tuple[str, str]] | list[str], default: str = None
-) -> str:
+async def rich_select(question: str, choices: list[tuple[str, str]] | list[str], default: str = None) -> str:
     """Interactive Rich-based selection with arrow key navigation."""
     if not choices:
         return ""
@@ -387,9 +375,7 @@ async def rich_select(
     return await _rich_select_interactive(question, normalized_choices, default_index)
 
 
-async def _rich_select_interactive(
-    question: str, choices: list[tuple[str, str]], default_index: int = 0
-) -> str:
+async def _rich_select_interactive(question: str, choices: list[tuple[str, str]], default_index: int = 0) -> str:
     """Interactive menu with arrow key navigation using asyncio + Rich."""
 
     from .keyboard import KeyboardInput
@@ -458,9 +444,7 @@ async def _rich_select_interactive(
                 raise
 
 
-async def _fetch_available_models(
-    base_url: str, api_key: str | None = None
-) -> tuple[list[str] | None, bool]:
+async def _fetch_available_models(base_url: str, api_key: str | None = None) -> tuple[list[str] | None, bool]:
     """Fetch available models from OpenAI-compatible endpoint.
 
     Args:
@@ -575,9 +559,7 @@ def _filter_embedding_models(models: list[str]) -> tuple[list[str], list[str]]:
 
         # Check if it's likely an embedding model
         is_embedding = any(keyword in model_lower for keyword in embedding_keywords)
-        is_non_embedding = any(
-            keyword in model_lower for keyword in non_embedding_keywords
-        )
+        is_non_embedding = any(keyword in model_lower for keyword in non_embedding_keywords)
 
         if is_embedding and not is_non_embedding:
             embedding_models.append(model)
@@ -622,9 +604,7 @@ def _filter_reranking_models(models: list[str]) -> list[str]:
 def _detect_opencode() -> bool:
     """Check if opencode CLI is installed"""
     try:
-        result = subprocess.run(
-            ["opencode", "--version"], capture_output=True, text=True, timeout=5
-        )
+        result = subprocess.run(["opencode", "--version"], capture_output=True, text=True, timeout=5)
         return result.returncode == 0
     except (subprocess.SubprocessError, FileNotFoundError, subprocess.TimeoutExpired):
         return False
@@ -652,9 +632,7 @@ def _should_run_setup_wizard(validation_errors: list[str]) -> bool:
     return False
 
 
-def _display_detected_configs(
-    configs: dict[str, dict[str, Any] | None], formatter: RichOutputFormatter
-) -> None:
+def _display_detected_configs(configs: dict[str, dict[str, Any] | None], formatter: RichOutputFormatter) -> None:
     """Display detected configurations using Rich components."""
     import rich.box
     from rich.table import Table
@@ -686,10 +664,7 @@ def _display_detected_configs(
             if detection_source == "environment":
                 table.add_row(f"• {provider_name} configured via environment")
             else:
-                table.add_row(
-                    f"• {provider_name} server detected at "
-                    f"{config.get('base_url', 'unknown')}"
-                )
+                table.add_row(f"• {provider_name} server detected at {config.get('base_url', 'unknown')}")
 
     if formatter.console is not None:
         formatter.console.print(table)
@@ -703,10 +678,7 @@ def _display_detected_configs(
                     print("• OpenAI API key found (OPENAI_API_KEY)")
                 elif provider == "local":
                     provider_name = config.get("provider_name", "Unknown")
-                    print(
-                        f"• {provider_name} server detected at "
-                        f"{config.get('base_url', 'unknown')}"
-                    )
+                    print(f"• {provider_name} server detected at {config.get('base_url', 'unknown')}")
 
 
 async def run_setup_wizard(target_path: Path, args=None) -> Config | None:
@@ -727,9 +699,7 @@ async def run_setup_wizard(target_path: Path, args=None) -> Config | None:
     # Continue with normal provider selection if no env config or user declined
     provider_choice = await _select_provider()
     if provider_choice == "skip":
-        formatter.info(
-            "Skipping provider setup. You can configure later in .chunkhound.json"
-        )
+        formatter.info("Skipping provider setup. You can configure later in .chunkhound.json")
         return None
 
     # Configure selected provider
@@ -742,15 +712,11 @@ async def run_setup_wizard(target_path: Path, args=None) -> Config | None:
         embedding_config = await _configure_openai_compatible(formatter)
 
     if not embedding_config:
-        formatter.warning(
-            "Setup cancelled. You can configure later using .chunkhound.json"
-        )
+        formatter.warning("Setup cancelled. You can configure later using .chunkhound.json")
         return None
 
     # Save configuration
-    config_path, status = await _save_configuration(
-        embedding_config, target_path, formatter
-    )
+    config_path, status = await _save_configuration(embedding_config, target_path, formatter)
     if status == "saved":
         formatter.success(f"Configuration saved to {config_path}")
 
@@ -787,16 +753,12 @@ def _display_welcome(formatter: RichOutputFormatter, target_path: Path) -> None:
     )
     if formatter.console is not None:
         formatter.console.print(panel)
-        formatter.console.print(
-            "Configure embedding provider and index your project for semantic search."
-        )
+        formatter.console.print("Configure embedding provider and index your project for semantic search.")
     else:
         print("ChunkHound Setup Wizard")
         print(f"Version: {__version__}")
         print(f"Directory: {target_path}")
-        print(
-            "Configure embedding provider and index your project for semantic search."
-        )
+        print("Configure embedding provider and index your project for semantic search.")
 
 
 async def _select_provider() -> str:
@@ -807,9 +769,7 @@ async def _select_provider() -> str:
         ("OpenAI-compatible (Ollama, LM Studio, etc.)", "openai_compatible"),
     ]
 
-    return await rich_select(
-        "Select your embedding provider:", choices=choices, default="voyageai"
-    )
+    return await rich_select("Select your embedding provider:", choices=choices, default="voyageai")
 
 
 async def _select_agent() -> str:
@@ -843,9 +803,7 @@ async def _setup_claude_code(target_path: Path, formatter: RichOutputFormatter) 
     if "ChunkHound" in servers:
         formatter.warning("ChunkHound MCP server already configured in .mcp.json")
 
-        overwrite = await rich_confirm(
-            "Overwrite existing ChunkHound configuration?", default=False
-        )
+        overwrite = await rich_confirm("Overwrite existing ChunkHound configuration?", default=False)
         if not overwrite:
             formatter.info("Skipping Claude Code configuration")
             return True
@@ -857,10 +815,7 @@ async def _setup_claude_code(target_path: Path, formatter: RichOutputFormatter) 
     if _write_claude_mcp_config(mcp_path, config):
         formatter.success(f"ChunkHound MCP server added to {mcp_path}")
         print("You can now use ChunkHound tools directly in Claude Code!")
-        print(
-            "Claude Code will prompt you to approve this project-scoped "
-            "server on first use."
-        )
+        print("Claude Code will prompt you to approve this project-scoped server on first use.")
         return True
     else:
         formatter.error(f"Failed to write configuration to {mcp_path}")
@@ -881,9 +836,7 @@ def _show_claude_installation_instructions(formatter: RichOutputFormatter) -> No
     )
 
 
-def _show_manual_claude_instructions(
-    formatter: RichOutputFormatter, mcp_path: Path | None = None
-) -> None:
+def _show_manual_claude_instructions(formatter: RichOutputFormatter, mcp_path: Path | None = None) -> None:
     """Show manual configuration instructions for Claude Code"""
     print("\nTo manually configure ChunkHound in Claude Code:")
 
@@ -1016,9 +969,7 @@ async def _setup_vscode(target_path: Path, formatter: RichOutputFormatter) -> bo
         if "ChunkHound" in servers:
             formatter.warning("ChunkHound MCP server already configured in VS Code")
 
-            overwrite = await rich_confirm(
-                "Overwrite existing ChunkHound configuration?", default=False
-            )
+            overwrite = await rich_confirm("Overwrite existing ChunkHound configuration?", default=False)
             if not overwrite:
                 formatter.info("Skipping VS Code configuration")
                 return True
@@ -1040,27 +991,17 @@ async def _setup_vscode(target_path: Path, formatter: RichOutputFormatter) -> bo
         formatter.warning("No VS Code workspace detected")
 
         # Offer to create workspace configuration
-        create_workspace = await rich_confirm(
-            "Create .vscode/mcp.json in target directory?", default=True
-        )
+        create_workspace = await rich_confirm("Create .vscode/mcp.json in target directory?", default=True)
 
         if create_workspace:
             vscode_dir = target_path / ".vscode"
             mcp_path = vscode_dir / "mcp.json"
 
-            config = {
-                "servers": {
-                    "ChunkHound": {"command": "chunkhound", "args": ["mcp", "stdio"]}
-                }
-            }
+            config = {"servers": {"ChunkHound": {"command": "chunkhound", "args": ["mcp", "stdio"]}}}
 
             if _write_vscode_mcp_config(mcp_path, config):
-                formatter.success(
-                    f"Created VS Code workspace with ChunkHound MCP: {mcp_path}"
-                )
-                print(
-                    "You can now use ChunkHound tools in VS Code with GitHub Copilot!"
-                )
+                formatter.success(f"Created VS Code workspace with ChunkHound MCP: {mcp_path}")
+                print("You can now use ChunkHound tools in VS Code with GitHub Copilot!")
                 return True
             else:
                 formatter.error(f"Failed to create {mcp_path}")
@@ -1072,9 +1013,7 @@ async def _setup_vscode(target_path: Path, formatter: RichOutputFormatter) -> bo
             return False
 
 
-def _show_manual_vscode_instructions(
-    formatter: RichOutputFormatter, mcp_path: Path | None = None
-) -> None:
+def _show_manual_vscode_instructions(formatter: RichOutputFormatter, mcp_path: Path | None = None) -> None:
     """Show manual configuration instructions for VS Code"""
     print("\nTo manually configure ChunkHound in VS Code:")
 
@@ -1090,15 +1029,14 @@ def _show_manual_vscode_instructions(
         formatter.bullet_list(
             [
                 "Create .vscode/mcp.json in your workspace",
-                'Add configuration: { "servers": { "ChunkHound": { "command": "chunkhound", "args": ["mcp", "stdio"] } } }',
+                'Add configuration: { "servers": { "ChunkHound":'
+                ' { "command": "chunkhound", "args": ["mcp", "stdio"] } } }',
                 "Restart VS Code to load the MCP server",
             ]
         )
 
 
-def _show_manual_opencode_instructions(
-    formatter: RichOutputFormatter, opencode_path: Path | None = None
-) -> None:
+def _show_manual_opencode_instructions(formatter: RichOutputFormatter, opencode_path: Path | None = None) -> None:
     """Show manual configuration instructions for OpenCode"""
     print("\nTo manually configure ChunkHound in OpenCode:")
 
@@ -1107,14 +1045,22 @@ def _show_manual_opencode_instructions(
             [
                 f"Edit or create: {opencode_path}",
                 "Add/merge ChunkHound configuration:",
-                '  { "mcp": { "chunkhound": { "type": "local", "command": ["chunkhound", "mcp"] } }, "$schema": "https://opencode.ai/config.json" }',
+                (
+                    '  { "mcp": { "chunkhound": { "type": "local",'
+                    ' "command": ["chunkhound", "mcp"] } },'
+                    ' "$schema": "https://opencode.ai/config.json" }'
+                ),
             ]
         )
     else:
         formatter.bullet_list(
             [
                 "Create opencode.json in your project root",
-                'Add: { "mcp": { "chunkhound": { "type": "local", "command": ["chunkhound", "mcp"] } }, "$schema": "https://opencode.ai/config.json" }',
+                (
+                    'Add: { "mcp": { "chunkhound": { "type": "local",'
+                    ' "command": ["chunkhound", "mcp"] } },'
+                    ' "$schema": "https://opencode.ai/config.json" }'
+                ),
             ]
         )
 
@@ -1136,9 +1082,7 @@ async def _setup_opencode(target_path: Path, formatter: RichOutputFormatter) -> 
         )
 
         # Offer to create configuration anyway
-        create_config = await rich_confirm(
-            "Create OpenCode configuration anyway?", default=False
-        )
+        create_config = await rich_confirm("Create OpenCode configuration anyway?", default=False)
         if not create_config:
             return False
 
@@ -1153,9 +1097,7 @@ async def _setup_opencode(target_path: Path, formatter: RichOutputFormatter) -> 
     if "chunkhound" in mcp_config:
         formatter.warning("ChunkHound MCP server already configured in opencode.json")
 
-        overwrite = await rich_confirm(
-            "Overwrite existing ChunkHound configuration?", default=False
-        )
+        overwrite = await rich_confirm("Overwrite existing ChunkHound configuration?", default=False)
         if not overwrite:
             formatter.info("Skipping OpenCode configuration")
             return True
@@ -1201,9 +1143,7 @@ async def _run_agent_setup(target_path: Path, formatter: RichOutputFormatter) ->
         success = await _setup_opencode(target_path, formatter)
 
     if not success:
-        formatter.warning(
-            "Agent setup incomplete. ChunkHound will still work via command line."
-        )
+        formatter.warning("Agent setup incomplete. ChunkHound will still work via command line.")
         print("Run 'chunkhound mcp' to test the MCP server manually.")
 
 
@@ -1219,9 +1159,7 @@ async def _configure_voyageai(formatter: RichOutputFormatter) -> dict[str, Any] 
     already_declined = False
 
     if detected_config and detected_config.get("api_key"):
-        use_detected = await rich_confirm(
-            "Found VoyageAI API key in environment. Use it?", default=True
-        )
+        use_detected = await rich_confirm("Found VoyageAI API key in environment. Use it?", default=True)
         if use_detected:
             api_key = detected_config["api_key"]
         else:
@@ -1246,9 +1184,7 @@ async def _configure_openai(formatter: RichOutputFormatter) -> dict[str, Any] | 
     already_declined = False
 
     if detected_config and detected_config.get("api_key"):
-        use_detected = await rich_confirm(
-            "Found OpenAI API key in environment. Use it?", default=True
-        )
+        use_detected = await rich_confirm("Found OpenAI API key in environment. Use it?", default=True)
         if use_detected:
             api_key = detected_config["api_key"]
         else:
@@ -1287,14 +1223,10 @@ async def _configure_openai_compatible(
         )
         print()
 
-        use_detected = await rich_confirm(
-            f"Use {provider_name} at {detected_url}?", default=True
-        )
+        use_detected = await rich_confirm(f"Use {provider_name} at {detected_url}?", default=True)
 
         if use_detected:
-            return await _configure_provider_unified(
-                "openai_compatible", base_url=detected_url, formatter=formatter
-            )
+            return await _configure_provider_unified("openai_compatible", base_url=detected_url, formatter=formatter)
 
     # If no local server detected or user declined, show manual entry
     print("Common OpenAI-compatible providers:")
@@ -1331,9 +1263,7 @@ async def _configure_openai_compatible(
         # Check if the detected config has a compatible base URL or no base URL
         detected_base_url = detected_config.get("base_url")
         if not detected_base_url or detected_base_url == normalized_url:
-            use_detected = await rich_confirm(
-                "Found API key in environment. Use it?", default=True
-            )
+            use_detected = await rich_confirm("Found API key in environment. Use it?", default=True)
             if use_detected:
                 detected_api_key = detected_config["api_key"]
             else:
@@ -1373,9 +1303,7 @@ async def _select_compatible_model(
 
         if retry_key.strip():
             formatter.safe_progress_indicator("Retrying with authentication...")
-            available_models, _ = await _fetch_available_models(
-                base_url, retry_key.strip()
-            )
+            available_models, _ = await _fetch_available_models(base_url, retry_key.strip())
             if available_models:
                 current_api_key = retry_key.strip()
 
@@ -1410,10 +1338,7 @@ async def _select_compatible_model(
                 return (None, current_api_key)
 
         elif other_models:
-            formatter.warning(
-                f"Found {len(other_models)} models, but none appear to be "
-                "embedding models"
-            )
+            formatter.warning(f"Found {len(other_models)} models, but none appear to be embedding models")
 
             # Show available models and offer manual entry
             print("\nAvailable models:")
@@ -1452,9 +1377,7 @@ async def _manual_model_entry() -> str | None:
     return model.strip() if model else None
 
 
-async def _select_reranking_model(
-    base_url: str, api_key: str | None, formatter: RichOutputFormatter
-) -> str | None:
+async def _select_reranking_model(base_url: str, api_key: str | None, formatter: RichOutputFormatter) -> str | None:
     """Automatically select a reranking model if available.
 
     Args:
@@ -1478,9 +1401,7 @@ async def _select_reranking_model(
             choices = [(model, model) for model in reranking_models]
 
             # User MUST select a reranking model if available
-            selected = await rich_select(
-                "Select reranking model (improves search accuracy):", choices=choices
-            )
+            selected = await rich_select("Select reranking model (improves search accuracy):", choices=choices)
 
             return selected
         else:
@@ -1491,9 +1412,7 @@ async def _select_reranking_model(
         return None
 
 
-async def _validate_detected_config(
-    config_data: dict[str, Any], formatter: RichOutputFormatter
-) -> bool:
+async def _validate_detected_config(config_data: dict[str, Any], formatter: RichOutputFormatter) -> bool:
     """Validate configuration detected from environment variables."""
     formatter.safe_progress_indicator("Validating detected configuration...")
 
@@ -1518,8 +1437,7 @@ async def _validate_detected_config(
 
             # If it's a local endpoint, treat it as OpenAI-compatible
             if base_url and any(
-                host in base_url.lower()
-                for host in ["localhost", "127.0.0.1", "host.docker.internal"]
+                host in base_url.lower() for host in ["localhost", "127.0.0.1", "host.docker.internal"]
             ):
                 return await _validate_openai_compatible(config_data, formatter)
             else:
@@ -1541,9 +1459,7 @@ async def _validate_voyageai_key(api_key: str, formatter: RichOutputFormatter) -
         formatter.info("Validating API key...")
 
         # Create a test configuration
-        config = EmbeddingConfig(
-            provider="voyageai", api_key=SecretStr(api_key), model=VOYAGE_DEFAULT_MODEL
-        )
+        config = EmbeddingConfig(provider="voyageai", api_key=SecretStr(api_key), model=VOYAGE_DEFAULT_MODEL)
 
         # Try to create provider and test connection
         from chunkhound.core.config.embedding_factory import EmbeddingProviderFactory
@@ -1561,17 +1477,13 @@ async def _validate_voyageai_key(api_key: str, formatter: RichOutputFormatter) -
         return False
 
 
-async def _validate_openai_key(
-    api_key: str, model: str, formatter: RichOutputFormatter
-) -> bool:
+async def _validate_openai_key(api_key: str, model: str, formatter: RichOutputFormatter) -> bool:
     """Test OpenAI API key with minimal embedding request"""
     try:
         formatter.info("Validating API key...")
 
         # Create a test configuration
-        config = EmbeddingConfig(
-            provider="openai", api_key=SecretStr(api_key), model=model
-        )
+        config = EmbeddingConfig(provider="openai", api_key=SecretStr(api_key), model=model)
 
         # Try to create provider and test connection
         from chunkhound.core.config.embedding_factory import EmbeddingProviderFactory
@@ -1589,9 +1501,7 @@ async def _validate_openai_key(
         return False
 
 
-async def _validate_openai_compatible(
-    config_data: dict[str, Any], formatter: RichOutputFormatter
-) -> bool:
+async def _validate_openai_compatible(config_data: dict[str, Any], formatter: RichOutputFormatter) -> bool:
     """Test OpenAI-compatible endpoint connection"""
     try:
         formatter.info("Testing connection...")
@@ -1649,26 +1559,20 @@ async def _ensure_api_key(
     if provider_info["requires_api_key"] is True:
         # Always require API key
         if not api_key:
-            api_key = await _prompt_for_api_key(
-                provider_type, formatter, already_declined
-            )
+            api_key = await _prompt_for_api_key(provider_type, formatter, already_declined)
         return api_key
     elif provider_info["requires_api_key"] == "auto":
         # Test connection first, prompt for key if needed
         if not api_key:
             # If user already declined a detected key, always give them the option to enter their own
             if already_declined:
-                api_key = await _prompt_for_api_key(
-                    provider_type, formatter, already_declined
-                )
+                api_key = await _prompt_for_api_key(provider_type, formatter, already_declined)
                 # Return whatever the user enters (could be None if they skip, which is valid for auto providers)
                 return api_key
             else:
                 needs_auth = await _test_needs_auth(base_url, formatter)
                 if needs_auth:
-                    api_key = await _prompt_for_api_key(
-                        provider_type, formatter, already_declined
-                    )
+                    api_key = await _prompt_for_api_key(provider_type, formatter, already_declined)
                     # For openai_compatible, API key is optional - allow empty
                     if not api_key and provider_type != "openai_compatible":
                         return None
@@ -1718,9 +1622,7 @@ async def _prompt_for_api_key(
             )
 
             if not api_key.strip() and not url_opened:
-                url_opened = _open_url_on_empty_input(
-                    "https://www.voyageai.com", "VoyageAI", formatter
-                )
+                url_opened = _open_url_on_empty_input("https://www.voyageai.com", "VoyageAI", formatter)
                 continue
 
             return api_key.strip()
@@ -1745,9 +1647,7 @@ async def _prompt_for_api_key(
             )
 
             if not api_key.strip() and not url_opened:
-                url_opened = _open_url_on_empty_input(
-                    "https://platform.openai.com/api-keys", "OpenAI", formatter
-                )
+                url_opened = _open_url_on_empty_input("https://platform.openai.com/api-keys", "OpenAI", formatter)
                 continue
 
             return api_key.strip()
@@ -1768,17 +1668,13 @@ async def _prompt_for_api_key(
     return None
 
 
-async def _test_needs_auth(
-    base_url: str | None, formatter: RichOutputFormatter
-) -> bool:
+async def _test_needs_auth(base_url: str | None, formatter: RichOutputFormatter) -> bool:
     """Test if the endpoint needs authentication by making a request without API key."""
     if not base_url:
         return False
 
     try:
-        formatter.safe_progress_indicator(
-            "Testing endpoint authentication requirements..."
-        )
+        formatter.safe_progress_indicator("Testing endpoint authentication requirements...")
 
         # Try to fetch models without API key
         models, needs_auth = await _fetch_available_models(base_url, None)
@@ -1818,43 +1714,27 @@ async def _select_model_unified(
         # If we still need auth, the API key resolution in _configure_provider_unified failed
         # In this case, we should not try to prompt again - just proceed without dynamic discovery
         if needs_auth and not api_key:
-            formatter.warning(
-                "Could not authenticate with endpoint - proceeding with manual entry"
-            )
+            formatter.warning("Could not authenticate with endpoint - proceeding with manual entry")
             models = None
 
         if models:
             if model_type == "embedding":
-                filtered, _ = _filter_embedding_models(
-                    models
-                )  # Unpack tuple, take first list
+                filtered, _ = _filter_embedding_models(models)  # Unpack tuple, take first list
             else:
                 filtered = _filter_reranking_models(models)
 
             if filtered:
                 choices = [(model, model) for model in filtered]
-                selected = await rich_select(
-                    f"Select {model_type} model:", choices=choices
-                )
+                selected = await rich_select(f"Select {model_type} model:", choices=choices)
                 return selected, api_key
 
     # Use defaults for voyageai and openai
-    defaults = (
-        provider_info["default_models"]
-        if model_type == "embedding"
-        else provider_info["default_rerankers"]
-    )
+    defaults = provider_info["default_models"] if model_type == "embedding" else provider_info["default_rerankers"]
     if defaults:
         choices = [(f"{model} - {desc}", model) for model, desc in defaults]
-        default = (
-            provider_info["default_selection"]
-            if model_type == "embedding"
-            else provider_info["default_reranker"]
-        )
+        default = provider_info["default_selection"] if model_type == "embedding" else provider_info["default_reranker"]
 
-        selected = await rich_select(
-            f"Select {model_type} model:", choices=choices, default=default
-        )
+        selected = await rich_select(f"Select {model_type} model:", choices=choices, default=default)
 
         return selected, api_key
 
@@ -1901,9 +1781,7 @@ async def _configure_provider_unified(
         formatter.section_header(f"{provider_info['display_name']} Configuration")
 
     # Step 1: Handle API key - ensure we have credentials before model discovery
-    api_key = await _ensure_api_key(
-        provider_type, base_url, api_key, formatter, already_declined_key
-    )
+    api_key = await _ensure_api_key(provider_type, base_url, api_key, formatter, already_declined_key)
     if not api_key and provider_info["requires_api_key"] is True:
         return None
 
@@ -1946,9 +1824,7 @@ async def _configure_provider_unified(
         return None
 
 
-async def _validate_provider_config(
-    config_data: dict[str, Any], formatter: RichOutputFormatter
-) -> bool:
+async def _validate_provider_config(config_data: dict[str, Any], formatter: RichOutputFormatter) -> bool:
     """Validate provider configuration by testing connection."""
     provider = config_data.get("provider")
 
@@ -2010,9 +1886,7 @@ async def _save_configuration(
         formatter.box_section("Configuration Summary", content)
 
         # Confirm save
-        should_save = await rich_confirm(
-            f"\nSave configuration to {config_path}?", default=True
-        )
+        should_save = await rich_confirm(f"\nSave configuration to {config_path}?", default=True)
 
         if not should_save:
             return None, "cancelled"
@@ -2025,8 +1899,5 @@ async def _save_configuration(
 
     except Exception as e:
         formatter.error(f"Failed to save configuration: {e}")
-        print(
-            "This might be a permissions issue. "
-            "Try running with appropriate permissions."
-        )
+        print("This might be a permissions issue. Try running with appropriate permissions.")
         return None, "error"

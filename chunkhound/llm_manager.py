@@ -33,9 +33,7 @@ class LLMManager:
         "opencode-cli": OpenCodeCLIProvider,
     }
 
-    def __init__(
-        self, utility_config: dict[str, Any], synthesis_config: dict[str, Any]
-    ):
+    def __init__(self, utility_config: dict[str, Any], synthesis_config: dict[str, Any]):
         """Initialize LLM manager with dual providers.
 
         Args:
@@ -67,10 +65,7 @@ class LLMManager:
 
         if provider_name not in self._providers:
             available = ", ".join(self._providers.keys())
-            raise ValueError(
-                f"Unknown LLM provider: {provider_name}. "
-                f"Available providers: {available}"
-            )
+            raise ValueError(f"Unknown LLM provider: {provider_name}. Available providers: {available}")
 
         provider_class = self._providers[provider_name]
 
@@ -95,15 +90,9 @@ class LLMManager:
             elif provider_name == "anthropic":
                 # Add Anthropic configuration
                 # Extended thinking
-                provider_kwargs["thinking_enabled"] = config.get(
-                    "thinking_enabled", False
-                )
-                provider_kwargs["thinking_budget_tokens"] = config.get(
-                    "thinking_budget_tokens", 10000
-                )
-                provider_kwargs["interleaved_thinking"] = config.get(
-                    "interleaved_thinking", False
-                )
+                provider_kwargs["thinking_enabled"] = config.get("thinking_enabled", False)
+                provider_kwargs["thinking_budget_tokens"] = config.get("thinking_budget_tokens", 10000)
+                provider_kwargs["interleaved_thinking"] = config.get("interleaved_thinking", False)
 
                 # Effort parameter (Opus 4.5 only)
                 if effort := config.get("effort"):
@@ -112,13 +101,9 @@ class LLMManager:
                 # Context management
                 if config.get("context_management_enabled"):
                     provider_kwargs["context_management_enabled"] = True
-                    if (
-                        keep_turns := config.get("clear_thinking_keep_turns")
-                    ) is not None:
+                    if (keep_turns := config.get("clear_thinking_keep_turns")) is not None:
                         provider_kwargs["clear_thinking_keep_turns"] = keep_turns
-                    if (
-                        trigger := config.get("clear_tool_uses_trigger_tokens")
-                    ) is not None:
+                    if (trigger := config.get("clear_tool_uses_trigger_tokens")) is not None:
                         provider_kwargs["clear_tool_uses_trigger_tokens"] = trigger
                     if (keep := config.get("clear_tool_uses_keep")) is not None:
                         provider_kwargs["clear_tool_uses_keep"] = keep
@@ -186,9 +171,7 @@ class LLMManager:
         Returns:
             True if both providers are configured
         """
-        return (
-            self._utility_provider is not None and self._synthesis_provider is not None
-        )
+        return self._utility_provider is not None and self._synthesis_provider is not None
 
     def list_providers(self) -> list[str]:
         """List available LLM providers.

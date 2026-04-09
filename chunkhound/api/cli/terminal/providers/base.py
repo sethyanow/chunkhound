@@ -37,9 +37,7 @@ class BaseTerminalProvider(ABC):
             self._configure_terminal()
             self._is_setup = True
         except Exception as e:
-            raise TerminalSetupError(
-                operation="setup", platform=self._get_platform_name(), reason=str(e)
-            ) from e
+            raise TerminalSetupError(operation="setup", platform=self._get_platform_name(), reason=str(e)) from e
 
     def cleanup(self) -> None:
         """Restore terminal to original state."""
@@ -214,9 +212,9 @@ def create_provider(config: TerminalConfig | None = None) -> TerminalInputProvid
 
         return UnixTerminalProvider(config)
     else:
-        from ..exceptions import TerminalUnsupportedPlatform
+        from ..exceptions import TerminalUnsupportedPlatformError
 
-        raise TerminalUnsupportedPlatform(
+        raise TerminalUnsupportedPlatformError(
             platform=platform,
             operation="create_provider",
             supported_platforms=["windows", "linux", "darwin", "freebsd"],

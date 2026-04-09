@@ -308,9 +308,7 @@ class DartMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: "UniversalConcept", captures: dict[str, Any], content: bytes
-    ) -> str:
+    def extract_name(self, concept: "UniversalConcept", captures: dict[str, Any], content: bytes) -> str:
         """Extract name from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -353,9 +351,7 @@ class DartMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: "UniversalConcept", captures: dict[str, Any], content: bytes
-    ) -> str:
+    def extract_content(self, concept: "UniversalConcept", captures: dict[str, Any], content: bytes) -> str:
         """Extract content from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -371,9 +367,7 @@ class DartMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: "UniversalConcept", captures: dict[str, Any], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: "UniversalConcept", captures: dict[str, Any], content: bytes) -> dict[str, Any]:
         """Extract Dart-specific metadata."""
         source = content.decode("utf-8")
         metadata: dict[str, Any] = {}
@@ -443,10 +437,7 @@ class DartMapping(BaseMapping):
                         # Check if this is consequence or alternative
                         for i, child in enumerate(parent.children):
                             if child == block_node:
-                                if (
-                                    i < len(parent.children) - 1
-                                    and parent.children[i + 1].type == "else"
-                                ):
+                                if i < len(parent.children) - 1 and parent.children[i + 1].type == "else":
                                     metadata["block_context"] = "if_consequence"
                                 elif parent.children[0] == block_node:
                                     metadata["block_context"] = "if_consequence"
@@ -575,9 +566,7 @@ class DartMapping(BaseMapping):
 
         return [{"name": name, "value": value}]
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve import path for Dart.
 
         Attempts to resolve relative imports and local file imports.

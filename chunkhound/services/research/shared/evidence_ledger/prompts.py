@@ -21,8 +21,7 @@ CONSTANTS_INSTRUCTION_FULL = (
 )
 
 CONSTANTS_INSTRUCTION_SHORT = (
-    "When referencing configuration values or limits, use constant names "
-    "rather than raw values."
+    "When referencing configuration values or limits, use constant names rather than raw values."
 )
 
 

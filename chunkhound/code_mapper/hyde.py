@@ -11,27 +11,15 @@ from chunkhound.interfaces.llm_provider import LLMProvider
 from chunkhound.llm_manager import LLMManager
 
 
-def load_hyde_scope_template(
-    *, mode: Literal["architectural", "operational"] = "architectural"
-) -> str:
+def load_hyde_scope_template(*, mode: Literal["architectural", "operational"] = "architectural") -> str:
     """Load the packaged HyDE scope prompt template."""
     package = "chunkhound.code_mapper.prompts"
-    filename = (
-        "hyde_scope_prompt.md"
-        if mode == "architectural"
-        else "hyde_scope_prompt_operational.md"
-    )
-    with (
-        importlib.resources.files(package)
-        .joinpath(filename)
-        .open("r", encoding="utf-8") as f
-    ):
+    filename = "hyde_scope_prompt.md" if mode == "architectural" else "hyde_scope_prompt_operational.md"
+    with importlib.resources.files(package).joinpath(filename).open("r", encoding="utf-8") as f:
         return f.read().strip()
 
 
-def load_hyde_scope_context_template(
-    *, mode: Literal["architectural", "operational"] = "architectural"
-) -> str:
+def load_hyde_scope_context_template(*, mode: Literal["architectural", "operational"] = "architectural") -> str:
     """Load the packaged HyDE scope prompt template for --context mode.
 
     Note: The context-mode scope prompt is currently shared across both
@@ -40,11 +28,7 @@ def load_hyde_scope_context_template(
     """
     package = "chunkhound.code_mapper.prompts"
     filename = "hyde_scope_prompt_context.md"
-    with (
-        importlib.resources.files(package)
-        .joinpath(filename)
-        .open("r", encoding="utf-8") as f
-    ):
+    with importlib.resources.files(package).joinpath(filename).open("r", encoding="utf-8") as f:
         return f.read().strip()
 
 
@@ -60,15 +44,11 @@ async def run_hyde_only_query(
     Returns (content, success). On failure, content contains a short diagnostic
     string suitable for CLI display.
     """
-    if provider_override is None and (
-        not llm_manager or not llm_manager.is_configured()
-    ):
+    if provider_override is None and (not llm_manager or not llm_manager.is_configured()):
         return "LLM not configured for HyDE-only mode.", False
 
     try:
-        provider = provider_override or (
-            llm_manager.get_synthesis_provider() if llm_manager else None
-        )
+        provider = provider_override or (llm_manager.get_synthesis_provider() if llm_manager else None)
         if provider is None:
             return "Synthesis provider unavailable for HyDE-only mode.", False
     except (AttributeError, ValueError, TypeError) as exc:
@@ -120,10 +100,7 @@ def build_hyde_scope_prompt(
         files_block = ""
         context_body = context.strip()
         code_context_block = (
-            f"User-provided context (authoritative; {mode_label} planning):\n\n"
-            "````markdown\n"
-            f"{context_body}\n"
-            "````"
+            f"User-provided context (authoritative; {mode_label} planning):\n\n````markdown\n{context_body}\n````"
         )
         return template.format(
             created=meta.created_from_sha,
@@ -134,15 +111,9 @@ def build_hyde_scope_prompt(
             code_context_block=code_context_block,
         ).strip()
 
-    files_block = (
-        "\n".join(f"- {p}" for p in file_paths)
-        if file_paths
-        else ("- (no files discovered)")
-    )
+    files_block = "\n".join(f"- {p}" for p in file_paths) if file_paths else ("- (no files discovered)")
 
-    snippet_char_budget = max(
-        0, int(getattr(hyde_cfg, "max_snippet_tokens", 100_000)) * 4
-    )
+    snippet_char_budget = max(0, int(getattr(hyde_cfg, "max_snippet_tokens", 100_000)) * 4)
     max_chars_per_file = hyde_cfg.max_snippet_chars
 
     binary_exts = {
@@ -269,11 +240,7 @@ def build_hyde_scope_prompt(
             fence = f"```{lang}" if lang else "```"
             code_snippets.append(f"File: {rel_path}\n{fence}\n{snippet}\n```")
 
-        code_context_block = (
-            "\n\n".join(code_snippets)
-            if code_snippets
-            else "(no sample code snippets available)"
-        )
+        code_context_block = "\n\n".join(code_snippets) if code_snippets else "(no sample code snippets available)"
 
     return template.format(
         created=meta.created_from_sha,

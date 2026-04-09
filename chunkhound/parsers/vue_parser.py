@@ -90,9 +90,7 @@ class VueParser:
         self.chunk_splitter = ChunkSplitter(self.cast_config)
 
         # Create TypeScript parser for script sections
-        self.ts_parser = create_parser_for_language(
-            Language.TYPESCRIPT, cast_config, detect_embedded_sql
-        )
+        self.ts_parser = create_parser_for_language(Language.TYPESCRIPT, cast_config, detect_embedded_sql)
 
         # Create template parser using tree-sitter-vue
         self.template_parser = self._create_template_parser()
@@ -178,16 +176,12 @@ class VueParser:
             vue_composables = self.vue_mapping.detect_composables(script_content)
 
             # Parse script content as TypeScript/JavaScript
-            parsed_chunks = self.ts_parser.parse_content(
-                script_content, file_path, file_id
-            )
+            parsed_chunks = self.ts_parser.parse_content(script_content, file_path, file_id)
 
             # Create new chunks with adjusted line numbers and Vue-specific metadata
             for chunk in parsed_chunks:
                 # Create updated metadata
-                updated_metadata = (
-                    chunk.metadata.copy() if chunk.metadata is not None else {}
-                )
+                updated_metadata = chunk.metadata.copy() if chunk.metadata is not None else {}
                 updated_metadata["vue_section"] = "script"
                 updated_metadata["vue_script_setup"] = is_setup
                 updated_metadata["vue_script_lang"] = script_lang
@@ -215,9 +209,7 @@ class VueParser:
         for attrs, template_content, start_line in sections["template"]:
             if template_content.strip():
                 # Try to parse template directives using tree-sitter
-                parsed_template_chunks = self._parse_template_content(
-                    template_content, start_line, file_path, file_id
-                )
+                parsed_template_chunks = self._parse_template_content(template_content, start_line, file_path, file_id)
 
                 if parsed_template_chunks:
                     # Successfully parsed template directives
@@ -263,9 +255,7 @@ class VueParser:
 
                 # Split if needed and convert to Chunks
                 for uc in self.chunk_splitter.validate_and_split(uchunk):
-                    chunks.append(
-                        universal_to_chunk(uc, file_path, file_id, Language.VUE)
-                    )
+                    chunks.append(universal_to_chunk(uc, file_path, file_id, Language.VUE))
 
         # Perform cross-reference analysis (Phase 2.3)
         # Link template references to script symbols
@@ -312,9 +302,7 @@ class VueParser:
             wrapped_content = f"<template>\n{template_content}\n</template>"
 
             # Parse wrapped template content with VueTemplateMapping
-            template_chunks = self.template_parser.parse_content(
-                wrapped_content, file_path, file_id
-            )
+            template_chunks = self.template_parser.parse_content(wrapped_content, file_path, file_id)
 
             # Adjust line numbers to account for:
             # 1. The <template> wrapper line (subtract 1)

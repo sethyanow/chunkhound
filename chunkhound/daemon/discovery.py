@@ -176,9 +176,7 @@ class DaemonDiscovery:
 
     def get_registry_entry_path(self) -> Path:
         """Return the registry entry path for this canonical project root."""
-        digest = hashlib.sha256(
-            _project_dir_identity(self._project_dir).encode()
-        ).hexdigest()[:16]
+        digest = hashlib.sha256(_project_dir_identity(self._project_dir).encode()).hexdigest()[:16]
         return self.get_registry_dir() / f"{digest}.json"
 
     def get_ipc_address(self) -> str:
@@ -218,9 +216,7 @@ class DaemonDiscovery:
         except (FileNotFoundError, json.JSONDecodeError, OSError):
             return None
 
-    def write_lock(
-        self, pid: int, socket_path: str, auth_token: str | None = None
-    ) -> None:
+    def write_lock(self, pid: int, socket_path: str, auth_token: str | None = None) -> None:
         """Write the lock file atomically.
 
         If *auth_token* is provided it is written as-is; otherwise a fresh
@@ -233,9 +229,7 @@ class DaemonDiscovery:
             "socket_path": socket_path,
             "started_at": time.time(),
             "project_dir": str(self._project_dir),
-            "auth_token": (
-                auth_token if auth_token is not None else secrets.token_hex(32)
-            ),
+            "auth_token": (auth_token if auth_token is not None else secrets.token_hex(32)),
         }
         _write_json_atomically(lock_path, data, private=True)
 
@@ -311,10 +305,7 @@ class DaemonDiscovery:
 
         root = _canonical_project_dir(Path(project_dir_raw))
         expected_lock_path = root / _LOCK_FILE_REL
-        if (
-            not isinstance(lock_path_raw, str)
-            or Path(lock_path_raw) != expected_lock_path
-        ):
+        if not isinstance(lock_path_raw, str) or Path(lock_path_raw) != expected_lock_path:
             self._remove_registry_entry_file(entry_path)
             return None
 
@@ -358,9 +349,7 @@ class DaemonDiscovery:
             if entry is None:
                 continue
             other_root = _canonical_project_dir(Path(str(entry["project_dir"])))
-            if _normalized_project_dir(other_root) == _normalized_project_dir(
-                self._project_dir
-            ):
+            if _normalized_project_dir(other_root) == _normalized_project_dir(self._project_dir):
                 continue
             if _roots_overlap(self._project_dir, other_root):
                 return entry
@@ -490,8 +479,7 @@ class DaemonDiscovery:
                 remaining = deadline - time.monotonic()
                 await asyncio.sleep(min(_STARTUP_POLL_INTERVAL, max(remaining, 0.0)))
             raise RuntimeError(
-                f"ChunkHound daemon (pid={pid}) did not become reachable "
-                f"within {timeout}s (address: {actual_address})"
+                f"ChunkHound daemon (pid={pid}) did not become reachable within {timeout}s (address: {actual_address})"
             )
 
         self._remove_stale_lock_artifacts(initial_address)
@@ -687,9 +675,7 @@ class DaemonDiscovery:
                 # starter lock and released after it, so no live process can
                 # hold the starter lock while we already hold the global one.
                 if not self._acquire_starter_lock():
-                    raise AssertionError(
-                        "starter lock unavailable while global startup lock is held"
-                    )
+                    raise AssertionError("starter lock unavailable while global startup lock is held")
 
                 try:
                     self._start_daemon_subprocess(args)
@@ -697,26 +683,20 @@ class DaemonDiscovery:
                     while time.monotonic() < poll_deadline:
                         lock = self.read_lock()
                         if lock is not None:
-                            actual_address = str(
-                                lock.get("socket_path", initial_address)
-                            )
+                            actual_address = str(lock.get("socket_path", initial_address))
                             if await self._socket_connectable(actual_address):
                                 return actual_address
                         sleep_for = poll_deadline - time.monotonic()
-                        await asyncio.sleep(
-                            min(_STARTUP_POLL_INTERVAL, max(sleep_for, 0.0))
-                        )
+                        await asyncio.sleep(min(_STARTUP_POLL_INTERVAL, max(sleep_for, 0.0)))
                 finally:
                     self._release_starter_lock()
 
                 raise RuntimeError(
-                    f"ChunkHound daemon did not start within {_STARTUP_TIMEOUT}s "
-                    f"(address: {initial_address})"
+                    f"ChunkHound daemon did not start within {_STARTUP_TIMEOUT}s (address: {initial_address})"
                 )
             finally:
                 self._release_global_startup_lock()
 
         raise RuntimeError(
-            f"ChunkHound daemon did not become reachable within "
-            f"{_STARTUP_TIMEOUT}s (address: {initial_address})"
+            f"ChunkHound daemon did not become reachable within {_STARTUP_TIMEOUT}s (address: {initial_address})"
         )

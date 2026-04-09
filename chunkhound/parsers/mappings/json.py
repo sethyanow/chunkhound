@@ -89,9 +89,7 @@ class JsonMapping(BaseMapping):
         else:
             return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
 
         # Convert bytes to string for JSON parsing
@@ -139,15 +137,11 @@ class JsonMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
 
         # Get the specific node to extract
-        def_node = (
-            captures.get("definition") or captures.get("block") or captures.get("node")
-        )
+        def_node = captures.get("definition") or captures.get("block") or captures.get("node")
         if not def_node and captures:
             def_node = list(captures.values())[0]
 
@@ -163,9 +157,7 @@ class JsonMapping(BaseMapping):
 
         return node_content
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Node], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract JSON-specific metadata."""
 
         source = content.decode("utf-8")
@@ -221,19 +213,11 @@ class JsonMapping(BaseMapping):
                 metadata["json_type"] = type(data).__name__
 
                 if isinstance(data, dict):
-                    metadata["nested_objects"] = sum(
-                        1 for v in data.values() if isinstance(v, dict)
-                    )
-                    metadata["nested_arrays"] = sum(
-                        1 for v in data.values() if isinstance(v, list)
-                    )
+                    metadata["nested_objects"] = sum(1 for v in data.values() if isinstance(v, dict))
+                    metadata["nested_arrays"] = sum(1 for v in data.values() if isinstance(v, list))
                 elif isinstance(data, list):
-                    metadata["nested_objects"] = sum(
-                        1 for item in data if isinstance(item, dict)
-                    )
-                    metadata["nested_arrays"] = sum(
-                        1 for item in data if isinstance(item, list)
-                    )
+                    metadata["nested_objects"] = sum(1 for item in data if isinstance(item, dict))
+                    metadata["nested_arrays"] = sum(1 for item in data if isinstance(item, list))
 
             elif concept == UniversalConcept.STRUCTURE:
                 metadata["root_type"] = type(data).__name__
@@ -263,15 +247,11 @@ class JsonMapping(BaseMapping):
         if isinstance(data, dict):
             if not data:
                 return current_depth
-            return max(
-                self._calculate_json_depth(v, current_depth + 1) for v in data.values()
-            )
+            return max(self._calculate_json_depth(v, current_depth + 1) for v in data.values())
         elif isinstance(data, list):
             if not data:
                 return current_depth
-            return max(
-                self._calculate_json_depth(item, current_depth + 1) for item in data
-            )
+            return max(self._calculate_json_depth(item, current_depth + 1) for item in data)
         else:
             return current_depth
 
@@ -284,9 +264,7 @@ class JsonMapping(BaseMapping):
         else:
             return 1
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Data formats don't have imports."""
         return []
 

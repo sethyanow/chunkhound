@@ -14,9 +14,9 @@ All tests use real embedding and reranking APIs to validate the algorithm
 works with actual semantic similarity and relevance scoring.
 """
 
+from typing import Any
+
 import pytest
-import tempfile
-import shutil
 import time
 from pathlib import Path
 from chunkhound.providers.database.duckdb_provider import DuckDBProvider
@@ -28,8 +28,9 @@ from chunkhound.parsers.parser_factory import create_parser_for_language
 from .provider_configs import get_reranking_providers
 from tests.fixtures.fake_providers import FakeEmbeddingProvider
 
-# All tests in this file require live API access — skip by default
-pytestmark = pytest.mark.integration
+# Live API embedding tests — results shift with any source code change.
+# e2e, not integration, because they test embedding model quality not ChunkHound logic.
+pytestmark = pytest.mark.e2e
 
 # Cache providers at module level to avoid multiple calls during parametrize
 reranking_providers = get_reranking_providers()
@@ -184,13 +185,15 @@ async def test_multi_hop_semantic_chain_discovery(indexed_codebase):
 
     # Instrument search service to track multi-hop mechanics
     search_service = SearchService(db, provider)
+    assert search_service._multi_hop_strategy is not None
+    assert search_service._embedding_provider is not None
 
     # Track metrics via instrumentation
-    expansion_metrics = {
+    expansion_metrics: dict[str, float] = {
         'rerank_calls': 0,
         'find_similar_calls': 0,
         'expansion_rounds': 0,
-        'total_time': 0
+        'total_time': 0.0,
     }
 
     # Wrap the multi-hop strategy's search method
@@ -200,6 +203,7 @@ async def test_multi_hop_semantic_chain_discovery(indexed_codebase):
         start = time.perf_counter()
 
         # Track reranking calls (proves expansion occurred)
+        assert search_service._embedding_provider is not None
         original_rerank = search_service._embedding_provider.rerank
         async def track_rerank(*rerank_args, **rerank_kwargs):
             expansion_metrics['rerank_calls'] += 1
@@ -226,7 +230,6 @@ async def test_multi_hop_semantic_chain_discovery(indexed_codebase):
         return result
 
     search_service._multi_hop_strategy.search = instrumented_search
-    search_service.expansion_metrics = expansion_metrics
 
     # Test with a broad query that should trigger multi-hop expansion across layers
     # This query spans: embedding operations, database storage, coordination, batch processing
@@ -255,6 +258,7 @@ async def test_multi_hop_semantic_chain_discovery(indexed_codebase):
         f"Should discover code across multiple files (multi-hop), found {len(unique_files)}: {unique_files}"
 
     # === Test 3: Score quality maintained ===
+    high_quality_results = []
     if results:
         top_scores = [r.get('score', 0.0) for r in results[:10]]
         high_quality_results = [s for s in top_scores if s >= 0.5]
@@ -305,12 +309,14 @@ async def test_multi_hop_with_path_filter_respects_scope(indexed_codebase):
 
     # Instrument search service to track multi-hop mechanics
     search_service = SearchService(db, provider)
+    assert search_service._multi_hop_strategy is not None
+    assert search_service._embedding_provider is not None
 
-    expansion_metrics = {
+    expansion_metrics: dict[str, float] = {
         "rerank_calls": 0,
         "find_similar_calls": 0,
         "expansion_rounds": 0,
-        "total_time": 0,
+        "total_time": 0.0,
     }
 
     original_search = search_service._multi_hop_strategy.search
@@ -319,6 +325,7 @@ async def test_multi_hop_with_path_filter_respects_scope(indexed_codebase):
         start = time.perf_counter()
 
         # Track reranking calls (proves expansion occurred)
+        assert search_service._embedding_provider is not None
         original_rerank = search_service._embedding_provider.rerank
 
         async def track_rerank(*rerank_args, **rerank_kwargs):
@@ -350,13 +357,12 @@ async def test_multi_hop_with_path_filter_respects_scope(indexed_codebase):
         return result
 
     search_service._multi_hop_strategy.search = instrumented_search
-    search_service.expansion_metrics = expansion_metrics
 
     # Use a scoped path that is well represented in the indexed corpus
     scoped_path = "chunkhound/providers/database"
 
     query = "database provider vector index hnsw"
-    results, pagination = await search_service.search_semantic(
+    results, _pagination = await search_service.search_semantic(
         query, page_size=30, path_filter=scoped_path
     )
 
@@ -400,8 +406,8 @@ async def test_mcp_authentication_chain(indexed_codebase):
     search_service = SearchService(db, provider)
     
     query = "MCP tools API authentication provider configuration"
-    results, pagination = await search_service.search_semantic(query, page_size=30)
-    
+    results, _pagination = await search_service.search_semantic(query, page_size=30)
+
     # Brief analysis of results
     substantial_results = [r for r in results if len(r['content']) >= 50]
     print(f"Search returned {len(results)} results ({len(substantial_results)} substantial chunks)")
@@ -545,14 +551,16 @@ async def test_expansion_termination_conditions(indexed_codebase):
 
     # Instrument search service to track expansion behavior
     search_service = SearchService(db, provider)
+    assert search_service._multi_hop_strategy is not None
+    assert search_service._embedding_provider is not None
 
     # Track metrics via instrumentation
-    expansion_metrics = {
+    expansion_metrics: dict[str, Any] = {
         'rerank_calls': 0,
         'find_similar_calls': 0,
-        'total_time': 0,
+        'total_time': 0.0,
         'rounds': 0,
-        'termination_reason': None
+        'termination_reason': None,
     }
 
     # Wrap the multi-hop strategy's search method
@@ -562,23 +570,24 @@ async def test_expansion_termination_conditions(indexed_codebase):
         start = time.perf_counter()
 
         # Track reranking calls
+        assert search_service._embedding_provider is not None
         original_rerank = search_service._embedding_provider.rerank
         async def track_rerank(*rerank_args, **rerank_kwargs):
-            expansion_metrics['rerank_calls'] += 1
+            expansion_metrics['rerank_calls'] += 1  # type: ignore[operator]
             return await original_rerank(*rerank_args, **rerank_kwargs)
         search_service._embedding_provider.rerank = track_rerank
 
         # Track find_similar calls
         original_find = search_service._db.find_similar_chunks
         def track_find(*find_args, **find_kwargs):
-            expansion_metrics['find_similar_calls'] += 1
+            expansion_metrics['find_similar_calls'] += 1  # type: ignore[operator]
             return original_find(*find_args, **find_kwargs)
         search_service._db.find_similar_chunks = track_find
 
         result = await original_search(*args, **kwargs)
 
         expansion_metrics['total_time'] = time.perf_counter() - start
-        expansion_metrics['rounds'] = expansion_metrics['find_similar_calls'] // 5
+        expansion_metrics['rounds'] = int(expansion_metrics['find_similar_calls']) // 5  # type: ignore[arg-type]
 
         # Restore original methods
         search_service._embedding_provider.rerank = original_rerank
@@ -587,7 +596,6 @@ async def test_expansion_termination_conditions(indexed_codebase):
         return result
 
     search_service._multi_hop_strategy.search = instrumented_search
-    search_service.expansion_metrics = expansion_metrics
     
     # Test different query types that should trigger different termination conditions
     test_cases = [
@@ -701,16 +709,18 @@ async def test_score_derivative_termination(indexed_codebase):
 
     # Instrument search service to track score evolution
     search_service = SearchService(db, provider)
+    assert search_service._multi_hop_strategy is not None
+    assert search_service._embedding_provider is not None
 
     # Track score history via instrumentation
     score_history = []
-    termination_reason = None
 
     # Wrap the multi-hop strategy's search method
     original_search = search_service._multi_hop_strategy.search
 
     async def instrumented_search(*args, **kwargs):
         # Intercept reranking to track score evolution
+        assert search_service._embedding_provider is not None
         original_rerank = search_service._embedding_provider.rerank
 
         async def track_scores(query, documents, top_k=None):
@@ -753,9 +763,8 @@ async def test_score_derivative_termination(indexed_codebase):
     for test in test_queries:
         # Reset tracking
         score_history.clear()
-        termination_reason = None
 
-        results, _ = await search_service.search_semantic(test['query'], page_size=20)
+        _results, _ = await search_service.search_semantic(test['query'], page_size=20)
 
         # Analyze score evolution
         history = score_history

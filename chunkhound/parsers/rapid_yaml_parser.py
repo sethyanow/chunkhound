@@ -45,9 +45,7 @@ class RapidYamlParser(LanguageParser):
 
     _KEY_NODE_TYPES = {"KEYVAL", "KEYMAP", "KEYSEQ"}
 
-    def __init__(
-        self, fallback: UniversalParser, cast_config: CASTConfig | None = None
-    ) -> None:
+    def __init__(self, fallback: UniversalParser, cast_config: CASTConfig | None = None) -> None:
         self._fallback = fallback
         self._cast_config = cast_config or CASTConfig()
         self._enabled = not _env_wants_tree_sitter()
@@ -81,8 +79,7 @@ class RapidYamlParser(LanguageParser):
             except Exception as exc:  # pragma: no cover - import-time guard
                 self._enabled = False
                 logger.info(
-                    "RapidYAML disabled (import failure): %s."
-                    " Falling back to tree-sitter.",
+                    "RapidYAML disabled (import failure): %s. Falling back to tree-sitter.",
                     exc,
                 )
 
@@ -205,9 +202,7 @@ class RapidYamlParser(LanguageParser):
             self._count_ryml_ok += 1
             return chunks
         except Exception as exc:
-            logger.debug(
-                "RapidYAML parser failed (%s). Falling back to tree-sitter.", exc
-            )
+            logger.debug("RapidYAML parser failed (%s). Falling back to tree-sitter.", exc)
             # Add to denylist to avoid repeated attempts
             if file_path is not None:
                 self._denylist_paths.add(str(file_path))
@@ -233,9 +228,7 @@ class RapidYamlParser(LanguageParser):
     def supports_incremental_parsing(self) -> bool:
         return False
 
-    def parse_incremental(
-        self, file_path: Path, previous_chunks: list[dict[str, object]] | None = None
-    ) -> list[Chunk]:
+    def parse_incremental(self, file_path: Path, previous_chunks: list[dict[str, object]] | None = None) -> list[Chunk]:
         return self.parse_file(file_path, FileId(0))
 
     def get_parse_tree(self, content: str):
@@ -246,9 +239,7 @@ class RapidYamlParser(LanguageParser):
 
     def cleanup(self) -> None:
         # Emit one-line summary for this parser instance
-        top_rewrites = (
-            ", ".join(f"{k}={v}" for k, v in self._rewrite_counts.most_common(6)) or "-"
-        )
+        top_rewrites = ", ".join(f"{k}={v}" for k, v in self._rewrite_counts.most_common(6)) or "-"
         logger.info(
             (
                 "RapidYAML summary: sanitized=%d pre_skip=%d complex_skip=%d "
@@ -688,9 +679,7 @@ class _RapidYamlChunkBuilder:
             # path[-1] is the current node, path[-2] is the actual parent
             parent_key = path[-2] if len(path) >= 2 else None
 
-            chunks.extend(
-                self._create_chunk(node, node_type, symbol, depth, parent_key)
-            )
+            chunks.extend(self._create_chunk(node, node_type, symbol, depth, parent_key))
 
         # Deduplicate chunks to prevent duplicate chunk IDs
         # (e.g., YAML files with repeated config values like "name: example-config")

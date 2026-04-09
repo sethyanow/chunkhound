@@ -50,9 +50,7 @@ class ClientProxy:
 
             ack = await asyncio.wait_for(ipc.read_frame(reader), timeout=10.0)
             if not isinstance(ack, dict) or ack.get("type") != "registered":
-                raise RuntimeError(
-                    f"Unexpected registration response from daemon: {ack}"
-                )
+                raise RuntimeError(f"Unexpected registration response from daemon: {ack}")
 
             # Bidirectional forwarding
             # Use wait() with FIRST_COMPLETED so when stdin closes, we immediately
@@ -62,9 +60,7 @@ class ClientProxy:
             stdin_task = asyncio.create_task(self._forward_stdin_to_socket(writer))
             stdout_task = asyncio.create_task(self._forward_socket_to_stdout(reader))
 
-            done, pending = await asyncio.wait(
-                {stdin_task, stdout_task}, return_when=asyncio.FIRST_COMPLETED
-            )
+            done, pending = await asyncio.wait({stdin_task, stdout_task}, return_when=asyncio.FIRST_COMPLETED)
 
             # Retrieve exceptions from completed tasks to prevent
             # "Task exception was never retrieved" noise on stderr.
@@ -107,9 +103,7 @@ class ClientProxy:
         """Unix: async stdin reading via connect_read_pipe."""
         loop = asyncio.get_running_loop()
         stdin = asyncio.StreamReader()
-        transport, _ = await loop.connect_read_pipe(
-            lambda: asyncio.StreamReaderProtocol(stdin), sys.stdin.buffer
-        )
+        transport, _ = await loop.connect_read_pipe(lambda: asyncio.StreamReaderProtocol(stdin), sys.stdin.buffer)
         try:
             while True:
                 line = await stdin.readline()

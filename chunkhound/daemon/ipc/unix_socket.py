@@ -28,9 +28,7 @@ async def create_client(
 async def is_connectable(path: str) -> bool:
     """Return True if the socket at *path* accepts connections."""
     try:
-        _, writer = await asyncio.wait_for(
-            asyncio.open_unix_connection(path), timeout=1.0
-        )
+        _, writer = await asyncio.wait_for(asyncio.open_unix_connection(path), timeout=1.0)
         writer.close()
         try:
             await writer.wait_closed()

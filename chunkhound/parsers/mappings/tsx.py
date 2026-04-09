@@ -275,9 +275,7 @@ class TSXMapping(TypeScriptMapping):
 
         return self.get_fallback_name(node, "hook")
 
-    def extract_component_props_type(
-        self, node: TSNode | None, source: str
-    ) -> str | None:
+    def extract_component_props_type(self, node: TSNode | None, source: str) -> str | None:
         """Extract component props type annotation.
 
         Args:
@@ -296,9 +294,7 @@ class TSXMapping(TypeScriptMapping):
             if params_node and params_node.child_count > 0:
                 first_param = params_node.child(1)  # Skip opening parenthesis
                 if first_param and first_param.type == "required_parameter":
-                    type_annotation = self.find_child_by_type(
-                        first_param, "type_annotation"
-                    )
+                    type_annotation = self.find_child_by_type(first_param, "type_annotation")
                     if type_annotation:
                         type_text = self.get_node_text(type_annotation, source).strip()
                         if type_text.startswith(":"):
@@ -342,26 +338,20 @@ class TSXMapping(TypeScriptMapping):
             if node.type == "call_expression":
                 type_args = self.find_child_by_type(node, "type_arguments")
                 if type_args:
-                    types["generic_types"] = self.get_node_text(
-                        type_args, source
-                    ).strip()
+                    types["generic_types"] = self.get_node_text(type_args, source).strip()
 
             # Look for variable type annotation
             elif node.type == "variable_declarator":
                 type_annotation = self.find_child_by_type(node, "type_annotation")
                 if type_annotation:
-                    types["variable_type"] = self.get_node_text(
-                        type_annotation, source
-                    ).strip()
+                    types["variable_type"] = self.get_node_text(type_annotation, source).strip()
 
                 # Also check the call expression for generic types
                 call_expr = self.find_child_by_type(node, "call_expression")
                 if call_expr:
                     type_args = self.find_child_by_type(call_expr, "type_arguments")
                     if type_args:
-                        types["generic_types"] = self.get_node_text(
-                            type_args, source
-                        ).strip()
+                        types["generic_types"] = self.get_node_text(type_args, source).strip()
 
         except Exception as e:
             logger.error(f"Failed to extract TSX hook types: {e}")
@@ -383,10 +373,7 @@ class TSXMapping(TypeScriptMapping):
 
         # Check if function returns JSX
         node_text = self.get_node_text(node, source)
-        if any(
-            jsx_indicator in node_text
-            for jsx_indicator in ["<", "jsx", "React.createElement"]
-        ):
+        if any(jsx_indicator in node_text for jsx_indicator in ["<", "jsx", "React.createElement"]):
             # Check if function name starts with uppercase (React convention)
             name = self.extract_function_name(node, source)
             if name and len(name) > 0 and name[0].isupper():
@@ -466,11 +453,7 @@ class TSXMapping(TypeScriptMapping):
         # Include hook usage
         if node.type == "call_expression":
             hook_name = self.extract_hook_name(node, source)
-            if (
-                hook_name.startswith("use")
-                and len(hook_name) > 3
-                and hook_name[3].isupper()
-            ):
+            if hook_name.startswith("use") and len(hook_name) > 3 and hook_name[3].isupper():
                 return True
 
         # Include props interfaces
@@ -526,17 +509,13 @@ class TSXMapping(TypeScriptMapping):
             Enhanced chunk dictionary with TSX metadata
         """
         # Start with base TypeScript enhanced chunk
-        chunk = super().create_enhanced_chunk(
-            node, source, file_path, chunk_type, name, **extra_fields
-        )
+        chunk = super().create_enhanced_chunk(node, source, file_path, chunk_type, name, **extra_fields)
 
         # Add TSX-specific enhancements
         if node:
             try:
                 # Add component props type for React components
-                if chunk_type == ChunkType.FUNCTION and self.is_react_component(
-                    node, source
-                ):
+                if chunk_type == ChunkType.FUNCTION and self.is_react_component(node, source):
                     props_type = self.extract_component_props_type(node, source)
                     if props_type:
                         extra_fields["props_type"] = props_type
@@ -561,9 +540,7 @@ class TSXMapping(TypeScriptMapping):
 
         return chunk
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve relative import path to absolute file path.
 
         Args:

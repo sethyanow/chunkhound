@@ -273,9 +273,7 @@ class KotlinMapping(BaseMapping):
             # Look for modifiers which contain annotations
             modifiers_node = self.find_child_by_type(node, "modifiers")
             if modifiers_node:
-                annotation_nodes = self.find_children_by_type(
-                    modifiers_node, "annotation"
-                )
+                annotation_nodes = self.find_children_by_type(modifiers_node, "annotation")
                 for ann_node in annotation_nodes:
                     annotation_text = self.get_node_text(ann_node, source).strip()
                     if annotation_text:
@@ -540,9 +538,7 @@ class KotlinMapping(BaseMapping):
             elif node.type == "function_declaration":
                 name = self.extract_function_name(node, source)
             elif node.type == "property_declaration":
-                name = self.extract_function_name(
-                    node, source
-                )  # Properties handled like functions
+                name = self.extract_function_name(node, source)  # Properties handled like functions
             else:
                 # Try to get name from identifier
                 name_node = self.find_child_by_type(node, "identifier")
@@ -733,9 +729,7 @@ class KotlinMapping(BaseMapping):
 
         return None
 
-    def extract_name(
-        self, concept: UniversalConcept, captures: dict[str, Any], content: bytes
-    ) -> str:
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, Any], content: bytes) -> str:
         """Extract name from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -804,9 +798,7 @@ class KotlinMapping(BaseMapping):
 
         return "unnamed"
 
-    def extract_content(
-        self, concept: UniversalConcept, captures: dict[str, Any], content: bytes
-    ) -> str:
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, Any], content: bytes) -> str:
         """Extract content from captures for this concept."""
         source = content.decode("utf-8")
 
@@ -819,9 +811,7 @@ class KotlinMapping(BaseMapping):
 
         return ""
 
-    def extract_metadata(
-        self, concept: UniversalConcept, captures: dict[str, Any], content: bytes
-    ) -> dict[str, Any]:
+    def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Any], content: bytes) -> dict[str, Any]:
         """Extract Kotlin-specific metadata."""
         source = content.decode("utf-8")
         metadata: dict[str, Any] = {}

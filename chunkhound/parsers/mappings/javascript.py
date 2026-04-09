@@ -304,9 +304,7 @@ class JavaScriptMapping(BaseMapping, JSFamilyExtraction):
                 if key_node.type in ["identifier", "property_identifier"]:
                     return self.get_node_text(key_node, source)
                 elif key_node.type == "string":
-                    return self.clean_string_literal(
-                        self.get_node_text(key_node, source)
-                    )
+                    return self.clean_string_literal(self.get_node_text(key_node, source))
 
         return self.get_fallback_name(node, "function")
 
@@ -514,9 +512,7 @@ class JavaScriptMapping(BaseMapping, JSFamilyExtraction):
         node_text = self.get_node_text(node, source)
         return "function*" in node_text or "*" in node_text.split("(")[0]
 
-    def extract_jsdoc_tags(
-        self, node: TSNode | None, source: str
-    ) -> dict[str, list[str]]:
+    def extract_jsdoc_tags(self, node: TSNode | None, source: str) -> dict[str, list[str]]:
         """Extract JSDoc tags from a JSDoc comment.
 
         Args:
@@ -555,9 +551,7 @@ class JavaScriptMapping(BaseMapping, JSFamilyExtraction):
 
         return tags
 
-    def resolve_import_paths(
-        self, import_text: str, base_dir: Path, source_file: Path
-    ) -> list[Path]:
+    def resolve_import_paths(self, import_text: str, base_dir: Path, source_file: Path) -> list[Path]:
         """Resolve JavaScript import to file path.
 
         Handles ES6 imports and CommonJS require statements, resolving them to

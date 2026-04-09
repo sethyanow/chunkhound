@@ -56,9 +56,7 @@ class ChunkHoundDaemon(MCPServerBase):
         # True only after we successfully bound the socket and wrote the lock
         self._lock_written = False
         self._auth_token: str | None = None  # Set before accepting connections
-        delay_str = os.environ.get(
-            "CHUNKHOUND_DAEMON_SHUTDOWN_DELAY", str(_DEFAULT_SHUTDOWN_DELAY)
-        )
+        delay_str = os.environ.get("CHUNKHOUND_DAEMON_SHUTDOWN_DELAY", str(_DEFAULT_SHUTDOWN_DELAY))
         try:
             self._shutdown_delay = float(delay_str)
         except ValueError:
@@ -106,25 +104,18 @@ class ChunkHoundDaemon(MCPServerBase):
             self._auth_token = auth_token
 
             # Start IPC server; on Windows actual address differs (port 0 → real port)
-            server, actual_address = await ipc.create_server(
-                self._socket_path, self._handle_client
-            )
+            server, actual_address = await ipc.create_server(self._socket_path, self._handle_client)
             self._socket_path = actual_address
 
             # Write lock file so proxies can discover us
-            self._discovery.write_lock(
-                os.getpid(), self._socket_path, auth_token=auth_token
-            )
+            self._discovery.write_lock(os.getpid(), self._socket_path, auth_token=auth_token)
 
             # Post-write validation: on Windows two daemons can race to bind
             # different OS-assigned ports and both write the lock.  Verify our
             # PID is the one recorded; if not, the other daemon won — shut down.
             written_lock = self._discovery.read_lock()
             if written_lock is None or written_lock.get("pid") != os.getpid():
-                self.debug_log(
-                    "Lock file PID mismatch after write — another daemon won the race; "
-                    "shutting down"
-                )
+                self.debug_log("Lock file PID mismatch after write — another daemon won the race; shutting down")
                 self._shutdown_event.set()
                 return
 
@@ -137,9 +128,7 @@ class ChunkHoundDaemon(MCPServerBase):
                 self._discovery.write_registry_entry(os.getpid(), self._socket_path)
             except Exception as e:
                 self.debug_log(f"Registry publish failed (non-fatal): {e}")
-            self.debug_log(
-                f"Lock file written (pid={os.getpid()}, address={self._socket_path})"
-            )
+            self.debug_log(f"Lock file written (pid={os.getpid()}, address={self._socket_path})")
 
             # Start PID poll background task
             self._pid_poll_task = asyncio.create_task(self._client_manager.poll_pids())
@@ -195,9 +184,7 @@ class ChunkHoundDaemon(MCPServerBase):
 
             # Auth token check — reject unknown clients silently to avoid
             # leaking information about the expected token value.
-            if self._auth_token is not None and (
-                reg.get("auth_token") != self._auth_token
-            ):
+            if self._auth_token is not None and (reg.get("auth_token") != self._auth_token):
                 return
 
             raw_pid = reg.get("pid", 0)
@@ -249,9 +236,7 @@ class ChunkHoundDaemon(MCPServerBase):
     # MCP JSON-RPC dispatch
     # ------------------------------------------------------------------
 
-    async def _dispatch_mcp(
-        self, msg: dict[str, Any], client_id: str
-    ) -> dict[str, Any] | None:
+    async def _dispatch_mcp(self, msg: dict[str, Any], client_id: str) -> dict[str, Any] | None:
         """Route a JSON-RPC 2.0 message to the correct handler.
 
         Returns a JSON-RPC response dict, or None for notifications.

@@ -61,19 +61,13 @@ class QueryExpander:
 
         # For child nodes: prioritize current query, add minimal parent context
         # Take last 1-2 ancestors (not more to avoid redundancy)
-        parent_context = (
-            context.ancestors[-2:]
-            if len(context.ancestors) >= 2
-            else context.ancestors[-1:]
-        )
+        parent_context = context.ancestors[-2:] if len(context.ancestors) >= 2 else context.ancestors[-1:]
         context_str = " → ".join(parent_context)
 
         # Current query FIRST (position bias optimization), then context
         return f"{query} | Context: {context_str}"
 
-    async def expand_query_with_llm(
-        self, query: str, context: ResearchContext
-    ) -> list[str]:
+    async def expand_query_with_llm(self, query: str, context: ResearchContext) -> list[str]:
         """Expand query into multiple diverse semantic search queries.
 
         Uses LLM to generate different perspectives on the same question,
@@ -95,7 +89,10 @@ class QueryExpander:
                 "queries": {
                     "type": "array",
                     "items": {"type": "string"},
-                    "description": f"Array of exactly {NUM_LLM_EXPANDED_QUERIES} expanded search queries (semantically complete sentences)",
+                    "description": (
+                        f"Array of exactly {NUM_LLM_EXPANDED_QUERIES}"
+                        " expanded search queries (semantically complete sentences)"
+                    ),
                 }
             },
             "required": ["queries"],
@@ -119,9 +116,7 @@ class QueryExpander:
             num_queries=NUM_LLM_EXPANDED_QUERIES,
         )
 
-        logger.debug(
-            f"Query expansion budget: {QUERY_EXPANSION_TOKENS:,} tokens (model: {llm.model})"
-        )
+        logger.debug(f"Query expansion budget: {QUERY_EXPANSION_TOKENS:,} tokens (model: {llm.model})")
 
         try:
             result = await llm.complete_structured(
@@ -136,7 +131,8 @@ class QueryExpander:
             # Validation: expect exactly 2 queries from LLM
             if not expanded or len(expanded) < NUM_LLM_EXPANDED_QUERIES:
                 logger.warning(
-                    f"LLM returned {len(expanded) if expanded else 0} queries, expected {NUM_LLM_EXPANDED_QUERIES}, using original query only"
+                    f"LLM returned {len(expanded) if expanded else 0} queries,"
+                    f" expected {NUM_LLM_EXPANDED_QUERIES}, using original query only"
                 )
                 return [query]
 
@@ -147,9 +143,7 @@ class QueryExpander:
             # Original query goes first for position bias in embedding models
             final_queries = [query] + expanded[:NUM_LLM_EXPANDED_QUERIES]
 
-            logger.debug(
-                f"Expanded query into {len(final_queries)} variations: {final_queries}"
-            )
+            logger.debug(f"Expanded query into {len(final_queries)} variations: {final_queries}")
             return final_queries
 
         except Exception as e:

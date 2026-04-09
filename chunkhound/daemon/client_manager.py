@@ -33,9 +33,7 @@ class ClientManager:
         self._sessions: dict[str, ClientSession] = {}
         self._on_empty = on_empty
 
-    def register(
-        self, client_id: str, pid: int, writer: asyncio.StreamWriter
-    ) -> ClientSession:
+    def register(self, client_id: str, pid: int, writer: asyncio.StreamWriter) -> ClientSession:
         """Register a new client and return its session object."""
         session = ClientSession(client_id=client_id, pid=pid, writer=writer)
         self._sessions[client_id] = session
@@ -58,11 +56,7 @@ class ClientManager:
         """
         while True:
             await asyncio.sleep(_PID_POLL_INTERVAL)
-            dead = [
-                cid
-                for cid, sess in list(self._sessions.items())
-                if not pid_alive(sess.pid)
-            ]
+            dead = [cid for cid, sess in list(self._sessions.items()) if not pid_alive(sess.pid)]
             for cid in dead:
                 sess = self._sessions.get(cid)
                 if sess is None:

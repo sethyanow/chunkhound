@@ -37,20 +37,14 @@ def _build_cleanup_provider_configs(
         synthesis_config["model"] = cleanup_model
 
     provider = synthesis_config.get("provider")
-    if (
-        cleanup_effort
-        and isinstance(provider, str)
-        and provider in ("codex-cli", "openai")
-    ):
+    if cleanup_effort and isinstance(provider, str) and provider in ("codex-cli", "openai"):
         synthesis_config = synthesis_config.copy()
         synthesis_config["reasoning_effort"] = cleanup_effort
 
     return utility_config, synthesis_config
 
 
-def _try_load_llm_config_from_env(
-    *, formatter: RichOutputFormatter
-) -> LLMConfig | None:
+def _try_load_llm_config_from_env(*, formatter: RichOutputFormatter) -> LLMConfig | None:
     if not _has_llm_env():
         return None
     try:
@@ -60,9 +54,7 @@ def _try_load_llm_config_from_env(
         return None
 
 
-def _resolve_llm_config_for_cleanup(
-    *, config: Config, formatter: RichOutputFormatter
-) -> LLMConfig | None:
+def _resolve_llm_config_for_cleanup(*, config: Config, formatter: RichOutputFormatter) -> LLMConfig | None:
     llm_config = config.llm
     if llm_config is None:
         llm_config = _try_load_llm_config_from_env(formatter=formatter)
@@ -101,10 +93,8 @@ def _log_cleanup_model_selection(
         resolved_model, _model_source = CodexCLIProvider.describe_model_resolution(
             model if isinstance(model, str) else None
         )
-        resolved_effort, _effort_source = (
-            CodexCLIProvider.describe_reasoning_effort_resolution(
-                effort if isinstance(effort, str) else None
-            )
+        resolved_effort, _effort_source = CodexCLIProvider.describe_reasoning_effort_resolution(
+            effort if isinstance(effort, str) else None
         )
         formatter.info(
             "Cleanup model selection: "
@@ -114,10 +104,7 @@ def _log_cleanup_model_selection(
         return
 
     effort_display = f", reasoning_effort={effort}" if effort else ""
-    formatter.info(
-        f"Cleanup model selection: provider={provider}, model={model}"
-        f"{effort_display}{suffix}"
-    )
+    formatter.info(f"Cleanup model selection: provider={provider}, model={model}{effort_display}{suffix}")
 
 
 def _build_llm_manager_for_cleanup(
@@ -160,10 +147,7 @@ def resolve_cleanup_config_and_llm_manager(
     if cleanup_mode != "llm":
         raise AutoDocCLIExitError(
             exit_code=2,
-            errors=(
-                "Unsupported AutoDoc cleanup mode: "
-                f"{cleanup_mode!r}. AutoDoc cleanup now requires an LLM.",
-            ),
+            errors=(f"Unsupported AutoDoc cleanup mode: {cleanup_mode!r}. AutoDoc cleanup now requires an LLM.",),
         )
 
     llm_manager = resolve_llm_manager(config=config, formatter=formatter)

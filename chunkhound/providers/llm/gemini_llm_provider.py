@@ -52,14 +52,10 @@ class GeminiLLMProvider(LLMProvider):
             max_retries: Number of retry attempts for failed requests
         """
         if not GENAI_AVAILABLE:
-            raise ImportError(
-                "google-genai not available - install with: uv add google-genai"
-            )
+            raise ImportError("google-genai not available - install with: uv add google-genai")
 
         if not api_key:
-            raise ValueError(
-                "Gemini API key required. Get one at: https://aistudio.google.com/apikey"
-            )
+            raise ValueError("Gemini API key required. Get one at: https://aistudio.google.com/apikey")
 
         self._api_key = api_key
         self._model = model
@@ -71,9 +67,7 @@ class GeminiLLMProvider(LLMProvider):
         # Note: Google SDK applies these at client level, not per-request
         http_options = types.HttpOptions(
             timeout=timeout * 1000,  # SDK expects milliseconds
-            retry_options=types.HttpRetryOptions(attempts=max_retries)
-            if max_retries is not None
-            else None,
+            retry_options=types.HttpRetryOptions(attempts=max_retries) if max_retries is not None else None,
         )
         self._client = genai.Client(api_key=api_key, http_options=http_options)
 
@@ -126,9 +120,7 @@ class GeminiLLMProvider(LLMProvider):
         elif "gemini-2.5" in self._model:
             # Gemini 2.5 uses thinking_budget (convert level to budget)
             if self._thinking_level == "low":
-                config_kwargs["thinking_config"] = types.ThinkingConfig(
-                    thinking_budget=0
-                )
+                config_kwargs["thinking_config"] = types.ThinkingConfig(thinking_budget=0)
             # Default/high: let model decide thinking budget
 
         # Add structured output config if schema provided
@@ -154,28 +146,20 @@ class GeminiLLMProvider(LLMProvider):
 
             # Handle specific error codes
             if code == 404:
-                return RuntimeError(
-                    f"Gemini model '{self._model}' not found. "
-                    f"Check model name or API availability."
-                )
+                return RuntimeError(f"Gemini model '{self._model}' not found. Check model name or API availability.")
             elif code == 429:
                 return RuntimeError(
                     f"Gemini rate limit exceeded during {operation}. "
                     f"Please retry after a delay or reduce request frequency."
                 )
             elif code == 400:
-                return RuntimeError(
-                    f"Invalid Gemini request during {operation}: {message}"
-                )
+                return RuntimeError(f"Invalid Gemini request during {operation}: {message}")
             elif code in (401, 403):
                 return RuntimeError(
-                    f"Gemini authentication failed: {message}. "
-                    f"Check your API key at https://aistudio.google.com/apikey"
+                    f"Gemini authentication failed: {message}. Check your API key at https://aistudio.google.com/apikey"
                 )
             else:
-                return RuntimeError(
-                    f"Gemini API error ({code}) during {operation}: {message}"
-                )
+                return RuntimeError(f"Gemini API error ({code}) during {operation}: {message}")
         else:
             return RuntimeError(f"Gemini {operation} failed: {e}")
 
@@ -219,8 +203,7 @@ class GeminiLLMProvider(LLMProvider):
             content = response.text
             if not content or not content.strip():
                 raise RuntimeError(
-                    "Gemini returned empty response. "
-                    "This may indicate a content filter, API error, or model refusal."
+                    "Gemini returned empty response. This may indicate a content filter, API error, or model refusal."
                 )
 
             # Extract usage metadata
@@ -228,9 +211,7 @@ class GeminiLLMProvider(LLMProvider):
                 usage = response.usage_metadata
                 prompt_tokens = getattr(usage, "prompt_token_count", 0)
                 completion_tokens = getattr(usage, "candidates_token_count", 0)
-                total_tokens = getattr(
-                    usage, "total_token_count", prompt_tokens + completion_tokens
-                )
+                total_tokens = getattr(usage, "total_token_count", prompt_tokens + completion_tokens)
 
                 self._prompt_tokens += prompt_tokens
                 self._completion_tokens += completion_tokens
@@ -262,8 +243,7 @@ class GeminiLLMProvider(LLMProvider):
                 "FINISHREASON_RECITATION",
             ):
                 raise RuntimeError(
-                    f"Gemini response blocked ({finish_reason}). "
-                    "Try rephrasing your query or adjusting the prompt."
+                    f"Gemini response blocked ({finish_reason}). Try rephrasing your query or adjusting the prompt."
                 )
 
             return LLMResponse(
@@ -325,18 +305,14 @@ class GeminiLLMProvider(LLMProvider):
             # Extract response content
             content = response.text
             if not content or not content.strip():
-                raise RuntimeError(
-                    "Gemini structured completion returned empty response"
-                )
+                raise RuntimeError("Gemini structured completion returned empty response")
 
             # Extract usage metadata
             if hasattr(response, "usage_metadata") and response.usage_metadata:
                 usage = response.usage_metadata
                 prompt_tokens = getattr(usage, "prompt_token_count", 0)
                 completion_tokens = getattr(usage, "candidates_token_count", 0)
-                total_tokens = getattr(
-                    usage, "total_token_count", prompt_tokens + completion_tokens
-                )
+                total_tokens = getattr(usage, "total_token_count", prompt_tokens + completion_tokens)
 
                 self._prompt_tokens += prompt_tokens
                 self._completion_tokens += completion_tokens
@@ -381,9 +357,7 @@ class GeminiLLMProvider(LLMProvider):
         max_completion_tokens: int = 4096,
     ) -> list[LLMResponse]:
         """Generate completions for multiple prompts concurrently."""
-        tasks = [
-            self.complete(prompt, system, max_completion_tokens) for prompt in prompts
-        ]
+        tasks = [self.complete(prompt, system, max_completion_tokens) for prompt in prompts]
         return await asyncio.gather(*tasks)
 
     def estimate_tokens(self, text: str) -> int:

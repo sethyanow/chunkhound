@@ -38,10 +38,7 @@ def setup_logging(verbose: bool = False) -> None:
         logger.add(
             sys.stderr,
             level="WARNING",
-            format=(
-                "<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | "
-                "<level>{message}</level>"
-            ),
+            format=("<green>{time:HH:mm:ss}</green> | <level>{level: <8}</level> | <level>{message}</level>"),
         )
     # Also set stdlib logging level to avoid mixed loggers being noisy
     _pylogging.basicConfig(level=_pylogging.DEBUG if verbose else _pylogging.ERROR)
@@ -96,9 +93,7 @@ async def async_main() -> None:
 
     # Validate args and create config
     # Special-case: index subtools (--simulate, --check-ignores) never require embeddings
-    if args.command == "index" and (
-        getattr(args, "simulate", False) or getattr(args, "check_ignores", False)
-    ):
+    if args.command == "index" and (getattr(args, "simulate", False) or getattr(args, "check_ignores", False)):
         setattr(args, "no_embeddings", True)
 
     # For the internal _daemon command, map --project-dir to args.path so that
@@ -120,9 +115,7 @@ async def async_main() -> None:
 
                 if wizard_config:
                     # Re-validate with new config
-                    config, validation_errors = create_validated_config(
-                        args, args.command
-                    )
+                    config, validation_errors = create_validated_config(args, args.command)
                 else:
                     # Wizard was run but returned None (user cancelled save)
                     # Exit gracefully without showing original validation errors
@@ -132,9 +125,7 @@ async def async_main() -> None:
         # If we still have errors after wizard (or wizard was skipped/cancelled)
         if validation_errors:
             # Check if this is an embedding-related error
-            embedding_error = any(
-                "embedding provider" in str(e).lower() for e in validation_errors
-            )
+            embedding_error = any("embedding provider" in str(e).lower() for e in validation_errors)
 
             # Log all errors to stderr
             for error in validation_errors:
@@ -213,10 +204,7 @@ def main() -> None:
     except ImportError as e:
         # More specific handling for import errors
         logger.error(f"Import error: {e}")
-        logger.info(
-            "This usually means a dependency is missing. "
-            "Try: uv tool install chunkhound"
-        )
+        logger.info("This usually means a dependency is missing. Try: uv tool install chunkhound")
         import traceback
 
         traceback.print_exc()
@@ -224,10 +212,7 @@ def main() -> None:
     except Exception as e:
         # Check if this is a Pydantic validation error for missing provider
         error_str = str(e)
-        if (
-            "validation error for EmbeddingConfig" in error_str
-            and "provider" in error_str
-        ):
+        if "validation error for EmbeddingConfig" in error_str and "provider" in error_str:
             logger.error(
                 "Embedding provider must be specified. "
                 "Choose from: openai, voyageai, or use an OpenAI-compatible endpoint.\n"

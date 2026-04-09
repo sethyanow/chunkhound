@@ -10,9 +10,9 @@ from .core import Keys, TerminalConfig
 from .exceptions import (
     TerminalConfigurationError,
     TerminalError,
-    TerminalInputTimeout,
+    TerminalInputTimeoutError,
     TerminalSetupError,
-    TerminalUnsupportedPlatform,
+    TerminalUnsupportedPlatformError,
 )
 from .providers.base import create_provider
 
@@ -215,8 +215,8 @@ __all__ = [
     # Exceptions
     "TerminalError",
     "TerminalSetupError",
-    "TerminalInputTimeout",
-    "TerminalUnsupportedPlatform",
+    "TerminalInputTimeoutError",
+    "TerminalUnsupportedPlatformError",
     "TerminalConfigurationError",
     # Global functions (readchar compatibility)
     "getkey",
