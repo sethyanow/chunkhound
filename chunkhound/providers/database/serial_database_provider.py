@@ -117,7 +117,7 @@ class SerialDatabaseProvider(ABC):
         """Establish database connection and initialize schema."""
         try:
             # Execute connection in DB thread to ensure proper initialization
-            self._execute_in_db_thread_sync("connect")
+            self._execute_in_db_thread_sync(self._executor_connect)
 
             # Initialize shared service instances for performance
             self._initialize_shared_instances()
@@ -139,7 +139,7 @@ class SerialDatabaseProvider(ABC):
         """Close database connection with optional checkpointing."""
         try:
             # Perform final operations in DB thread
-            self._execute_in_db_thread_sync("disconnect", skip_checkpoint)
+            self._execute_in_db_thread_sync(self._executor_disconnect, skip_checkpoint)
         finally:
             # Clear thread-local storage
             self._executor.clear_thread_local()
@@ -244,7 +244,7 @@ class SerialDatabaseProvider(ABC):
             return [], {"error": "Semantic search not supported by this provider"}
 
         return self._execute_in_db_thread_sync(
-            "search_semantic",
+            self._executor_search_semantic,
             query_embedding,
             provider,
             model,
@@ -267,7 +267,7 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
-        return self._execute_in_db_thread_sync("search_regex", pattern, page_size, offset, path_filter, fuzzy_path)
+        return self._execute_in_db_thread_sync(self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path)
 
     async def search_regex_async(
         self,
@@ -281,67 +281,67 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
-        return await self._execute_in_db_thread("search_regex", pattern, page_size, offset, path_filter, fuzzy_path)
+        return await self._execute_in_db_thread(self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path)
 
     async def execute_query_async(self, query: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         """Async variant of execute_query."""
-        return await self._execute_in_db_thread("execute_query", query, params)
+        return await self._execute_in_db_thread(self._executor_execute_query, query, params)
 
     async def get_stats_async(self) -> dict[str, int]:
         """Async variant of get_stats."""
-        return await self._execute_in_db_thread("get_stats")
+        return await self._execute_in_db_thread(self._executor_get_stats)
 
     async def delete_file_completely_async(self, file_path: str) -> bool:
         """Async variant of delete_file_completely."""
-        return await self._execute_in_db_thread("delete_file_completely", file_path)
+        return await self._execute_in_db_thread(self._executor_delete_file_completely, file_path)
 
     async def begin_transaction_async(self) -> None:
         """Async variant of begin_transaction."""
         if not hasattr(self, "_executor_begin_transaction"):
             logger.debug("begin_transaction not supported by this provider")
             return
-        await self._execute_in_db_thread("begin_transaction")
+        await self._execute_in_db_thread(self._executor_begin_transaction)
 
     async def commit_transaction_async(self, force_checkpoint: bool = False) -> None:
         """Async variant of commit_transaction."""
         if not hasattr(self, "_executor_commit_transaction"):
             logger.debug("commit_transaction not supported by this provider")
             return
-        await self._execute_in_db_thread("commit_transaction", force_checkpoint)
+        await self._execute_in_db_thread(self._executor_commit_transaction, force_checkpoint)
 
     async def rollback_transaction_async(self) -> None:
         """Async variant of rollback_transaction."""
         if not hasattr(self, "_executor_rollback_transaction"):
             logger.debug("rollback_transaction not supported by this provider")
             return
-        await self._execute_in_db_thread("rollback_transaction")
+        await self._execute_in_db_thread(self._executor_rollback_transaction)
 
     async def get_file_by_path_async(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Async variant of get_file_by_path."""
-        return await self._execute_in_db_thread("get_file_by_path", path, as_model)
+        return await self._execute_in_db_thread(self._executor_get_file_by_path, path, as_model)
 
     async def update_file_async(self, file_id: int, **kwargs: Any) -> None:
         """Async variant of update_file."""
-        await self._execute_in_db_thread("update_file", file_id, **kwargs)
+        await self._execute_in_db_thread(self._executor_update_file, file_id, **kwargs)
 
     async def insert_file_async(self, file: File) -> int:
         """Async variant of insert_file."""
-        return await self._execute_in_db_thread("insert_file", file)
+        return await self._execute_in_db_thread(self._executor_insert_file, file)
 
     async def get_chunks_by_file_id_async(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Async variant of get_chunks_by_file_id."""
-        return await self._execute_in_db_thread("get_chunks_by_file_id", file_id, as_model)
+        return await self._execute_in_db_thread(self._executor_get_chunks_by_file_id, file_id, as_model)
 
     async def insert_chunks_batch_async(self, chunks: list[Chunk]) -> list[int]:
         """Async variant of insert_chunks_batch."""
-        return await self._execute_in_db_thread("insert_chunks_batch", chunks)
+        return await self._execute_in_db_thread(self._executor_insert_chunks_batch, chunks)
 
     async def delete_chunks_batch_async(self, chunk_ids: list[int]) -> None:
         """Async variant of delete_chunks_batch."""
         if not hasattr(self, "_executor_delete_chunks_batch"):
             logger.debug("delete_chunks_batch not supported by this provider")
             return
-        await self._execute_in_db_thread("delete_chunks_batch", chunk_ids)
+        await self._execute_in_db_thread(self._executor_delete_chunks_batch, chunk_ids)
 
     # Async symbol/edge CRUD variants
 
@@ -349,29 +349,29 @@ class SerialDatabaseProvider(ABC):
         """Async variant of insert_symbols_batch."""
         if not symbols:
             return
-        await self._execute_in_db_thread("insert_symbols_batch", symbols)
+        await self._execute_in_db_thread(self._executor_insert_symbols_batch, symbols)
 
     async def delete_symbols_by_file_async(self, file_id: int) -> None:
         """Async variant of delete_symbols_by_file."""
-        await self._execute_in_db_thread("delete_symbols_by_file", file_id)
+        await self._execute_in_db_thread(self._executor_delete_symbols_by_file, file_id)
 
     async def delete_edges_by_file_async(self, file_id: int) -> None:
         """Async variant of delete_edges_by_file."""
-        await self._execute_in_db_thread("delete_edges_by_file", file_id)
+        await self._execute_in_db_thread(self._executor_delete_edges_by_file, file_id)
 
     async def query_symbols_by_file_async(self, file_id: int) -> list[dict[str, Any]]:
         """Async variant of query_symbols_by_file."""
-        return await self._execute_in_db_thread("query_symbols_by_file", file_id)
+        return await self._execute_in_db_thread(self._executor_query_symbols_by_file, file_id)
 
     async def query_symbol_fqns_by_file_async(self, file_id: int) -> dict[str, int]:
         """Async variant of query_symbol_fqns_by_file."""
-        return await self._execute_in_db_thread("query_symbol_fqns_by_file", file_id)
+        return await self._execute_in_db_thread(self._executor_query_symbol_fqns_by_file, file_id)
 
     async def insert_edges_batch_async(self, edges: list[EdgeRow]) -> None:
         """Async variant of insert_edges_batch."""
         if not edges:
             return
-        await self._execute_in_db_thread("insert_edges_batch", edges)
+        await self._execute_in_db_thread(self._executor_insert_edges_batch, edges)
 
     def search_chunks_regex(self, pattern: str, file_path: str | None = None) -> list[dict[str, Any]]:
         """Backward compatibility wrapper for legacy search_chunks_regex calls."""
@@ -389,7 +389,7 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_text"):
             return [], {"error": "Text search not supported by this provider"}
 
-        return self._execute_in_db_thread_sync("search_text", query, page_size, offset)
+        return self._execute_in_db_thread_sync(self._executor_search_text, query, page_size, offset)
 
     # Capability detection methods
 
@@ -412,28 +412,28 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_begin_transaction"):
             logger.debug("begin_transaction not supported by this provider")
             return
-        self._execute_in_db_thread_sync("begin_transaction")
+        self._execute_in_db_thread_sync(self._executor_begin_transaction)
 
     def commit_transaction(self, force_checkpoint: bool = False) -> None:
         """Commit the current transaction if supported."""
         if not hasattr(self, "_executor_commit_transaction"):
             logger.debug("commit_transaction not supported by this provider")
             return
-        self._execute_in_db_thread_sync("commit_transaction", force_checkpoint)
+        self._execute_in_db_thread_sync(self._executor_commit_transaction, force_checkpoint)
 
     def rollback_transaction(self) -> None:
         """Rollback the current transaction if supported."""
         if not hasattr(self, "_executor_rollback_transaction"):
             logger.debug("rollback_transaction not supported by this provider")
             return
-        self._execute_in_db_thread_sync("rollback_transaction")
+        self._execute_in_db_thread_sync(self._executor_rollback_transaction)
 
     def delete_chunks_batch(self, chunk_ids: list[int]) -> None:
         """Delete multiple chunks by ID efficiently (with embedding cleanup)."""
         if not hasattr(self, "_executor_delete_chunks_batch"):
             logger.debug("delete_chunks_batch not supported by this provider")
             return
-        self._execute_in_db_thread_sync("delete_chunks_batch", chunk_ids)
+        self._execute_in_db_thread_sync(self._executor_delete_chunks_batch, chunk_ids)
 
     # File processing integration
 
