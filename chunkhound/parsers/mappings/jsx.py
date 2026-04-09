@@ -174,7 +174,7 @@ class JSXMapping(JavaScriptMapping):
         return base_query + jsx_comment_query
 
     # Universal Concept integration: override to TSX-friendly patterns
-    def get_query_for_concept(self, concept: "UniversalConcept") -> str | None:  # type: ignore[override]
+    def get_query_for_concept(self, concept: "UniversalConcept") -> str | None:
         if concept == UniversalConcept.DEFINITION:
             return "\n".join(
                 [

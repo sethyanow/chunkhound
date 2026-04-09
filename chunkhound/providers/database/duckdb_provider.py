@@ -2681,7 +2681,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Executor method for rollback_transaction - runs in DB thread."""
         try:
             conn.execute("ROLLBACK")
-        except duckdb.TransactionException:  # type: ignore[attr-defined]  # exists at runtime, missing from stubs
+        except duckdb.TransactionException:
             # No active transaction — defensive rollback in except handlers is safe.
             logger.warning("Rollback skipped (no active transaction)")
         state["transaction_active"] = False

@@ -26,7 +26,7 @@ def _normalize_schema_for_structured_outputs(schema: dict[str, Any]) -> dict[str
         Normalized schema with additionalProperties: false on all objects
     """
     if not isinstance(schema, dict):
-        return schema  # type: ignore[unreachable]  # Defensive guard for runtime
+        return schema
 
     result = schema.copy()
 

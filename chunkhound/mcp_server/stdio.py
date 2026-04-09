@@ -100,7 +100,7 @@ class StdioMCPServer(MCPServerBase):
                         CodexCLIProvider,
                     )
 
-                    async def _stub_run_exec(  # type: ignore[override]
+                    async def _stub_run_exec(
                         self,
                         text,
                         cwd=None,
@@ -120,8 +120,8 @@ class StdioMCPServer(MCPServerBase):
                     def _stub_available(self) -> bool:  # pragma: no cover
                         return True
 
-                    CodexCLIProvider._run_exec = _stub_run_exec  # type: ignore[attr-defined]
-                    CodexCLIProvider._codex_available = _stub_available  # type: ignore[attr-defined]
+                    CodexCLIProvider._run_exec = _stub_run_exec
+                    CodexCLIProvider._codex_available = _stub_available
                 except Exception:
                     pass
         except Exception:
@@ -131,7 +131,7 @@ class StdioMCPServer(MCPServerBase):
         # Create MCP server instance (lazy import if SDK is present)
         if not _MCP_AVAILABLE:
             # Defer server creation; fallback path implemented in run()
-            self.server = None  # type: ignore
+            self.server = None
         else:
             from mcp.server import Server
 

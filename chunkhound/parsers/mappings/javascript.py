@@ -144,7 +144,7 @@ class JavaScriptMapping(BaseMapping, JSFamilyExtraction):
         """
 
     # Universal Concept integration -------------------------------------------------
-    def get_query_for_concept(self, concept: "UniversalConcept") -> str | None:  # type: ignore[override]
+    def get_query_for_concept(self, concept: "UniversalConcept") -> str | None:
         """Provide a richer DEFINITION query including top-level config patterns.
 
         - Keep standard function/class patterns

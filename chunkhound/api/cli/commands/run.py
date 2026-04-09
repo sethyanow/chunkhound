@@ -416,7 +416,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
             if str(db_path) != ":memory:" and not db_path.parent.exists():
                 # If parent path doesn't exist, switch to in-memory
                 try:
-                    config.database.path = Path(":memory:")  # type: ignore[attr-defined]
+                    config.database.path = Path(":memory:")
                 except Exception:
                     pass
         # If still not in-memory, ensure parent exists
@@ -426,7 +426,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
     except Exception:
         # As a last resort, in-memory
         try:
-            config.database.path = Path(":memory:")  # type: ignore[attr-defined]
+            config.database.path = Path(":memory:")
         except Exception:
             pass
 
@@ -455,7 +455,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
         import time as _t
 
         _t0 = _t.perf_counter()
-        files = await indexing_coordinator._discover_files(  # type: ignore[attr-defined]
+        files = await indexing_coordinator._discover_files(
             base_dir, processed_patterns, exclude_patterns
         )
         _t1 = _t.perf_counter()
@@ -498,7 +498,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
         except Exception:
             pass
     else:
-        files = await indexing_coordinator._discover_files(  # type: ignore[attr-defined]
+        files = await indexing_coordinator._discover_files(
             base_dir, processed_patterns, exclude_patterns
         )
 

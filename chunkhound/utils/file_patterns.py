@@ -579,7 +579,7 @@ def walk_subtree_worker(
                     build_ignore_engine,
                     build_repo_aware_ignore_engine,
                     build_repo_aware_ignore_engine_from_roots,
-                )  # type: ignore
+                )
 
                 if isinstance(ignore_engine_args, dict) and ignore_engine_args.get("mode") == "repo_aware":
                     roots = ignore_engine_args.get("roots")

@@ -34,7 +34,7 @@ def build_git_pathspecs(rel_prefix: str | None, include_patterns: Sequence[str])
     """
     # Import summarizer lazily to avoid cycles
     from chunkhound.utils.file_patterns import (
-        _summarize_include_patterns,  # type: ignore
+        _summarize_include_patterns,
     )
 
     rel = (rel_prefix or "").strip("/")

@@ -265,7 +265,7 @@ class RapidYamlParser(LanguageParser):
         # Delegate cleanup if supported
         if hasattr(self._fallback, "cleanup"):
             try:
-                self._fallback.cleanup()  # type: ignore[call-arg]
+                self._fallback.cleanup()
             except Exception:
                 pass
 

@@ -186,7 +186,7 @@ class HaskellMapping(BaseMapping):
     # Uses BaseMapping default filtering behaviour.
 
     # LanguageMapping protocol methods --------------------------------------------
-    def get_query_for_concept(self, concept: UniversalConcept) -> str | None:  # type: ignore[override]
+    def get_query_for_concept(self, concept: UniversalConcept) -> str | None:
         """Provide universal concept queries for Haskell.
 
         Returns:
@@ -259,7 +259,7 @@ class HaskellMapping(BaseMapping):
 
         return None
 
-    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:  # type: ignore[override]
+    def extract_name(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract name for a universal concept using Haskell semantics."""
         # Decode once
         source = content.decode("utf-8", errors="replace")
@@ -314,7 +314,7 @@ class HaskellMapping(BaseMapping):
 
         return f"unnamed_{concept.value}"
 
-    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:  # type: ignore[override]
+    def extract_content(self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes) -> str:
         """Extract raw content for the captured node."""
         source = content.decode("utf-8", errors="replace")
         node = captures.get("definition") or next(iter(captures.values()), None)
@@ -322,7 +322,7 @@ class HaskellMapping(BaseMapping):
 
     def extract_metadata(
         self, concept: UniversalConcept, captures: dict[str, TSNode], content: bytes
-    ) -> dict[str, Any]:  # type: ignore[override]
+    ) -> dict[str, Any]:
         """Provide light metadata for concepts."""
         meta: dict[str, Any] = {
             "concept": concept.value,

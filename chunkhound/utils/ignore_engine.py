@@ -650,7 +650,7 @@ def _try_build_libgit2_repo_aware(
     try:
         _LIBGIT2_WARNED
     except NameError:
-        _LIBGIT2_WARNED = False  # type: ignore[var-annotated]
+        _LIBGIT2_WARNED = False
     # Only attempt when gitignore is part of sources
     if "gitignore" not in (sources or []):
         return None
@@ -661,7 +661,7 @@ def _try_build_libgit2_repo_aware(
             logger.warning(
                 "gitignore_backend=libgit2 requested but pygit2 is not available; falling back to python backend"
             )
-            _LIBGIT2_WARNED = True  # type: ignore[assignment]
+            _LIBGIT2_WARNED = True
         return None
     try:
         return RepoAwareLibgit2Evaluator(root, repo_roots, sources, chignore_file, config_exclude)
@@ -670,7 +670,7 @@ def _try_build_libgit2_repo_aware(
             logger.warning(
                 "gitignore_backend=libgit2 requested but initialization failed; falling back to python backend"
             )
-            _LIBGIT2_WARNED = True  # type: ignore[assignment]
+            _LIBGIT2_WARNED = True
         return None
 
 

@@ -870,7 +870,7 @@ async def semantic_diff_impl(
     # Step 1: Get changed lines from git diff
     changed_lines = _git_changed_lines(workspace_root, base, head)
     if "error" in changed_lines:
-        return changed_lines  # type: ignore[return-value]
+        return changed_lines
 
     # Step 2: Map changed lines to symbols
     changed_symbols = _map_lines_to_symbols(services, changed_lines)

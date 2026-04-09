@@ -1757,7 +1757,7 @@ class IndexingCoordinator(BaseService):
         # the entire tree in each worker when building repo-aware engines.
         precomputed_roots = []
         try:
-            from chunkhound.utils.ignore_engine import detect_repo_roots  # type: ignore
+            from chunkhound.utils.ignore_engine import detect_repo_roots
         except ImportError:
             detect_repo_roots = None  # type: ignore[assignment]
 
@@ -2455,7 +2455,7 @@ class IndexingCoordinator(BaseService):
                                     local_engine
                                     and getattr(local_engine, "matches", None)
                                     and local_engine.matches(fp, is_dir=False)
-                                ):  # type: ignore[attr-defined]
+                                ):
                                     continue
                             except Exception:
                                 pass
@@ -2525,7 +2525,7 @@ class IndexingCoordinator(BaseService):
 
             roots = _detect(
                 root,
-                cfg_excludes,  # type: ignore[arg-type]
+                cfg_excludes,
                 prune_ignored_gitfile_roots=prune_ignored_gitfile_roots,
             )
         except Exception:
@@ -2600,14 +2600,14 @@ class IndexingCoordinator(BaseService):
                     # Prune dirs by engine
                     pruned = []
                     for d in list(dn):
-                        if ignore_engine_obj.matches(cur / d, is_dir=True):  # type: ignore[attr-defined]
+                        if ignore_engine_obj.matches(cur / d, is_dir=True):
                             pruned.append(d)
                     for d in pruned:
                         dn.remove(d)
                     # Files
                     for name in fn:
                         fp = cur / name
-                        if ignore_engine_obj.matches(fp, is_dir=False):  # type: ignore[attr-defined]
+                        if ignore_engine_obj.matches(fp, is_dir=False):
                             continue
                         # Include filter
                         if _inc(fp, directory, patterns or [], pat_cache):
