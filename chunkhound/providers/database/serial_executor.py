@@ -7,7 +7,10 @@ import os
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
-from typing import Any
+from collections.abc import Callable
+from typing import Any, TypeVar, overload
+
+_T = TypeVar("_T")
 
 from loguru import logger
 
@@ -93,15 +96,20 @@ class SerialDatabaseExecutor:
             thread_name_prefix="serial-db",
         )
 
-    def execute_sync(self, provider: Any, operation_name: str, *args: Any, **kwargs: Any) -> Any:
-        """Execute named operation synchronously in DB thread.
+    @overload
+    def execute_sync(self, provider: Any, operation: Callable[..., _T], *args: Any, **kwargs: Any) -> _T: ...
+    @overload
+    def execute_sync(self, provider: Any, operation: str, *args: Any, **kwargs: Any) -> Any: ...
+    def execute_sync(self, provider: Any, operation: str | Callable[..., _T], *args: Any, **kwargs: Any) -> _T | Any:
+        """Execute operation synchronously in DB thread.
 
         All database operations MUST go through this method to ensure serialization.
         The connection and all state management happens exclusively in the executor thread.
 
         Args:
             provider: Database provider instance
-            operation_name: Name of the executor method to call (e.g., 'search_semantic')
+            operation: Either a callable (conn, state, *args, **kwargs) -> T to invoke
+                directly, or a string name resolved via getattr (legacy).
             *args: Positional arguments for the operation
             **kwargs: Keyword arguments for the operation
 
@@ -123,9 +131,12 @@ class SerialDatabaseExecutor:
             if hasattr(provider, "get_base_directory"):
                 state["base_directory"] = provider.get_base_directory()
 
-            # Execute operation - look for method named _executor_{operation_name}
-            op_func = getattr(provider, f"_executor_{operation_name}")
+            if callable(operation):
+                return operation(conn, state, *args, **kwargs)
+            op_func = getattr(provider, f"_executor_{operation}")
             return op_func(conn, state, *args, **kwargs)
+
+        operation_label = getattr(operation, "__name__", str(operation))
 
         # Run in executor synchronously with timeout (env override)
         future = self._db_executor.submit(executor_operation)
@@ -136,18 +147,25 @@ class SerialDatabaseExecutor:
         try:
             return future.result(timeout=timeout_s)
         except concurrent.futures.TimeoutError:
-            logger.error(f"Database operation '{operation_name}' timed out after {timeout_s} seconds")
-            raise TimeoutError(f"Operation '{operation_name}' timed out")
+            logger.error(f"Database operation '{operation_label}' timed out after {timeout_s} seconds")
+            raise TimeoutError(f"Operation '{operation_label}' timed out")
 
-    async def execute_async(self, provider: Any, operation_name: str, *args, **kwargs) -> Any:
-        """Execute named operation asynchronously in DB thread.
+    @overload
+    async def execute_async(self, provider: Any, operation: Callable[..., _T], *args: Any, **kwargs: Any) -> _T: ...
+    @overload
+    async def execute_async(self, provider: Any, operation: str, *args: Any, **kwargs: Any) -> Any: ...
+    async def execute_async(
+        self, provider: Any, operation: str | Callable[..., _T], *args: Any, **kwargs: Any
+    ) -> _T | Any:
+        """Execute operation asynchronously in DB thread.
 
         All database operations MUST go through this method to ensure serialization.
         The connection and all state management happens exclusively in the executor thread.
 
         Args:
             provider: Database provider instance
-            operation_name: Name of the executor method to call (e.g., 'search_semantic')
+            operation: Either a callable (conn, state, *args, **kwargs) -> T to invoke
+                directly, or a string name resolved via getattr (legacy).
             *args: Positional arguments for the operation
             **kwargs: Keyword arguments for the operation
 
@@ -156,7 +174,7 @@ class SerialDatabaseExecutor:
         """
         loop = asyncio.get_running_loop()
 
-        def executor_operation():
+        def executor_operation() -> Any:
             # Get thread-local connection (created on first access)
             conn = get_thread_local_connection(provider)
 
@@ -170,8 +188,9 @@ class SerialDatabaseExecutor:
             if hasattr(provider, "get_base_directory"):
                 state["base_directory"] = provider.get_base_directory()
 
-            # Execute operation - look for method named _executor_{operation_name}
-            op_func = getattr(provider, f"_executor_{operation_name}")
+            if callable(operation):
+                return operation(conn, state, *args, **kwargs)
+            op_func = getattr(provider, f"_executor_{operation}")
             return op_func(conn, state, *args, **kwargs)
 
         # Capture context for async compatibility

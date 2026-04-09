@@ -2,7 +2,10 @@
 
 from abc import ABC, abstractmethod
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from collections.abc import Callable
+from typing import TYPE_CHECKING, Any, TypeVar, overload
+
+_T = TypeVar("_T")
 
 from loguru import logger
 
@@ -143,13 +146,23 @@ class SerialDatabaseProvider(ABC):
             # Shutdown executor with Windows-specific handling
             self._executor.shutdown(wait=True)
 
-    def _execute_in_db_thread_sync(self, operation_name: str, *args, **kwargs) -> Any:
+    @overload
+    def _execute_in_db_thread_sync(self, operation: Callable[..., _T], *args: Any, **kwargs: Any) -> _T: ...
+    @overload
+    def _execute_in_db_thread_sync(self, operation: str, *args: Any, **kwargs: Any) -> Any: ...
+    def _execute_in_db_thread_sync(self, operation: str | Callable[..., _T], *args: Any, **kwargs: Any) -> _T | Any:
         """Execute operation synchronously in DB thread."""
-        return self._executor.execute_sync(self, operation_name, *args, **kwargs)
+        return self._executor.execute_sync(self, operation, *args, **kwargs)
 
-    async def _execute_in_db_thread(self, operation_name: str, *args, **kwargs) -> Any:
+    @overload
+    async def _execute_in_db_thread(self, operation: Callable[..., _T], *args: Any, **kwargs: Any) -> _T: ...
+    @overload
+    async def _execute_in_db_thread(self, operation: str, *args: Any, **kwargs: Any) -> Any: ...
+    async def _execute_in_db_thread(
+        self, operation: str | Callable[..., _T], *args: Any, **kwargs: Any
+    ) -> _T | Any:
         """Execute operation asynchronously in DB thread."""
-        return await self._executor.execute_async(self, operation_name, *args, **kwargs)
+        return await self._executor.execute_async(self, operation, *args, **kwargs)
 
     def get_base_directory(self) -> Path:
         """Get the current base directory for path normalization."""
