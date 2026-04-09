@@ -372,7 +372,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def create_schema(self) -> None:
         """Create database schema for files, chunks, and embeddings."""
-        return self._execute_in_db_thread_sync("create_schema")
+        return self._execute_in_db_thread_sync(self._executor_create_schema)
 
     def _executor_create_schema(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for create_schema - runs in DB thread."""
@@ -424,7 +424,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def create_indexes(self) -> None:
         """Create database indexes for performance optimization."""
-        return self._execute_in_db_thread_sync("create_indexes")
+        return self._execute_in_db_thread_sync(self._executor_create_indexes)
 
     def _executor_create_indexes(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for create_indexes - runs in DB thread."""
@@ -464,7 +464,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def create_vector_index(self, provider: str, model: str, dims: int, metric: str = "cosine") -> None:
         """Create vector index for specific provider/model/dims combination."""
-        return self._execute_in_db_thread_sync("create_vector_index", provider, model, dims, metric)
+        return self._execute_in_db_thread_sync(self._executor_create_vector_index, provider, model, dims, metric)
 
     def _executor_create_vector_index(
         self,
@@ -544,7 +544,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     # File Operations
     def insert_file(self, file: File) -> int:
         """Insert file record and return file ID."""
-        return self._execute_in_db_thread_sync("insert_file", file)
+        return self._execute_in_db_thread_sync(self._executor_insert_file, file)
 
     def _executor_insert_file(self, conn: Any, state: dict[str, Any], file: File) -> int:
         """Executor method for insert_file - runs in DB thread."""
@@ -578,7 +578,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         # We need to query back because merge_insert doesn't return the ID
         result = self._files_table.search().where(f"path = '{normalized_path}'").to_list()
         if result:
-            return result[0]["id"]
+            return result[0]["id"]  # type: ignore[no-any-return]  # lancedb to_list() -> List[dict]
         else:
             # This should not happen, but handle gracefully
             logger.error(f"Failed to retrieve file ID after merge_insert for path: {normalized_path}")
@@ -586,7 +586,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_file_by_path(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path."""
-        return self._execute_in_db_thread_sync("get_file_by_path", path, as_model)
+        return self._execute_in_db_thread_sync(self._executor_get_file_by_path, path, as_model)
 
     def _executor_get_file_by_path(
         self, conn: Any, state: dict[str, Any], path: str, as_model: bool = False
@@ -621,7 +621,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_file_by_id(self, file_id: int, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by ID."""
-        return self._execute_in_db_thread_sync("get_file_by_id", file_id, as_model)
+        return self._execute_in_db_thread_sync(self._executor_get_file_by_id, file_id, as_model)
 
     def _executor_get_file_by_id(
         self, conn: Any, state: dict[str, Any], file_id: int, as_model: bool = False
@@ -658,7 +658,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         **kwargs,
     ) -> None:
         """Update file record with new values."""
-        return self._execute_in_db_thread_sync("update_file", file_id, size_bytes, mtime, content_hash)
+        return self._execute_in_db_thread_sync(self._executor_update_file, file_id, size_bytes, mtime, content_hash)
 
     def _executor_update_file(
         self,
@@ -699,7 +699,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def delete_file_completely(self, file_path: str) -> bool:
         """Delete a file and all its chunks/embeddings completely."""
-        return self._execute_in_db_thread_sync("delete_file_completely", file_path)
+        return self._execute_in_db_thread_sync(self._executor_delete_file_completely, file_path)
 
     def _executor_delete_file_completely(self, conn: Any, state: dict[str, Any], file_path: str) -> bool:
         """Executor method for delete_file_completely - runs in DB thread."""
@@ -727,7 +727,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     # Chunk Operations
     def insert_chunk(self, chunk: Chunk) -> int:
         """Insert chunk record and return chunk ID."""
-        return self._execute_in_db_thread_sync("insert_chunk", chunk)
+        return self._execute_in_db_thread_sync(self._executor_insert_chunk, chunk)
 
     def _executor_insert_chunk(self, conn: Any, state: dict[str, Any], chunk: Chunk) -> int:
         """Executor method for insert_chunk - runs in DB thread."""
@@ -769,7 +769,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def insert_chunks_batch(self, chunks: list[Chunk]) -> list[int]:
         """Insert multiple chunks in batch using optimized DataFrame operations."""
-        return self._execute_in_db_thread_sync("insert_chunks_batch", chunks)
+        return self._execute_in_db_thread_sync(self._executor_insert_chunks_batch, chunks)
 
     def _executor_insert_chunks_batch(self, conn: Any, state: dict[str, Any], chunks: list[Chunk]) -> list[int]:
         """Executor method for insert_chunks_batch - runs in DB thread."""
@@ -833,7 +833,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_chunk_by_id(self, chunk_id: int, as_model: bool = False) -> dict[str, Any] | Chunk | None:
         """Get chunk record by ID."""
-        return self._execute_in_db_thread_sync("get_chunk_by_id", chunk_id, as_model)
+        return self._execute_in_db_thread_sync(self._executor_get_chunk_by_id, chunk_id, as_model)
 
     def _executor_get_chunk_by_id(
         self, conn: Any, state: dict[str, Any], chunk_id: int, as_model: bool = False
@@ -867,7 +867,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
         """Get all chunks for a specific file."""
-        return self._execute_in_db_thread_sync("get_chunks_by_file_id", file_id, as_model)
+        return self._execute_in_db_thread_sync(self._executor_get_chunks_by_file_id, file_id, as_model)
 
     def _executor_get_chunks_by_file_id(
         self, conn: Any, state: dict[str, Any], file_id: int, as_model: bool = False
@@ -903,7 +903,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_chunks_in_range(self, file_id: int, start_line: int, end_line: int) -> list[dict[str, Any]]:
         """Get all chunks overlapping a line range (pattern from context_retriever.py)."""
-        return self._execute_in_db_thread_sync("get_chunks_in_range", file_id, start_line, end_line)
+        return self._execute_in_db_thread_sync(self._executor_get_chunks_in_range, file_id, start_line, end_line)
 
     def _executor_get_chunks_in_range(
         self,
@@ -976,7 +976,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def delete_file_chunks(self, file_id: int) -> None:
         """Delete all chunks for a file."""
-        return self._execute_in_db_thread_sync("delete_file_chunks", file_id)
+        return self._execute_in_db_thread_sync(self._executor_delete_file_chunks, file_id)
 
     def _executor_delete_file_chunks(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         """Executor method for delete_file_chunks - runs in DB thread."""
@@ -988,7 +988,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def delete_chunk(self, chunk_id: int) -> None:
         """Delete a single chunk by ID."""
-        return self._execute_in_db_thread_sync("delete_chunk", chunk_id)
+        return self._execute_in_db_thread_sync(self._executor_delete_chunk, chunk_id)
 
     def _executor_delete_chunk(self, conn: Any, state: dict[str, Any], chunk_id: int) -> None:
         """Executor method for delete_chunk - runs in DB thread."""
@@ -1017,7 +1017,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         connection=None,
     ) -> int:
         """Insert multiple embedding vectors efficiently using merge_insert."""
-        return self._execute_in_db_thread_sync("insert_embeddings_batch", embeddings_data, batch_size)
+        return self._execute_in_db_thread_sync(self._executor_insert_embeddings_batch, embeddings_data, batch_size)
 
     def _executor_insert_embeddings_batch(
         self,
@@ -1294,7 +1294,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_existing_embeddings(self, chunk_ids: list[int], provider: str, model: str) -> set[int]:
         """Get set of chunk IDs that already have embeddings for given provider/model."""
-        return self._execute_in_db_thread_sync("get_existing_embeddings", chunk_ids, provider, model)
+        return self._execute_in_db_thread_sync(self._executor_get_existing_embeddings, chunk_ids, provider, model)
 
     def _executor_get_existing_embeddings(
         self,
@@ -1358,7 +1358,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_all_chunks_with_metadata(self) -> list[dict[str, Any]]:
         """Get all chunks with their metadata including file paths (provider-agnostic)."""
-        return self._execute_in_db_thread_sync("get_all_chunks_with_metadata")
+        return self._execute_in_db_thread_sync(self._executor_get_all_chunks_with_metadata)
 
     def get_scope_stats(self, scope_prefix: str | None) -> tuple[int, int]:
         """Return (total_files, total_chunks) under an optional scope prefix.
@@ -1367,7 +1367,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         chunk content when possible, but LanceDB table APIs may vary across
         versions; callers should treat failures as non-fatal.
         """
-        return self._execute_in_db_thread_sync("get_scope_stats", scope_prefix)
+        return self._execute_in_db_thread_sync(self._executor_get_scope_stats, scope_prefix)
 
     def _executor_get_scope_stats(self, conn: Any, state: dict[str, Any], scope_prefix: str | None) -> tuple[int, int]:
         if not self._files_table or not self._chunks_table:
@@ -1460,7 +1460,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_scope_file_paths(self, scope_prefix: str | None) -> list[str]:
         """Return file paths under an optional scope prefix."""
-        return self._execute_in_db_thread_sync("get_scope_file_paths", scope_prefix)
+        return self._execute_in_db_thread_sync(self._executor_get_scope_file_paths, scope_prefix)
 
     def _executor_get_scope_file_paths(self, conn: Any, state: dict[str, Any], scope_prefix: str | None) -> list[str]:
         if not self._files_table:
@@ -1685,7 +1685,7 @@ class LanceDBProvider(SerialDatabaseProvider):
             List of similar chunks with scores and metadata
         """
         return self._execute_in_db_thread_sync(
-            "find_similar_chunks",
+            self._executor_find_similar_chunks,
             chunk_id,
             provider,
             model,
@@ -1924,7 +1924,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     # Statistics and Monitoring
     def get_stats(self) -> dict[str, int]:
         """Get database statistics (file count, chunk count, etc.)."""
-        return self._execute_in_db_thread_sync("get_stats")
+        return self._execute_in_db_thread_sync(self._executor_get_stats)
 
     def _executor_get_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, int]:
         """Executor method for get_stats - runs in DB thread."""
@@ -1966,7 +1966,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_file_stats(self, file_id: int) -> dict[str, Any]:
         """Get statistics for a specific file."""
-        return self._execute_in_db_thread_sync("get_file_stats", file_id)
+        return self._execute_in_db_thread_sync(self._executor_get_file_stats, file_id)
 
     def _executor_get_file_stats(self, conn: Any, state: dict[str, Any], file_id: int) -> dict[str, Any]:
         """Executor method for get_file_stats - runs in DB thread."""
@@ -1985,7 +1985,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def get_provider_stats(self, provider: str, model: str) -> dict[str, Any]:
         """Get statistics for a specific embedding provider/model."""
-        return self._execute_in_db_thread_sync("get_provider_stats", provider, model)
+        return self._execute_in_db_thread_sync(self._executor_get_provider_stats, provider, model)
 
     def _executor_get_provider_stats(
         self, conn: Any, state: dict[str, Any], provider: str, model: str
@@ -2085,7 +2085,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         Returns:
             Dictionary with fragment counts: {"chunks": 551, "files": 12}
         """
-        return self._execute_in_db_thread_sync("get_fragment_count")
+        return self._execute_in_db_thread_sync(self._executor_get_fragment_count)
 
     def _executor_get_fragment_count(self, conn: Any, state: dict[str, Any]) -> dict[str, int]:
         """Executor method for get_fragment_count - runs in DB thread."""
@@ -2135,7 +2135,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def optimize_tables(self) -> None:
         """Optimize tables by compacting fragments and rebuilding indexes."""
-        return self._execute_in_db_thread_sync("optimize_tables")
+        return self._execute_in_db_thread_sync(self._executor_optimize_tables)
 
     def _executor_optimize_tables(self, conn: Any, state: dict[str, Any]) -> None:
         """Executor method for optimize_tables - runs in DB thread."""
@@ -2163,7 +2163,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def health_check(self) -> dict[str, Any]:
         """Perform health check and return status information."""
-        return self._execute_in_db_thread_sync("health_check")
+        return self._execute_in_db_thread_sync(self._executor_health_check)
 
     def _executor_health_check(self, conn: Any, state: dict[str, Any]) -> dict[str, Any]:
         """Executor method for health_check - runs in DB thread."""
@@ -2219,7 +2219,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Batch insert symbol rows with internal chunking."""
         if not symbols:
             return
-        self._execute_in_db_thread_sync("insert_symbols_batch", symbols)
+        self._execute_in_db_thread_sync(self._executor_insert_symbols_batch, symbols)
 
     def _executor_insert_symbols_batch(self, conn: Any, state: dict[str, Any], symbols: list[SymbolRow]) -> None:
         if not symbols:
@@ -2255,7 +2255,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def delete_symbols_by_file(self, file_id: int) -> None:
         """Delete all symbols for a given file_id."""
-        self._execute_in_db_thread_sync("delete_symbols_by_file", file_id)
+        self._execute_in_db_thread_sync(self._executor_delete_symbols_by_file, file_id)
 
     def _executor_delete_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         sym_tbl, _ = self._ensure_symbol_tables(conn, state)
@@ -2266,7 +2266,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def delete_edges_by_file(self, file_id: int) -> None:
         """Delete all edges referencing symbols belonging to this file."""
-        self._execute_in_db_thread_sync("delete_edges_by_file", file_id)
+        self._execute_in_db_thread_sync(self._executor_delete_edges_by_file, file_id)
 
     def _executor_delete_edges_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2288,7 +2288,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_file(self, file_id: int) -> list[dict[str, Any]]:
         """Return all symbols for a given file_id."""
-        return self._execute_in_db_thread_sync("query_symbols_by_file", file_id)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_file, file_id)
 
     def _executor_query_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2301,7 +2301,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_range(self, file_path: str, line: int) -> dict[str, Any] | None:
         """Return the innermost symbol containing the given line."""
-        return self._execute_in_db_thread_sync("query_symbols_by_range", file_path, line)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_range, file_path, line)
 
     def _executor_query_symbols_by_range(
         self, conn: Any, state: dict[str, Any], file_path: str, line: int
@@ -2324,7 +2324,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_range_overlap(self, file_path: str, min_line: int, max_line: int) -> list[dict[str, Any]]:
         """Return all symbols whose range overlaps [min_line, max_line]."""
-        return self._execute_in_db_thread_sync("query_symbols_by_range_overlap", file_path, min_line, max_line)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_range_overlap, file_path, min_line, max_line)
 
     def _executor_query_symbols_by_range_overlap(
         self,
@@ -2348,7 +2348,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_symbol_fqns_by_file(self, file_id: int) -> dict[str, int]:
         """Return {fqn: symbol_id} mapping for all symbols in a file."""
-        return self._execute_in_db_thread_sync("query_symbol_fqns_by_file", file_id)
+        return self._execute_in_db_thread_sync(self._executor_query_symbol_fqns_by_file, file_id)
 
     def _executor_query_symbol_fqns_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> dict[str, int]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2361,7 +2361,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
         """Check whether a symbol with the given FQN and file_path exists."""
-        return self._execute_in_db_thread_sync("query_symbols_by_fqn_exists", fqn, file_path)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_fqn_exists, fqn, file_path)
 
     def _executor_query_symbols_by_fqn_exists(self, conn: Any, state: dict[str, Any], fqn: str, file_path: str) -> bool:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2378,7 +2378,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Batch insert edge rows."""
         if not edges:
             return
-        self._execute_in_db_thread_sync("insert_edges_batch", edges)
+        self._execute_in_db_thread_sync(self._executor_insert_edges_batch, edges)
 
     def _executor_insert_edges_batch(self, conn: Any, state: dict[str, Any], edges: list[EdgeRow]) -> None:
         if not edges:
@@ -2411,7 +2411,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def symbol_stats(self) -> dict[str, Any]:
         """Return counts for symbols and edges."""
-        return self._execute_in_db_thread_sync("symbol_stats")
+        return self._execute_in_db_thread_sync(self._executor_symbol_stats)
 
     def _executor_symbol_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, Any]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2440,7 +2440,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Walk connected symbols from seed FQNs using Python BFS."""
         if not seed_fqns:
             return [], []
-        return self._execute_in_db_thread_sync("graph_walk", seed_fqns, depth, directed, edge_kind, limit)
+        return self._execute_in_db_thread_sync(self._executor_graph_walk, seed_fqns, depth, directed, edge_kind, limit)
 
     def _executor_graph_walk(
         self,
@@ -2554,7 +2554,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
         """Find unreachable symbols within a scope prefix."""
-        return self._execute_in_db_thread_sync("graph_reachability", scope)
+        return self._execute_in_db_thread_sync(self._executor_graph_reachability, scope)
 
     def _executor_graph_reachability(self, conn: Any, state: dict[str, Any], scope: str) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2619,7 +2619,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def graph_boundary(self, scope: str, limit: int) -> list[dict[str, Any]]:
         """Find cross-boundary edges for a scope prefix."""
-        return self._execute_in_db_thread_sync("graph_boundary", scope, limit)
+        return self._execute_in_db_thread_sync(self._executor_graph_boundary, scope, limit)
 
     def _executor_graph_boundary(
         self, conn: Any, state: dict[str, Any], scope: str, limit: int
@@ -2652,7 +2652,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def graph_overview(self, scope: str | None, limit: int) -> list[dict[str, Any]]:
         """Get top symbols by edge connectivity."""
-        return self._execute_in_db_thread_sync("graph_overview", scope, limit)
+        return self._execute_in_db_thread_sync(self._executor_graph_overview, scope, limit)
 
     def _executor_graph_overview(
         self, conn: Any, state: dict[str, Any], scope: str | None, limit: int
@@ -2700,7 +2700,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Resolve seed chunks to symbol FQNs via range overlap."""
         if not chunks:
             return []
-        return self._execute_in_db_thread_sync("symbol_overlap", chunks)
+        return self._execute_in_db_thread_sync(self._executor_symbol_overlap, chunks)
 
     def _executor_symbol_overlap(self, conn: Any, state: dict[str, Any], chunks: list[dict[str, Any]]) -> list[str]:
         if not chunks:
@@ -2729,7 +2729,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Resolve symbol FQNs to chunks via file_id + range overlap."""
         if not fqns:
             return []
-        return self._execute_in_db_thread_sync("chunk_resolution", fqns)
+        return self._execute_in_db_thread_sync(self._executor_chunk_resolution, fqns)
 
     def _executor_chunk_resolution(self, conn: Any, state: dict[str, Any], fqns: list[str]) -> list[dict[str, Any]]:
         if not fqns:
@@ -2782,7 +2782,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_scope(self, scope: str) -> list[dict[str, Any]]:
         """Return symbols matching scope prefix, grouped by name."""
-        return self._execute_in_db_thread_sync("query_symbols_by_scope", scope)
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_scope, scope)
 
     def _executor_query_symbols_by_scope(self, conn: Any, state: dict[str, Any], scope: str) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2795,7 +2795,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_test_symbols(self, scope: str | None) -> list[dict[str, Any]]:
         """Return test function symbols (kind='Function', name LIKE 'test_%')."""
-        return self._execute_in_db_thread_sync("query_test_symbols", scope)
+        return self._execute_in_db_thread_sync(self._executor_query_test_symbols, scope)
 
     def _executor_query_test_symbols(self, conn: Any, state: dict[str, Any], scope: str | None) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
@@ -2813,7 +2813,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Return FQN → type_signature mapping for a batch of FQNs."""
         if not fqns:
             return {}
-        return self._execute_in_db_thread_sync("query_symbol_type_signatures", fqns)
+        return self._execute_in_db_thread_sync(self._executor_query_symbol_type_signatures, fqns)
 
     def _executor_query_symbol_type_signatures(
         self, conn: Any, state: dict[str, Any], fqns: list[str]
@@ -2834,7 +2834,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
         """Return distinct FQNs for symbols in a given file."""
-        return self._execute_in_db_thread_sync("query_distinct_fqns_by_file_path", file_path)
+        return self._execute_in_db_thread_sync(self._executor_query_distinct_fqns_by_file_path, file_path)
 
     def _executor_query_distinct_fqns_by_file_path(self, conn: Any, state: dict[str, Any], file_path: str) -> list[str]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
