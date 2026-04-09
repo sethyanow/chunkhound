@@ -186,7 +186,7 @@ class TextMapping(BaseMapping):
         """Extract text-specific metadata."""
 
         source = content.decode("utf-8")
-        metadata = {}
+        metadata: dict[str, Any] = {}
 
         # Basic text statistics
         lines = source.split("\n")

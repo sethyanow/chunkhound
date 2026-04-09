@@ -161,7 +161,7 @@ class JsonMapping(BaseMapping):
         """Extract JSON-specific metadata."""
 
         source = content.decode("utf-8")
-        metadata = {}
+        metadata: dict[str, Any] = {}
 
         try:
             data = json.loads(source)

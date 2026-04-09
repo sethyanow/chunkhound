@@ -162,7 +162,7 @@ class TomlMapping(BaseMapping):
     def extract_metadata(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> dict[str, Any]:
         """Extract TOML-specific metadata."""
 
-        metadata = {}
+        metadata: dict[str, Any] = {}
 
         def_node = captures.get("definition") or (list(captures.values())[0] if captures else None)
         if def_node is not None:

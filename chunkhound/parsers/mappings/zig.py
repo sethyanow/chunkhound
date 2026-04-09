@@ -227,7 +227,7 @@ class ZigMapping(BaseMapping):
         """Extract Zig-specific metadata."""
 
         source = content.decode("utf-8")
-        metadata = {}
+        metadata: dict[str, Any] = {}
 
         if concept == UniversalConcept.DEFINITION:
             # Extract definition-specific metadata
