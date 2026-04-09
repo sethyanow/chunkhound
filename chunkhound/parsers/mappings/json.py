@@ -7,7 +7,7 @@ it uses Python's built-in json module with custom structure detection.
 
 import json
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 from tree_sitter import Node
 
@@ -87,7 +87,7 @@ class JsonMapping(BaseMapping):
             return ""
 
         else:
-            return None
+            assert_never(concept)
 
     def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""

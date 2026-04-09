@@ -7,7 +7,7 @@ and line-based chunking using simple text analysis.
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 from tree_sitter import Node
 
@@ -150,7 +150,7 @@ class TextMapping(BaseMapping):
         elif concept == UniversalConcept.STRUCTURE:
             return "text_document"
 
-        return "unnamed"
+        assert_never(concept)
 
     def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""

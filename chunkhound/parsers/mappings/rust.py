@@ -7,7 +7,7 @@ semantic concepts used by the unified parser.
 
 import re
 from pathlib import Path
-from typing import Any
+from typing import Any, assert_never
 
 from tree_sitter import Node
 
@@ -184,7 +184,7 @@ class RustMapping(BaseMapping):
             ) @definition
             """
 
-        return None
+        assert_never(concept)
 
     def extract_name(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract name from captures for this concept."""
@@ -280,7 +280,7 @@ class RustMapping(BaseMapping):
         elif concept == UniversalConcept.STRUCTURE:
             return "file_structure"
 
-        return "unnamed"
+        assert_never(concept)
 
     def extract_content(self, concept: UniversalConcept, captures: dict[str, Node], content: bytes) -> str:
         """Extract content from captures for this concept."""
