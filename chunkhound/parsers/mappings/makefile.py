@@ -212,6 +212,7 @@ class MakefileMapping(BaseMapping):
                 # For rules, extract targets and prerequisites
                 if def_node.type == "rule":
                     metadata["kind"] = "rule"
+                    targets_list: list[str] = []
 
                     # Extract all targets
                     if "targets" in captures:
