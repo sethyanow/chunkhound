@@ -75,7 +75,7 @@ class MCPServerBase(ABC):
 
         # Scan progress tracking
         self._scan_complete = False
-        self._scan_progress = {
+        self._scan_progress: dict[str, Any] = {
             "files_processed": 0,
             "chunks_created": 0,
             "is_scanning": False,

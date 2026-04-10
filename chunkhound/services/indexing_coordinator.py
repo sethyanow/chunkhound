@@ -205,7 +205,7 @@ class IndexingCoordinator(BaseService):
         # PATTERN: Lazy lock creation within event loop context
         # WHY: asyncio.Lock() must be created inside the event loop
         self._file_locks: dict[str, asyncio.Lock] = {}
-        self._locks_lock = None  # Will be initialized when first needed
+        self._locks_lock: asyncio.Lock | None = None  # Will be initialized when first needed
 
         # Base directory for path normalization (immutable after initialization)
         # Store raw path - will resolve at usage time for consistent symlink handling

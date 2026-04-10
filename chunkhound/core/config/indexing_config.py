@@ -341,7 +341,7 @@ class IndexingConfig(BaseModel):
     @classmethod
     def load_from_env(cls) -> dict[str, Any]:
         """Load indexing config from environment variables."""
-        config = {}
+        config: dict[str, Any] = {}
 
         if force_reindex := os.getenv("CHUNKHOUND_INDEXING__FORCE_REINDEX"):
             config["force_reindex"] = force_reindex.lower() in ("true", "1", "yes")

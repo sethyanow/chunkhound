@@ -140,7 +140,7 @@ class DatabaseConfig(BaseModel):
     @classmethod
     def load_from_env(cls) -> dict[str, Any]:
         """Load database config from environment variables."""
-        config = {}
+        config: dict[str, Any] = {}
         # Support both new and legacy env var names
         if db_path := (os.getenv("CHUNKHOUND_DATABASE__PATH") or os.getenv("CHUNKHOUND_DB_PATH")):
             config["path"] = Path(db_path)

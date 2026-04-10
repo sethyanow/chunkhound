@@ -1,7 +1,12 @@
 """Code parser module for ChunkHound - clean version using only registry system."""
 
+from __future__ import annotations
+
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from chunkhound.registry import ProviderRegistry
 
 from loguru import logger
 
@@ -29,7 +34,7 @@ class CodeParser:
         # TreeCache integration
         self.use_cache = use_cache
         self.tree_cache = cache or get_default_cache() if use_cache else None
-        self._registry = None
+        self._registry: ProviderRegistry | None = None
 
     def setup(self) -> None:
         """Set up the parser registry."""

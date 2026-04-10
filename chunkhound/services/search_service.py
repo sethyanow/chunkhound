@@ -48,8 +48,8 @@ class SearchService(BaseService):
                 config=config,
             )
         else:
-            self._single_hop_strategy = None
-            self._multi_hop_strategy = None
+            self._single_hop_strategy: SingleHopStrategy | None = None
+            self._multi_hop_strategy: MultiHopStrategy | None = None
 
     async def search_semantic(
         self,

@@ -16,7 +16,10 @@ import gc
 import time
 from collections.abc import Callable, Iterator
 from pathlib import Path
-from typing import Any
+from typing import TYPE_CHECKING, Any
+
+if TYPE_CHECKING:
+    from chunkhound.utils.ignore_engine import RepoAwareIgnoreEvaluator
 
 from loguru import logger
 from watchdog.events import FileSystemEventHandler
@@ -45,7 +48,7 @@ class SimpleEventHandler(FileSystemEventHandler):
         self.event_queue = event_queue
         self.config = config
         self.loop = loop
-        self._engine = None
+        self._engine: RepoAwareIgnoreEvaluator | None = None
         self._include_patterns: list[str] | None = None
         self._pattern_cache: dict[str, Any] = {}
         self._git_repo: Any | None = None
