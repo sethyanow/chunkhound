@@ -9,11 +9,6 @@ from typing import Any, Literal, cast
 
 from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
 
-from .queries.search import (
-    build_symbol_count_query,
-    build_symbol_search_query,
-    build_type_filter_query,
-)
 from .registry import register_tool
 from .response import SearchResponse, limit_response_size
 
@@ -206,24 +201,13 @@ async def _search_symbols(
     type_filter: str | None,
 ) -> SearchResponse:
     """Search the symbols table directly by name/FQN substring."""
-    # Build and execute search query
-    search_sql, search_params = build_symbol_search_query(
+    symbol_rows, total = services.provider.search_symbols(
         query=query,
         path=path,
         type_filter=type_filter,
         limit=page_size,
         offset=offset,
     )
-    symbol_rows = services.provider.execute_query(search_sql, search_params)
-
-    # Build and execute count query for pagination
-    count_sql, count_params = build_symbol_count_query(
-        query=query,
-        path=path,
-        type_filter=type_filter,
-    )
-    count_rows = services.provider.execute_query(count_sql, count_params)
-    total = count_rows[0]["total"] if count_rows else 0
 
     results = [
         {
@@ -340,17 +324,4 @@ def _apply_type_filter(
     """Post-filter chunk results by matching symbols with type_signature."""
     if not results:
         return results
-
-    filter_sql, filter_params = build_type_filter_query(
-        results=results,
-        type_filter=type_filter,
-    )
-    matches = services.provider.execute_query(filter_sql, filter_params)
-
-    match_set = {(m["file_path"], m["range_start"], m["range_end"]) for m in matches}
-
-    return [
-        r
-        for r in results
-        if any(fp == r["file_path"] and rs <= r["end_line"] and re >= r["start_line"] for fp, rs, re in match_set)
-    ]
+    return services.provider.filter_chunks_by_symbol_type_signature(results, type_filter)

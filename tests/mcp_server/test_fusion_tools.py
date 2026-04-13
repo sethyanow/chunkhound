@@ -15,13 +15,18 @@ pytestmark = pytest.mark.unit
 
 
 class TestResolveStartFqn:
-    """_resolve_start_fqn: resolve file position to containing symbol's FQN."""
+    """_resolve_start_fqn: resolve file position to containing symbol's FQN.
+
+    Post ch-nxu Step 15: helper calls provider.query_symbols_by_range
+    (returning dict | None) instead of raw execute_query.
+    """
 
     def test_returns_fqn_for_known_position(self) -> None:
         """Symbol at (line=10, char=5) resolves to its FQN."""
-        services = make_mock_services([
-            [{"fqn": "module::MyClass::method"}],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {
+            "fqn": "module::MyClass::method",
+        }
 
         from chunkhound.mcp_server.tools.fusion import _resolve_start_fqn
 
@@ -33,10 +38,9 @@ class TestResolveStartFqn:
         assert result == "module::MyClass::method"
 
     def test_converts_1based_line_to_0based_for_db(self) -> None:
-        """1-based input line=10 becomes 0-based 9 in DB query params."""
-        services = make_mock_services([
-            [{"fqn": "mod::func"}],
-        ])
+        """1-based input line=10 becomes 0-based 9 in provider call."""
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::func"}
 
         from chunkhound.mcp_server.tools.fusion import _resolve_start_fqn
 
@@ -45,17 +49,14 @@ class TestResolveStartFqn:
             workspace_root="/workspace",
         )
 
-        call_args = services.provider.execute_query.call_args
-        params = call_args[0][1]  # second positional arg = params list
-        # range_start <= 9 AND range_end >= 9  (0-based)
-        assert params[1] == 9
-        assert params[2] == 9
+        # Provider receives 0-based line (1-based 10 → 0-based 9)
+        call_args = services.provider.query_symbols_by_range.call_args
+        assert call_args[0][1] == 9
 
     def test_returns_error_dict_when_no_symbol_at_position(self) -> None:
         """Position outside any symbol returns error dict with 'error' key."""
-        services = make_mock_services([
-            [],  # no symbol at position
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = None  # no match
 
         from chunkhound.mcp_server.tools.fusion import _resolve_start_fqn
 
@@ -69,16 +70,19 @@ class TestResolveStartFqn:
 
 
 class TestAnnotateTypeSignatures:
-    """_annotate_type_signatures: batch-query type_signature from symbols table."""
+    """_annotate_type_signatures: batch-query type_signature from symbols table.
+
+    Post ch-nxu Step 15: helper calls provider.query_symbol_type_signatures
+    (returning dict[str, str|None]) instead of raw execute_query.
+    """
 
     def test_merges_signatures_into_nodes(self) -> None:
         """Nodes receive type_signature from DB lookup by FQN."""
-        services = make_mock_services([
-            [
-                {"fqn": "mod::func_a", "type_signature": "(int) -> str"},
-                {"fqn": "mod::func_b", "type_signature": "(str) -> bool"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbol_type_signatures.return_value = {
+            "mod::func_a": "(int) -> str",
+            "mod::func_b": "(str) -> bool",
+        }
         nodes = [
             {"fqn": "mod::func_a", "name": "func_a"},
             {"fqn": "mod::func_b", "name": "func_b"},
@@ -92,10 +96,12 @@ class TestAnnotateTypeSignatures:
         assert result[1]["type_signature"] == "(str) -> bool"
 
     def test_null_signature_becomes_none(self) -> None:
-        """Nodes not in DB get type_signature=None, no crash."""
-        services = make_mock_services([
-            [{"fqn": "mod::func_a", "type_signature": None}],
-        ])
+        """Nodes with None or missing from provider get type_signature=None."""
+        services = make_mock_services()
+        services.provider.query_symbol_type_signatures.return_value = {
+            "mod::func_a": None,  # present but None
+            # "mod::missing" absent → .get() returns None
+        }
         nodes = [
             {"fqn": "mod::func_a", "name": "func_a"},
             {"fqn": "mod::missing", "name": "missing"},
@@ -117,7 +123,7 @@ class TestAnnotateTypeSignatures:
         result = _annotate_type_signatures(services, [])
 
         assert result == []
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_symbol_type_signatures.assert_not_called()
 
 
 class TestBuildCallerTree:
@@ -185,15 +191,12 @@ class TestImpactCascadeImpl:
     @pytest.mark.asyncio
     async def test_returns_structured_tree(self) -> None:
         """Happy path: root + one caller → tree with correct shape."""
-        services = make_mock_services([
-            # 1. _resolve_start_fqn: symbol lookup
-            [{"fqn": "mod::target"}],
-            # 2. _annotate_type_signatures: type lookups
-            [
-                {"fqn": "mod::target", "type_signature": "(int) -> str"},
-                {"fqn": "mod::caller_a", "type_signature": "(str) -> None"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::target"}
+        services.provider.query_symbol_type_signatures.return_value = {
+            "mod::target": "(int) -> str",
+            "mod::caller_a": "(str) -> None",
+        }
         services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
@@ -226,10 +229,9 @@ class TestImpactCascadeImpl:
     @pytest.mark.asyncio
     async def test_empty_callers_returns_root_only(self) -> None:
         """Root exists but has no callers — children: [], total_nodes: 1."""
-        services = make_mock_services([
-            [{"fqn": "mod::leaf"}],  # resolve
-            [{"fqn": "mod::leaf", "type_signature": None}],  # signatures
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::leaf"}
+        services.provider.query_symbol_type_signatures.return_value = {"mod::leaf": None}
         services.provider.graph_walk.return_value = (
             [{"fqn": "mod::leaf", "name": "leaf", "kind": "Function", "file_path": "mod.py", "depth": 0}],
             [],  # no edges
@@ -250,10 +252,9 @@ class TestImpactCascadeImpl:
     @pytest.mark.asyncio
     async def test_null_type_signatures_no_crash(self) -> None:
         """Nodes without type_signature get null, no crash."""
-        services = make_mock_services([
-            [{"fqn": "mod::func"}],
-            [],  # no signatures at all
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::func"}
+        services.provider.query_symbol_type_signatures.return_value = {}  # no signatures
         services.provider.graph_walk.return_value = (
             [{"fqn": "mod::func", "name": "func", "kind": "Function", "file_path": "mod.py", "depth": 0}],
             [],
@@ -371,10 +372,9 @@ class TestImpactCascadeAdversarial:
     @pytest.mark.asyncio
     async def test_depth_zero_clamped_to_one(self) -> None:
         """depth=0 is below minimum — clamped to 1."""
-        services = make_mock_services([
-            [{"fqn": "mod::f"}],
-            [],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::f"}
+        services.provider.query_symbol_type_signatures.return_value = {}
         services.provider.graph_walk.return_value = (
             [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
             [],
@@ -394,10 +394,9 @@ class TestImpactCascadeAdversarial:
     @pytest.mark.asyncio
     async def test_depth_999_clamped_to_ten(self) -> None:
         """depth=999 is above maximum — clamped to 10."""
-        services = make_mock_services([
-            [{"fqn": "mod::f"}],
-            [],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::f"}
+        services.provider.query_symbol_type_signatures.return_value = {}
         services.provider.graph_walk.return_value = (
             [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
             [],
@@ -414,10 +413,9 @@ class TestImpactCascadeAdversarial:
         assert "root" in result
 
     def test_line_one_converts_to_zero_based(self) -> None:
-        """line=1 (minimum valid) converts to 0-based 0 in DB query."""
-        services = make_mock_services([
-            [{"fqn": "mod::f"}],
-        ])
+        """line=1 (minimum valid) converts to 0-based 0 in provider call."""
+        services = make_mock_services()
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::f"}
 
         from chunkhound.mcp_server.tools.fusion import _resolve_start_fqn
 
@@ -426,9 +424,8 @@ class TestImpactCascadeAdversarial:
             workspace_root="/workspace",
         )
 
-        params = services.provider.execute_query.call_args[0][1]
-        assert params[1] == 0  # 1-based 1 → 0-based 0
-        assert params[2] == 0
+        # 1-based 1 → 0-based 0 passed to provider
+        assert services.provider.query_symbols_by_range.call_args[0][1] == 0
 
 
 # ---------------------------------------------------------------------------
@@ -437,13 +434,19 @@ class TestImpactCascadeAdversarial:
 
 
 class TestResolveChangedToFqns:
-    """_resolve_changed_to_fqns: resolve file paths and FQNs to FQN list."""
+    """_resolve_changed_to_fqns: resolve file paths and FQNs to FQN list.
+
+    Post ch-nxu Step 15: helper calls provider.query_distinct_fqns_by_file_path
+    (returning list[str]) instead of raw execute_query.
+    """
 
     def test_file_path_resolves_to_fqns(self) -> None:
         """File path input queries symbols table and returns FQNs."""
-        services = make_mock_services([
-            [{"fqn": "mod::ClassA"}, {"fqn": "mod::func_b"}],
-        ])
+        services = make_mock_services()
+        services.provider.query_distinct_fqns_by_file_path.return_value = [
+            "mod::ClassA",
+            "mod::func_b",
+        ]
 
         from chunkhound.mcp_server.tools.fusion import _resolve_changed_to_fqns
 
@@ -454,7 +457,7 @@ class TestResolveChangedToFqns:
         )
 
         assert set(result) == {"mod::ClassA", "mod::func_b"}
-        services.provider.execute_query.assert_called_once()
+        services.provider.query_distinct_fqns_by_file_path.assert_called_once()
 
     def test_fqn_string_passes_through(self) -> None:
         """Strings containing '::' pass through as FQNs, no DB query."""
@@ -469,13 +472,14 @@ class TestResolveChangedToFqns:
         )
 
         assert result == ["mod::func_a"]
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_distinct_fqns_by_file_path.assert_not_called()
 
     def test_mixed_file_paths_and_fqns(self) -> None:
         """Mixed list: file paths resolved, FQNs passed through."""
-        services = make_mock_services([
-            [{"fqn": "mod::from_file"}],
-        ])
+        services = make_mock_services()
+        services.provider.query_distinct_fqns_by_file_path.return_value = [
+            "mod::from_file",
+        ]
 
         from chunkhound.mcp_server.tools.fusion import _resolve_changed_to_fqns
 
@@ -490,9 +494,8 @@ class TestResolveChangedToFqns:
 
     def test_file_with_no_symbols_excluded(self) -> None:
         """File path with no indexed symbols produces no FQNs, no error."""
-        services = make_mock_services([
-            [],  # no symbols for this file
-        ])
+        services = make_mock_services()
+        services.provider.query_distinct_fqns_by_file_path.return_value = []
 
         from chunkhound.mcp_server.tools.fusion import _resolve_changed_to_fqns
 
@@ -517,7 +520,7 @@ class TestResolveChangedToFqns:
         )
 
         assert result == []
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_distinct_fqns_by_file_path.assert_not_called()
 
     def test_empty_string_filtered_out(self) -> None:
         """Empty and whitespace-only strings are filtered, not queried."""
@@ -532,7 +535,7 @@ class TestResolveChangedToFqns:
         )
 
         assert result == []
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_distinct_fqns_by_file_path.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -541,16 +544,20 @@ class TestResolveChangedToFqns:
 
 
 class TestCollectTestFqns:
-    """_collect_test_fqns: collect test entry points from symbols table."""
+    """_collect_test_fqns: collect test entry points from symbols table.
+
+    Post ch-nxu Step 15: helper calls provider.query_test_symbols. Kind/name
+    LIKE filtering and LIKE-escape semantics are now provider internals —
+    tested in tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.
+    """
 
     def test_returns_dict_with_name_and_file_path(self) -> None:
         """Returns dict mapping FQN→{name, file_path} for test functions."""
-        services = make_mock_services([
-            [
-                {"fqn": "tests::test_foo", "name": "test_foo", "file_path": "tests/test_mod.py"},
-                {"fqn": "tests::test_bar", "name": "test_bar", "file_path": "tests/test_mod.py"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "tests::test_foo", "name": "test_foo", "file_path": "tests/test_mod.py"},
+            {"fqn": "tests::test_bar", "name": "test_bar", "file_path": "tests/test_mod.py"},
+        ]
 
         from chunkhound.mcp_server.tools.fusion import _collect_test_fqns
 
@@ -561,48 +568,35 @@ class TestCollectTestFqns:
         assert result["tests::test_foo"]["file_path"] == "tests/test_mod.py"
         assert "tests::test_bar" in result
 
-    def test_respects_test_scope_filter(self) -> None:
-        """test_scope adds LIKE filter on file_path — only tests in scope."""
-        services = make_mock_services([
-            [
-                {"fqn": "unit::test_a", "name": "test_a", "file_path": "tests/unit/test_a.py"},
-            ],
-        ])
+    def test_passes_test_scope_to_provider(self) -> None:
+        """test_scope is forwarded to the provider method verbatim."""
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "unit::test_a", "name": "test_a", "file_path": "tests/unit/test_a.py"},
+        ]
 
         from chunkhound.mcp_server.tools.fusion import _collect_test_fqns
 
         result = _collect_test_fqns(services=services, test_scope="tests/unit/")
 
         assert "unit::test_a" in result
-        # Verify LIKE query was used (scope passed to query)
-        call_args = services.provider.execute_query.call_args
-        sql = call_args[0][0]
-        assert "LIKE" in sql
+        services.provider.query_test_symbols.assert_called_once_with("tests/unit/")
 
-    def test_excludes_non_function_symbols(self) -> None:
-        """Variable named test_data excluded — only kind='Function' matches."""
-        services = make_mock_services([
-            [
-                {"fqn": "mod::test_helper", "name": "test_helper", "file_path": "tests/test_mod.py"},
-            ],
-        ])
+    def test_none_scope_forwarded_to_provider(self) -> None:
+        """Default test_scope=None is forwarded as None (no filter)."""
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = []
 
         from chunkhound.mcp_server.tools.fusion import _collect_test_fqns
 
-        result = _collect_test_fqns(services=services)
+        _collect_test_fqns(services=services)
 
-        # Query should filter kind='Function' — mock returns only what DB returns
-        # The key verification is the SQL contains the kind filter
-        call_args = services.provider.execute_query.call_args
-        sql = call_args[0][0]
-        assert "Function" in sql
-        assert "test_helper" in result["mod::test_helper"]["name"]
+        services.provider.query_test_symbols.assert_called_once_with(None)
 
     def test_empty_result_returns_empty_dict(self) -> None:
         """No test symbols in DB → empty dict, no error."""
-        services = make_mock_services([
-            [],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = []
 
         from chunkhound.mcp_server.tools.fusion import _collect_test_fqns
 
@@ -622,12 +616,10 @@ class TestTestTargetingImpl:
     @pytest.mark.asyncio
     async def test_changed_symbol_with_test_callers(self) -> None:
         """Changed FQN has callers that are test functions → returns those tests."""
-        services = make_mock_services([
-            # 1. _collect_test_fqns: test symbols
-            [
-                {"fqn": "tests::test_foo", "name": "test_foo", "file_path": "tests/test_mod.py"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "tests::test_foo", "name": "test_foo", "file_path": "tests/test_mod.py"},
+        ]
         services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
@@ -656,10 +648,8 @@ class TestTestTargetingImpl:
     @pytest.mark.asyncio
     async def test_no_test_callers_returns_empty(self) -> None:
         """Changed symbol has callers but none are tests → empty tests list."""
-        services = make_mock_services([
-            # 1. _collect_test_fqns: no test symbols
-            [],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = []
         services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
@@ -684,14 +674,11 @@ class TestTestTargetingImpl:
     @pytest.mark.asyncio
     async def test_changed_file_resolves_to_symbols(self) -> None:
         """File path input → resolves to symbols → walks → finds tests."""
-        services = make_mock_services([
-            # 1. _resolve_changed_to_fqns: file path → symbols
-            [{"fqn": "mod::func_a"}],
-            # 2. _collect_test_fqns: test symbols
-            [
-                {"fqn": "tests::test_a", "name": "test_a", "file_path": "tests/test_a.py"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_distinct_fqns_by_file_path.return_value = ["mod::func_a"]
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "tests::test_a", "name": "test_a", "file_path": "tests/test_a.py"},
+        ]
         services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::func_a", "name": "func_a", "kind": "Function", "file_path": "mod.py", "depth": 0},
@@ -716,12 +703,10 @@ class TestTestTargetingImpl:
     @pytest.mark.asyncio
     async def test_min_hop_distance_across_symbols(self) -> None:
         """Two changed symbols reach same test — hop_distance is the minimum."""
-        services = make_mock_services([
-            # _collect_test_fqns
-            [
-                {"fqn": "tests::test_shared", "name": "test_shared", "file_path": "tests/test_s.py"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "tests::test_shared", "name": "test_shared", "file_path": "tests/test_s.py"},
+        ]
         # Two graph_walk calls — one per changed symbol
         services.provider.graph_walk.side_effect = [
             (
@@ -770,7 +755,8 @@ class TestTestTargetingImpl:
             "total_tests": 0,
             "walk_depth": 0,
         }
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_distinct_fqns_by_file_path.assert_not_called()
+        services.provider.query_test_symbols.assert_not_called()
 
     def test_registered_in_tool_registry(self) -> None:
         """test_targeting is in TOOL_REGISTRY after import."""
@@ -801,13 +787,12 @@ class TestResolveChangedAdversarial:
         )
 
         assert result == ["mod::func"]
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_distinct_fqns_by_file_path.assert_not_called()
 
     def test_url_like_string_treated_as_file_path(self) -> None:
         """String with '://' but no '::' treated as file path, not FQN."""
-        services = make_mock_services([
-            [],  # no symbols at this "path"
-        ])
+        services = make_mock_services()
+        services.provider.query_distinct_fqns_by_file_path.return_value = []  # no symbols
 
         from chunkhound.mcp_server.tools.fusion import _resolve_changed_to_fqns
 
@@ -819,13 +804,12 @@ class TestResolveChangedAdversarial:
 
         # Treated as file path → query made, no symbols found → empty result
         assert result == []
-        services.provider.execute_query.assert_called_once()
+        services.provider.query_distinct_fqns_by_file_path.assert_called_once()
 
     def test_file_and_fqn_resolving_to_same_symbol_deduplicated(self) -> None:
         """File path resolves to FQN already in changed list → deduplicated."""
-        services = make_mock_services([
-            [{"fqn": "mod::func"}],  # file resolves to same FQN
-        ])
+        services = make_mock_services()
+        services.provider.query_distinct_fqns_by_file_path.return_value = ["mod::func"]
 
         from chunkhound.mcp_server.tools.fusion import _resolve_changed_to_fqns
 
@@ -838,38 +822,10 @@ class TestResolveChangedAdversarial:
         assert result == ["mod::func"]  # only once
 
 
-class TestCollectTestFqnsAdversarial:
-    """Adversarial: encoding boundary for _collect_test_fqns."""
-
-    def test_scope_with_percent_escaped(self) -> None:
-        """test_scope containing '%' is LIKE-escaped, not treated as wildcard."""
-        services = make_mock_services([
-            [],
-        ])
-
-        from chunkhound.mcp_server.tools.fusion import _collect_test_fqns
-
-        _collect_test_fqns(services=services, test_scope="tests/100%_coverage/")
-
-        call_args = services.provider.execute_query.call_args
-        params = call_args[0][1]
-        # '%' should be escaped to '!%' in the LIKE pattern
-        assert "!%" in params[0]
-
-    def test_scope_with_underscore_escaped(self) -> None:
-        """test_scope containing '_' is LIKE-escaped, not treated as wildcard."""
-        services = make_mock_services([
-            [],
-        ])
-
-        from chunkhound.mcp_server.tools.fusion import _collect_test_fqns
-
-        _collect_test_fqns(services=services, test_scope="tests/my_module/")
-
-        call_args = services.provider.execute_query.call_args
-        params = call_args[0][1]
-        # '_' should be escaped to '!_' in the LIKE pattern
-        assert "!_" in params[0]
+# TestCollectTestFqnsAdversarial deleted by ch-nxu Step 15: the tests
+# inspected SQL strings built inside _collect_test_fqns (LIKE/ESCAPE
+# semantics). That logic now lives in the provider layer; escape
+# semantics are tested in tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.
 
 
 class TestTestTargetingAdversarial:
@@ -878,12 +834,10 @@ class TestTestTargetingAdversarial:
     @pytest.mark.asyncio
     async def test_changed_symbol_is_also_a_test(self) -> None:
         """Changed symbol is itself a test function → appears in output."""
-        services = make_mock_services([
-            # _collect_test_fqns: the changed symbol IS a test
-            [
-                {"fqn": "tests::test_self", "name": "test_self", "file_path": "tests/test_s.py"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "tests::test_self", "name": "test_self", "file_path": "tests/test_s.py"},
+        ]
         services.provider.graph_walk.return_value = (
             [
                 {"fqn": "tests::test_self", "name": "test_self", "kind": "Function", "file_path": "tests/test_s.py", "depth": 0},
@@ -906,10 +860,8 @@ class TestTestTargetingAdversarial:
     @pytest.mark.asyncio
     async def test_negative_depth_clamped(self) -> None:
         """Negative depth clamped to 1, no crash."""
-        services = make_mock_services([
-            # _collect_test_fqns
-            [],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = []
         services.provider.graph_walk.return_value = (
             [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
             [],
@@ -928,12 +880,10 @@ class TestTestTargetingAdversarial:
     @pytest.mark.asyncio
     async def test_graph_walk_error_skipped(self) -> None:
         """One symbol returns empty walk, another returns a reachable test."""
-        services = make_mock_services([
-            # _collect_test_fqns
-            [
-                {"fqn": "tests::test_b", "name": "test_b", "file_path": "tests/test_b.py"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_test_symbols.return_value = [
+            {"fqn": "tests::test_b", "name": "test_b", "file_path": "tests/test_b.py"},
+        ]
         # First walk: no test reachable. Second walk: test_b reachable.
         services.provider.graph_walk.side_effect = [
             (
@@ -987,20 +937,24 @@ class TestTestTargetingAdversarial:
 
 
 class TestQueryScopeSymbols:
-    """_query_scope_symbols: query symbols grouped by name for a scope prefix."""
+    """_query_scope_symbols: query symbols grouped by name for a scope prefix.
+
+    Post ch-nxu Step 15: helper calls provider.query_symbols_by_scope.
+    LIKE/ESCAPE semantics are now provider internals — tested in
+    tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.
+    """
 
     def test_returns_grouped_dict_by_name(self) -> None:
         """Scope prefix returns dict mapping name→[{fqn, kind, language, ...}]."""
-        services = make_mock_services([
-            [
-                {"name": "process", "fqn": "src::process", "kind": "Function",
-                 "language": "python", "file_path": "src/core/proc.py",
-                 "type_signature": "(data: bytes) -> str"},
-                {"name": "Config", "fqn": "src::Config", "kind": "Class",
-                 "language": "python", "file_path": "src/core/config.py",
-                 "type_signature": None},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_scope.return_value = [
+            {"name": "process", "fqn": "src::process", "kind": "Function",
+             "language": "python", "file_path": "src/core/proc.py",
+             "type_signature": "(data: bytes) -> str"},
+            {"name": "Config", "fqn": "src::Config", "kind": "Class",
+             "language": "python", "file_path": "src/core/config.py",
+             "type_signature": None},
+        ]
 
         from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
 
@@ -1018,16 +972,15 @@ class TestQueryScopeSymbols:
 
     def test_multiple_symbols_same_name_grouped(self) -> None:
         """Overloads: two symbols named 'init' in different files → both in list."""
-        services = make_mock_services([
-            [
-                {"name": "init", "fqn": "a::init", "kind": "Function",
-                 "language": "python", "file_path": "src/a.py",
-                 "type_signature": "() -> None"},
-                {"name": "init", "fqn": "b::init", "kind": "Function",
-                 "language": "c", "file_path": "src/b.c",
-                 "type_signature": "void init(void)"},
-            ],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_scope.return_value = [
+            {"name": "init", "fqn": "a::init", "kind": "Function",
+             "language": "python", "file_path": "src/a.py",
+             "type_signature": "() -> None"},
+            {"name": "init", "fqn": "b::init", "kind": "Function",
+             "language": "c", "file_path": "src/b.c",
+             "type_signature": "void init(void)"},
+        ]
 
         from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
 
@@ -1039,9 +992,8 @@ class TestQueryScopeSymbols:
 
     def test_empty_result_returns_empty_dict(self) -> None:
         """No symbols in scope → empty dict, no error."""
-        services = make_mock_services([
-            [],
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_scope.return_value = []
 
         from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
 
@@ -1049,24 +1001,19 @@ class TestQueryScopeSymbols:
 
         assert result == {}
 
-    def test_scope_uses_like_with_escape(self) -> None:
-        """Verify query uses LIKE with ESCAPE clause via scope_filter."""
-        services = make_mock_services([
-            [],
-        ])
+    def test_scope_passed_to_provider_verbatim(self) -> None:
+        """Scope is forwarded to provider method unchanged; escape semantics
+        are the provider's concern (integration tests cover them)."""
+        services = make_mock_services()
+        services.provider.query_symbols_by_scope.return_value = []
 
         from chunkhound.mcp_server.tools.fusion import _query_scope_symbols
 
         _query_scope_symbols(services=services, scope="tests/100%_coverage/")
 
-        call_args = services.provider.execute_query.call_args
-        sql = call_args[0][0]
-        params = call_args[0][1]
-        assert "LIKE" in sql
-        assert "ESCAPE" in sql
-        # '%' and '_' should be escaped with '!' in the param
-        assert "!%" in params[0]
-        assert "!_" in params[0]
+        services.provider.query_symbols_by_scope.assert_called_once_with(
+            "tests/100%_coverage/"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -1273,8 +1220,9 @@ class TestCrossLanguageCheckImpl:
     @pytest.mark.asyncio
     async def test_overlapping_names_with_mismatch(self) -> None:
         """Two scopes with overlapping names, one arity mismatch → structured output."""
-        services = make_mock_services([
-            # 1. _query_scope_symbols for scope_a
+        services = make_mock_services()
+        services.provider.query_symbols_by_scope.side_effect = [
+            # 1. scope_a
             [
                 {"name": "process", "fqn": "py::process", "kind": "Function",
                  "language": "python", "file_path": "bindings/proc.py",
@@ -1283,7 +1231,7 @@ class TestCrossLanguageCheckImpl:
                  "language": "python", "file_path": "bindings/init.py",
                  "type_signature": "() -> None"},
             ],
-            # 2. _query_scope_symbols for scope_b
+            # 2. scope_b
             [
                 {"name": "process", "fqn": "c::process", "kind": "Function",
                  "language": "c", "file_path": "src/core/proc.c",
@@ -1292,7 +1240,7 @@ class TestCrossLanguageCheckImpl:
                  "language": "c", "file_path": "src/core/init.c",
                  "type_signature": "void init(void)"},
             ],
-        ])
+        ]
 
         from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
 
@@ -1316,7 +1264,8 @@ class TestCrossLanguageCheckImpl:
     @pytest.mark.asyncio
     async def test_no_overlapping_names(self) -> None:
         """No shared names → only missing lists populated."""
-        services = make_mock_services([
+        services = make_mock_services()
+        services.provider.query_symbols_by_scope.side_effect = [
             # scope_a
             [
                 {"name": "alpha", "fqn": "a::alpha", "kind": "Function",
@@ -1329,7 +1278,7 @@ class TestCrossLanguageCheckImpl:
                  "language": "c", "file_path": "b/beta.c",
                  "type_signature": "void beta(void)"},
             ],
-        ])
+        ]
 
         from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
 
@@ -1506,20 +1455,13 @@ class TestCrossLanguageCheckAdversarial:
     @pytest.mark.asyncio
     async def test_same_scope_both_sides(self) -> None:
         """scope_a == scope_b → compares scope against itself, 0 mismatches."""
-        services = make_mock_services([
-            # First query (scope_a)
-            [
-                {"name": "func", "fqn": "x::func", "kind": "Function",
-                 "language": "python", "file_path": "x/func.py",
-                 "type_signature": "(x: int) -> str"},
-            ],
-            # Second query (scope_b) — same data
-            [
-                {"name": "func", "fqn": "x::func", "kind": "Function",
-                 "language": "python", "file_path": "x/func.py",
-                 "type_signature": "(x: int) -> str"},
-            ],
-        ])
+        services = make_mock_services()
+        sym = [
+            {"name": "func", "fqn": "x::func", "kind": "Function",
+             "language": "python", "file_path": "x/func.py",
+             "type_signature": "(x: int) -> str"},
+        ]
+        services.provider.query_symbols_by_scope.side_effect = [sym, list(sym)]
 
         from chunkhound.mcp_server.tools.fusion import cross_language_check_impl
 
@@ -1753,7 +1695,8 @@ class TestMapLinesToSymbols:
         from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
 
         sym = self._sym_row("mod::func", "func", range_start=5, range_end=15)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"src/mod.py": [7, 10]})
 
@@ -1767,7 +1710,8 @@ class TestMapLinesToSymbols:
 
         # Symbol at lines 5-15, changed lines at 20-25
         sym = self._sym_row("mod::func", "func", range_start=5, range_end=15)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"src/mod.py": [20, 25]})
 
@@ -1779,7 +1723,8 @@ class TestMapLinesToSymbols:
 
         sym_a = self._sym_row("mod::func_a", "func_a", range_start=0, range_end=10)
         sym_b = self._sym_row("mod::func_b", "func_b", range_start=20, range_end=30)
-        services = make_mock_services([[sym_a, sym_b]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym_a, sym_b]
 
         result = _map_lines_to_symbols(services, {"src/mod.py": [5, 25]})
 
@@ -1791,7 +1736,8 @@ class TestMapLinesToSymbols:
         from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
 
         sym = self._sym_row("mod::func", "func", range_start=10, range_end=20)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"src/mod.py": [10, 15]})
 
@@ -1803,7 +1749,8 @@ class TestMapLinesToSymbols:
         from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
 
         sym = self._sym_row("mod::func", "func", range_start=10, range_end=20)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"src/mod.py": [15, 18]})
 
@@ -1819,7 +1766,7 @@ class TestMapLinesToSymbols:
         result = _map_lines_to_symbols(services, {})
 
         assert result == []
-        services.provider.execute_query.assert_not_called()
+        services.provider.query_symbols_by_range_overlap.assert_not_called()
 
 
 class TestSemanticDiffImpl:
@@ -1889,11 +1836,16 @@ class TestSemanticDiffImpl:
             "file_path": "src/b.py", "depth": 0,
         }
 
-        services = make_mock_services([
-            [sym_a],                          # map symbols for src/a.py
-            [sym_b],                          # map symbols for src/b.py
-            [{"fqn": "test::test_a", "type_signature": "() -> None"}],  # annotate sigs
-        ])
+        services = make_mock_services()
+        # One query_symbols_by_range_overlap call per changed file
+        services.provider.query_symbols_by_range_overlap.side_effect = [
+            [sym_a],
+            [sym_b],
+        ]
+        # query_symbol_type_signatures is called once on the affected callers
+        services.provider.query_symbol_type_signatures.return_value = {
+            "test::test_a": "() -> None",
+        }
         # Two graph_walk calls — one per changed symbol
         services.provider.graph_walk.side_effect = [
             ([root_node_a, caller_node], [caller_edge]),
@@ -2082,7 +2034,8 @@ class TestMapLinesToSymbolsAdversarial:
         from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
 
         sym = self._sym_row("m::f", "f", range_start=5, range_end=5)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"x.py": [5]})
 
@@ -2093,16 +2046,17 @@ class TestMapLinesToSymbolsAdversarial:
         """Semantically hostile: symbol with range_start > range_end (malformed DB data)."""
         from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
 
-        # range_start=20, range_end=10 — inverted. The broad SQL uses
-        # range_start <= max(lines) AND range_end >= min(lines). With
+        # range_start=20, range_end=10 — inverted. The provider's range filter
+        # uses range_start <= max(lines) AND range_end >= min(lines). With
         # range_start=20, range_end=10, changed line=15:
-        # 20 <= 15 is False, so SQL excludes it. Safe.
+        # 20 <= 15 is False, so provider excludes it. Safe.
         sym = self._sym_row("m::bad", "bad", range_start=20, range_end=10)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"x.py": [15]})
 
-        # Even if SQL returns it (mock doesn't enforce SQL logic),
+        # Even if provider returns it (mock doesn't enforce filter logic),
         # intersection should be empty because range(20,10) contains nothing
         assert result == []
 
@@ -2112,7 +2066,8 @@ class TestMapLinesToSymbolsAdversarial:
 
         sym_a = self._sym_row("m::outer", "outer", range_start=0, range_end=30)
         sym_b = self._sym_row("m::inner", "inner", range_start=10, range_end=20)
-        services = make_mock_services([[sym_a, sym_b]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym_a, sym_b]
 
         result = _map_lines_to_symbols(services, {"x.py": [15]})
 
@@ -2124,7 +2079,8 @@ class TestMapLinesToSymbolsAdversarial:
         from chunkhound.mcp_server.tools.fusion import _map_lines_to_symbols
 
         sym = self._sym_row("m::f", "f", range_start=5, range_end=15, type_signature=None)
-        services = make_mock_services([[sym]])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
 
         result = _map_lines_to_symbols(services, {"x.py": [10]})
 
@@ -2138,10 +2094,11 @@ class TestMapLinesToSymbolsAdversarial:
 
         sym_a = self._sym_row("a::f", "f", range_start=0, range_end=10, file_path="a.py")
         sym_b = self._sym_row("b::g", "g", range_start=0, range_end=10, file_path="b.py")
-        services = make_mock_services([
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.side_effect = [
             [sym_a],  # query for a.py
             [sym_b],  # query for b.py
-        ])
+        ]
 
         result = _map_lines_to_symbols(services, {"a.py": [5], "b.py": [5]})
 
@@ -2218,10 +2175,9 @@ class TestSemanticDiffImplAdversarial:
             "fqn": "x::f", "name": "f", "kind": "Function", "file_path": "x.py",
             "type_signature": "(x: int) -> str", "range_start": 5, "range_end": 15,
         }
-        services = make_mock_services([
-            [sym],                    # map_lines_to_symbols
-            [],                       # annotate type signatures (no callers)
-        ])
+        services = make_mock_services()
+        services.provider.query_symbols_by_range_overlap.return_value = [sym]
+        services.provider.query_symbol_type_signatures.return_value = {}
         # graph_walk returns empty → fusion treats it as no reachable callers
         services.provider.graph_walk.return_value = ([], [])
         config = make_mock_config("/workspace")

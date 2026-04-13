@@ -523,3 +523,395 @@ class TestDuckDBSymbolReadQueries:
             assert provider.query_distinct_fqns_by_file_path("src/missing.py") == []
         finally:
             provider.disconnect()
+
+
+class TestDuckDBFusionContractFields:
+    """Strong field-contract assertions for the 6 methods fusion.py calls.
+
+    Before ch-nxu Step 15 migrates fusion.py helpers off raw execute_query,
+    verify each provider method returns every field the helpers dereference.
+    Pattern from memory reference_strengthen_provider_tests_before_migration:
+    run identical assertions against BOTH backends — cross-backend divergence
+    surfaces as a test passing on one and failing on the other.
+    """
+
+    def _seed(self, provider: DuckDBProvider) -> int:
+        file_id = _insert_test_file(provider)
+        symbols: list[SymbolRow] = [
+            SymbolRow(
+                fqn="example::Outer",
+                name="Outer",
+                kind="Class",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=0,
+                range_end=100,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature=None,
+            ),
+            SymbolRow(
+                fqn="example::Outer::compute",
+                name="compute",
+                kind="Method",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=10,
+                range_end=25,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn="example::Outer",
+                type_signature="(self, x: int) -> int",
+            ),
+            SymbolRow(
+                fqn="example::test_compute",
+                name="test_compute",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=40,
+                range_end=55,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="() -> None",
+            ),
+        ]
+        provider.insert_symbols_batch(symbols)
+        return file_id
+
+    def test_range_overlap_returns_all_fusion_fields(self, tmp_path: Path) -> None:
+        """fusion._map_lines_to_symbols reads fqn, name, kind, file_path,
+        type_signature, range_start, range_end on each row."""
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows = provider.query_symbols_by_range_overlap("src/example.py", 12, 20)
+            assert len(rows) >= 1
+            hit = next(r for r in rows if r["fqn"] == "example::Outer::compute")
+            assert hit["name"] == "compute"
+            assert hit["kind"] == "Method"
+            assert hit["file_path"] == "src/example.py"
+            assert hit["type_signature"] == "(self, x: int) -> int"
+            assert int(hit["range_start"]) == 10
+            assert int(hit["range_end"]) == 25
+        finally:
+            provider.disconnect()
+
+    def test_scope_returns_all_fusion_fields(self, tmp_path: Path) -> None:
+        """fusion._query_scope_symbols reads name, fqn, kind, language,
+        file_path, type_signature on each row."""
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows = provider.query_symbols_by_scope("src/")
+            hit = next(r for r in rows if r["fqn"] == "example::Outer::compute")
+            assert hit["name"] == "compute"
+            assert hit["kind"] == "Method"
+            assert hit["language"] == "python"
+            assert hit["file_path"] == "src/example.py"
+            assert hit["type_signature"] == "(self, x: int) -> int"
+        finally:
+            provider.disconnect()
+
+    def test_test_symbols_returns_fqn_name_file_path(self, tmp_path: Path) -> None:
+        """fusion._collect_test_fqns reads fqn, name, file_path on each row."""
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows = provider.query_test_symbols(scope=None)
+            assert len(rows) == 1
+            row = rows[0]
+            assert row["fqn"] == "example::test_compute"
+            assert row["name"] == "test_compute"
+            assert row["file_path"] == "src/example.py"
+        finally:
+            provider.disconnect()
+
+    def test_range_returns_fqn_for_innermost(self, tmp_path: Path) -> None:
+        """fusion._resolve_start_fqn reads row['fqn'] on the innermost match."""
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            row = provider.query_symbols_by_range("src/example.py", 15)
+            assert row is not None
+            assert row["fqn"] == "example::Outer::compute"  # innermost at line 15
+        finally:
+            provider.disconnect()
+
+    def test_type_signatures_value_maps_fqn_to_signature(self, tmp_path: Path) -> None:
+        """fusion._annotate_type_signatures consumes the dict[str, str|None]
+        directly and calls .get(fqn) on it."""
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            result = provider.query_symbol_type_signatures(
+                ["example::Outer::compute", "example::Outer", "example::missing"]
+            )
+            assert result["example::Outer::compute"] == "(self, x: int) -> int"
+            # Outer has type_signature=None → present with value None
+            assert result.get("example::Outer") is None
+            # Missing FQN absent from dict
+            assert "example::missing" not in result
+        finally:
+            provider.disconnect()
+
+    def test_distinct_fqns_returns_list_of_strings(self, tmp_path: Path) -> None:
+        """fusion._resolve_changed_to_fqns iterates list[str] directly."""
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            fqns = provider.query_distinct_fqns_by_file_path("src/example.py")
+            assert isinstance(fqns, list)
+            assert all(isinstance(f, str) for f in fqns)
+            assert set(fqns) == {
+                "example::Outer",
+                "example::Outer::compute",
+                "example::test_compute",
+            }
+        finally:
+            provider.disconnect()
+
+
+class TestDuckDBSearchSymbolsContract:
+    """Field-contract tests for ch-nxu Step 16 protocol methods used by search.py.
+
+    search.py reads: fqn, name, kind, language, file_path, range_start,
+    range_end, type_signature. Mirror on LanceDB in
+    TestLanceDBSearchSymbolsContract — cross-backend divergence surfaces
+    as one backend passing and the other failing.
+    """
+
+    def _seed(self, provider: DuckDBProvider) -> int:
+        file_id = _insert_test_file(provider)
+        symbols: list[SymbolRow] = [
+            SymbolRow(
+                fqn="example::parse_config",
+                name="parse_config",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=10,
+                range_end=25,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="(path: str) -> dict[str, Any]",
+            ),
+            SymbolRow(
+                fqn="example::parse_args",
+                name="parse_args",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=30,
+                range_end=45,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="(argv: list[str]) -> Namespace",
+            ),
+            SymbolRow(
+                fqn="example::helper",
+                name="helper",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/other.py",
+                range_start=0,
+                range_end=10,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="() -> None",
+            ),
+        ]
+        provider.insert_symbols_batch(symbols)
+        return file_id
+
+    def test_search_returns_rows_with_all_fields_and_total(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows, total = provider.search_symbols(
+                query="parse", path=None, type_filter=None, limit=10, offset=0
+            )
+            assert total == 2
+            assert len(rows) == 2
+            hit = next(r for r in rows if r["fqn"] == "example::parse_config")
+            assert hit["name"] == "parse_config"
+            assert hit["kind"] == "Function"
+            assert hit["language"] == "python"
+            assert hit["file_path"] == "src/example.py"
+            assert int(hit["range_start"]) == 10
+            assert int(hit["range_end"]) == 25
+            assert hit["type_signature"] == "(path: str) -> dict[str, Any]"
+        finally:
+            provider.disconnect()
+
+    def test_search_ordered_by_name_ascending(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows, _ = provider.search_symbols(
+                query="parse", path=None, type_filter=None, limit=10, offset=0
+            )
+            assert [r["name"] for r in rows] == ["parse_args", "parse_config"]
+        finally:
+            provider.disconnect()
+
+    def test_search_path_filter_restricts_results(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows, total = provider.search_symbols(
+                query="", path="src/other", type_filter=None, limit=10, offset=0
+            )
+            assert total == 1
+            assert rows[0]["fqn"] == "example::helper"
+        finally:
+            provider.disconnect()
+
+    def test_search_type_filter_restricts_results(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows, total = provider.search_symbols(
+                query="", path=None, type_filter="Namespace", limit=10, offset=0
+            )
+            assert total == 1
+            assert rows[0]["fqn"] == "example::parse_args"
+        finally:
+            provider.disconnect()
+
+    def test_search_pagination_limit_and_offset(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            page1, total1 = provider.search_symbols(
+                query="", path=None, type_filter=None, limit=2, offset=0
+            )
+            page2, total2 = provider.search_symbols(
+                query="", path=None, type_filter=None, limit=2, offset=2
+            )
+            assert total1 == 3 == total2
+            assert len(page1) == 2
+            assert len(page2) == 1
+            assert {r["fqn"] for r in page1} | {r["fqn"] for r in page2} == {
+                "example::parse_config",
+                "example::parse_args",
+                "example::helper",
+            }
+        finally:
+            provider.disconnect()
+
+    def test_search_empty_query_matches_all(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            rows, total = provider.search_symbols(
+                query="", path=None, type_filter=None, limit=100, offset=0
+            )
+            assert total == 3
+            assert len(rows) == 3
+        finally:
+            provider.disconnect()
+
+
+class TestDuckDBFilterChunksByTypeSignature:
+    """Field-contract tests for filter_chunks_by_symbol_type_signature.
+
+    search._apply_type_filter passes a list of chunk dicts (file_path,
+    start_line, end_line) and a type_filter substring. The provider must
+    return only chunks whose file has a symbol with matching type_signature
+    whose range overlaps the chunk range.
+    """
+
+    def _seed(self, provider: DuckDBProvider) -> int:
+        file_id = _insert_test_file(provider)
+        symbols: list[SymbolRow] = [
+            SymbolRow(
+                fqn="example::returns_int",
+                name="returns_int",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=5,
+                range_end=15,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="(x: int) -> int",
+            ),
+            SymbolRow(
+                fqn="example::returns_str",
+                name="returns_str",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=20,
+                range_end=30,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="() -> str",
+            ),
+        ]
+        provider.insert_symbols_batch(symbols)
+        return file_id
+
+    def test_keeps_chunks_with_matching_type(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            chunks = [
+                {"file_path": "src/example.py", "start_line": 5, "end_line": 15, "code": "a"},
+                {"file_path": "src/example.py", "start_line": 20, "end_line": 30, "code": "b"},
+            ]
+            kept = provider.filter_chunks_by_symbol_type_signature(chunks, "int")
+            assert len(kept) == 1
+            assert kept[0]["code"] == "a"
+        finally:
+            provider.disconnect()
+
+    def test_empty_chunks_returns_empty(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            assert provider.filter_chunks_by_symbol_type_signature([], "int") == []
+        finally:
+            provider.disconnect()
+
+    def test_no_matching_symbol_returns_empty(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            chunks = [
+                {"file_path": "src/example.py", "start_line": 5, "end_line": 15, "code": "a"},
+            ]
+            kept = provider.filter_chunks_by_symbol_type_signature(chunks, "Decimal")
+            assert kept == []
+        finally:
+            provider.disconnect()
+
+    def test_preserves_input_order(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            # Both chunks match the "int" or "str" filter via different symbols.
+            chunks = [
+                {"file_path": "src/example.py", "start_line": 20, "end_line": 30, "code": "second"},
+                {"file_path": "src/example.py", "start_line": 5, "end_line": 15, "code": "first"},
+            ]
+            kept = provider.filter_chunks_by_symbol_type_signature(chunks, "")
+            # Empty filter matches any non-NULL type_signature; both kept.
+            assert [c["code"] for c in kept] == ["second", "first"]
+        finally:
+            provider.disconnect()

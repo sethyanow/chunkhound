@@ -601,3 +601,43 @@ class DatabaseProvider(Protocol):
     def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
         """Return distinct FQNs for all symbols in a file."""
         ...
+
+    def search_symbols(
+        self,
+        query: str,
+        path: str | None,
+        type_filter: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Substring search on symbol name/fqn with optional path and type filters.
+
+        Args:
+            query: Substring to match against ``name`` or ``fqn``. Empty string
+                matches all rows (paired with the other filters).
+            path: Optional file-path prefix to restrict the search.
+            type_filter: Optional ``type_signature`` substring filter.
+            limit: Maximum rows to return for the current page.
+            offset: Pagination offset.
+
+        Returns:
+            ``(rows, total)`` where ``rows`` are ordered by ``name`` ascending,
+            each row has ``fqn``, ``name``, ``kind``, ``language``, ``file_path``,
+            ``range_start``, ``range_end``, ``type_signature``, and ``total`` is
+            the unpaginated match count.
+        """
+        ...
+
+    def filter_chunks_by_symbol_type_signature(
+        self,
+        chunks: list[dict[str, Any]],
+        type_filter: str,
+    ) -> list[dict[str, Any]]:
+        """Return chunks that overlap a symbol whose type_signature matches.
+
+        Each chunk dict must have ``file_path``, ``start_line``, ``end_line``.
+        A chunk is retained when any symbol in the same file has a range
+        overlapping the chunk AND a ``type_signature`` containing the filter
+        substring. Order of the returned list mirrors the input order.
+        """
+        ...

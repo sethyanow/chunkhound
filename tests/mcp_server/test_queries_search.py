@@ -1,4 +1,11 @@
-"""Tests for chunkhound.mcp_server.tools.queries.search — sqlglot search query builders."""
+"""Tests for chunkhound.mcp_server.tools.queries.search — sqlglot search query builders.
+
+ch-nxu Step 16 removed tests for build_symbol_search_query, build_symbol_count_query,
+and build_type_filter_query — the builders were absorbed into
+DuckDBProvider.search_symbols / filter_chunks_by_symbol_type_signature, with
+behavioral coverage in tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.
+The remaining 3 builders (overlap, walk, resolution) will go in Step 17.
+"""
 
 import pytest
 import sqlglot
@@ -7,10 +14,7 @@ from sqlglot import exp
 from chunkhound.mcp_server.tools.queries.search import (
     build_chunk_resolution_query,
     build_structural_walk_query,
-    build_symbol_count_query,
     build_symbol_overlap_query,
-    build_symbol_search_query,
-    build_type_filter_query,
 )
 
 pytestmark = pytest.mark.unit
@@ -31,121 +35,10 @@ def _count_placeholders(sql: str) -> int:
     return sql.count("?")
 
 
-# ---------------------------------------------------------------------------
-# build_symbol_search_query
-# ---------------------------------------------------------------------------
-
-
-class TestBuildSymbolSearchQuery:
-    """Symbol search: LIKE on name/fqn, optional path + type_filter."""
-
-    def test_roundtrip_parses(self) -> None:
-        sql, _ = build_symbol_search_query(
-            query="parse", path=None, type_filter=None, limit=10, offset=0
-        )
-        _roundtrip(sql)
-
-    def test_like_on_name_and_fqn(self) -> None:
-        sql, _ = build_symbol_search_query(
-            query="parse", path=None, type_filter=None, limit=10, offset=0
-        )
-        lower = sql.lower()
-        assert lower.count("like") >= 2, "Should LIKE on both name and fqn"
-
-    def test_empty_query_matches_all(self) -> None:
-        """Empty query string means 'list all symbols' — no name/fqn LIKE."""
-        sql, params = build_symbol_search_query(
-            query="", path=None, type_filter=None, limit=10, offset=0
-        )
-        _roundtrip(sql)
-        # Only LIMIT and OFFSET params when no filters
-        assert _count_placeholders(sql) == 2
-        assert params == [10, 0]
-
-    def test_path_filter_with_escape(self) -> None:
-        sql, params = build_symbol_search_query(
-            query="parse", path="src/auth", type_filter=None, limit=10, offset=0
-        )
-        lower = sql.lower()
-        assert "escape" in lower, "Path filter should use LIKE ESCAPE"
-
-    def test_type_filter_adds_like(self) -> None:
-        sql, params = build_symbol_search_query(
-            query="parse", path=None, type_filter="Result", limit=10, offset=0
-        )
-        lower = sql.lower()
-        # name/fqn LIKE + type_signature LIKE
-        assert lower.count("like") >= 3
-
-    def test_placeholder_count_query_only(self) -> None:
-        sql, params = build_symbol_search_query(
-            query="parse", path=None, type_filter=None, limit=10, offset=0
-        )
-        # 2 for name/fqn LIKE + 2 for LIMIT/OFFSET
-        assert _count_placeholders(sql) == len(params)
-
-    def test_placeholder_count_all_filters(self) -> None:
-        sql, params = build_symbol_search_query(
-            query="parse", path="src/", type_filter="int", limit=10, offset=0
-        )
-        # 2 (name/fqn) + 1 (path) + 1 (type_filter) + 2 (LIMIT/OFFSET)
-        assert _count_placeholders(sql) == len(params)
-        assert len(params) == 6
-
-    def test_has_limit_and_offset(self) -> None:
-        sql, _ = build_symbol_search_query(
-            query="parse", path=None, type_filter=None, limit=10, offset=5
-        )
-        upper = sql.upper()
-        assert "LIMIT" in upper
-        assert "OFFSET" in upper
-
-    def test_has_order_by(self) -> None:
-        sql, _ = build_symbol_search_query(
-            query="parse", path=None, type_filter=None, limit=10, offset=0
-        )
-        upper = sql.upper()
-        assert "ORDER BY" in upper
-
-
-# ---------------------------------------------------------------------------
-# build_symbol_count_query
-# ---------------------------------------------------------------------------
-
-
-class TestBuildSymbolCountQuery:
-    """Count query: same conditions as search, but SELECT COUNT(*)."""
-
-    def test_roundtrip_parses(self) -> None:
-        sql, _ = build_symbol_count_query(query="parse", path=None, type_filter=None)
-        _roundtrip(sql)
-
-    def test_has_count(self) -> None:
-        sql, _ = build_symbol_count_query(query="parse", path=None, type_filter=None)
-        upper = sql.upper()
-        assert "COUNT" in upper
-
-    def test_no_limit_offset(self) -> None:
-        """Count query should not have LIMIT or OFFSET."""
-        sql, params = build_symbol_count_query(
-            query="parse", path=None, type_filter=None
-        )
-        upper = sql.upper()
-        assert "LIMIT" not in upper
-        assert "OFFSET" not in upper
-        # Only 2 params for name/fqn LIKE (no limit/offset)
-        assert len(params) == 2
-
-    def test_same_conditions_as_search(self) -> None:
-        """Count and search queries should use the same filter conditions."""
-        _, search_params = build_symbol_search_query(
-            query="parse", path="src/", type_filter="int", limit=10, offset=0
-        )
-        _, count_params = build_symbol_count_query(
-            query="parse", path="src/", type_filter="int"
-        )
-        # Count params = search params minus last 2 (limit, offset)
-        assert count_params == search_params[:-2]
+# build_symbol_search_query / build_symbol_count_query test classes removed by
+# ch-nxu Step 16 — see tests/integration/test_{duckdb,lancedb}_symbol_protocol.py
+# (TestDuckDBSearchSymbolsContract, TestLanceDBSearchSymbolsContract) for
+# real-database behavioral coverage.
 
 
 # ---------------------------------------------------------------------------
@@ -310,48 +203,8 @@ class TestBuildChunkResolutionQuery:
             build_chunk_resolution_query(fqns=[])
 
 
-# ---------------------------------------------------------------------------
-# build_type_filter_query
-# ---------------------------------------------------------------------------
-
-
-class TestBuildTypeFilterQuery:
-    """Type filter: batch symbol lookup for type_signature overlap."""
-
-    def test_roundtrip_parses(self) -> None:
-        results = [{"file_path": "a.py", "start_line": 1, "end_line": 10}]
-        sql, _ = build_type_filter_query(results=results, type_filter="Result")
-        _roundtrip(sql)
-
-    def test_placeholder_count(self) -> None:
-        results = [
-            {"file_path": "a.py", "start_line": 1, "end_line": 10},
-            {"file_path": "b.py", "start_line": 5, "end_line": 15},
-        ]
-        sql, params = build_type_filter_query(results=results, type_filter="int")
-        # 3 per result (file_path, end_line, start_line) + 1 for type_filter
-        assert _count_placeholders(sql) == 7
-        assert len(params) == 7
-
-    def test_type_signature_like(self) -> None:
-        results = [{"file_path": "a.py", "start_line": 1, "end_line": 10}]
-        sql, _ = build_type_filter_query(results=results, type_filter="Result")
-        lower = sql.lower()
-        assert "type_signature" in lower
-        assert "like" in lower
-
-    def test_column_aliases(self) -> None:
-        """Column alias contract: needs file_path, range_start, range_end."""
-        results = [{"file_path": "a.py", "start_line": 1, "end_line": 10}]
-        sql, _ = build_type_filter_query(results=results, type_filter="int")
-        lower = sql.lower()
-        assert "file_path" in lower
-        assert "range_start" in lower
-        assert "range_end" in lower
-
-    def test_empty_results_raises(self) -> None:
-        with pytest.raises(ValueError):
-            build_type_filter_query(results=[], type_filter="int")
+# build_type_filter_query test class removed by ch-nxu Step 16 — see
+# TestDuckDBFilterChunksByTypeSignature / TestLanceDBFilterChunksByTypeSignature.
 
 
 # ---------------------------------------------------------------------------
@@ -359,55 +212,9 @@ class TestBuildTypeFilterQuery:
 # ---------------------------------------------------------------------------
 
 
-class TestAdversarialSymbolSearch:
-    """Adversarial battery for build_symbol_search_query."""
-
-    def test_unicode_query(self) -> None:
-        """Multi-byte characters in query produce valid SQL."""
-        sql, params = build_symbol_search_query(
-            query="函数", path=None, type_filter=None, limit=10, offset=0
-        )
-        _roundtrip(sql)
-        assert any("函数" in str(p) for p in params)
-
-    def test_sql_injection_in_query(self) -> None:
-        """SQL injection attempt is safely parameterized, not interpolated."""
-        sql, params = build_symbol_search_query(
-            query="'; DROP TABLE symbols; --",
-            path=None,
-            type_filter=None,
-            limit=10,
-            offset=0,
-        )
-        _roundtrip(sql)
-        # Injection string is in params, not in SQL text
-        assert "DROP" not in sql
-        assert any("DROP" in str(p) for p in params)
-
-    def test_limit_zero(self) -> None:
-        """limit=0 produces valid SQL (caller is responsible for clamping)."""
-        sql, params = build_symbol_search_query(
-            query="x", path=None, type_filter=None, limit=0, offset=0
-        )
-        _roundtrip(sql)
-        assert 0 in params
-
-    def test_very_large_offset(self) -> None:
-        """Offset beyond any realistic total produces valid SQL."""
-        sql, params = build_symbol_search_query(
-            query="x", path=None, type_filter=None, limit=10, offset=999999
-        )
-        _roundtrip(sql)
-        assert 999999 in params
-
-    def test_like_wildcard_in_query_escaped(self) -> None:
-        """LIKE wildcards in query are escaped — % doesn't match everything."""
-        sql, params = build_symbol_search_query(
-            query="%", path=None, type_filter=None, limit=10, offset=0
-        )
-        _roundtrip(sql)
-        name_param = params[0]
-        assert "!%" in name_param
+# TestAdversarialSymbolSearch removed by ch-nxu Step 16 — LIKE-escape,
+# unicode, injection, pagination edge cases now tested via real-database
+# contract tests on both DuckDB and LanceDB backends.
 
 
 class TestAdversarialSymbolOverlap:
@@ -462,23 +269,6 @@ class TestAdversarialStructuralWalk:
         assert _count_placeholders(sql) == 102  # 100 seeds + depth + limit
 
 
-class TestAdversarialTypeFilter:
-    """Adversarial battery for build_type_filter_query."""
-
-    def test_like_wildcards_in_filter_escaped(self) -> None:
-        """LIKE wildcards in type_filter are escaped."""
-        results = [{"file_path": "a.py", "start_line": 1, "end_line": 10}]
-        sql, params = build_type_filter_query(results=results, type_filter="Result[%]")
-        _roundtrip(sql)
-        # The type_filter param should have escaped %
-        filter_param = params[-1]
-        assert "!%" in filter_param
-
-    def test_identical_result_entries(self) -> None:
-        """Duplicate results produce valid SQL with duplicate OR conditions."""
-        result = {"file_path": "a.py", "start_line": 1, "end_line": 10}
-        sql, params = build_type_filter_query(
-            results=[result, result], type_filter="int"
-        )
-        _roundtrip(sql)
-        assert _count_placeholders(sql) == 7  # 3*2 + 1
+# TestAdversarialTypeFilter removed by ch-nxu Step 16 — LIKE-wildcard escape
+# and duplicate-result handling now tested in
+# TestDuckDBFilterChunksByTypeSignature / TestLanceDBFilterChunksByTypeSignature.

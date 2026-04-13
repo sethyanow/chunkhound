@@ -12,7 +12,6 @@ from typing import Any
 import pygit2
 
 from .graph import _graph_walk
-from .queries.common import escape_like, scope_filter
 from .registry import register_tool
 
 # ---------------------------------------------------------------------------
@@ -113,10 +112,8 @@ def _map_lines_to_symbols(
         line_set = set(lines)
 
         # Broad query: symbols whose range overlaps [min_line, max_line]
-        rows = services.provider.execute_query(
-            "SELECT fqn, name, kind, file_path, type_signature, range_start, range_end "
-            "FROM symbols WHERE file_path = ? AND range_start <= ? AND range_end >= ?",
-            [file_path, max_line, min_line],
+        rows = services.provider.query_symbols_by_range_overlap(
+            file_path, min_line, max_line
         )
 
         for row in rows:
@@ -159,9 +156,7 @@ def _query_scope_symbols(
         Dict mapping symbol name → list of symbol dicts, each with
         fqn, kind, language, file_path, type_signature.
     """
-    scope_sql, scope_params = scope_filter(scope)
-    sql = f"SELECT name, fqn, kind, language, file_path, type_signature FROM symbols WHERE {scope_sql}"
-    rows = services.provider.execute_query(sql, scope_params)
+    rows = services.provider.query_symbols_by_scope(scope)
 
     grouped: dict[str, list[dict[str, Any]]] = {}
     for row in rows:
@@ -378,12 +373,7 @@ def _resolve_changed_to_fqns(
         else:
             # File path — resolve to relative and query symbols
             relative_path = os.path.relpath(str(Path(item).resolve()), workspace_root)
-            rows = services.provider.execute_query(
-                "SELECT DISTINCT fqn FROM symbols WHERE file_path = ?",
-                [relative_path],
-            )
-            for row in rows:
-                fqn = row["fqn"]
+            for fqn in services.provider.query_distinct_fqns_by_file_path(relative_path):
                 if fqn not in seen:
                     fqns.append(fqn)
                     seen.add(fqn)
@@ -408,16 +398,7 @@ def _collect_test_fqns(
     Returns:
         Dict mapping FQN → {name, file_path} for each test function.
     """
-    sql = "SELECT fqn, name, file_path FROM symbols WHERE kind = 'Function' AND name LIKE 'test_%'"
-    params: list[str] = []
-
-    if test_scope:
-        escaped = escape_like(test_scope)
-        sql += " AND file_path LIKE ? ESCAPE '!'"
-        params.append(f"{escaped}%")
-
-    rows = services.provider.execute_query(sql, params)
-
+    rows = services.provider.query_test_symbols(test_scope)
     return {row["fqn"]: {"name": row["name"], "file_path": row["file_path"]} for row in rows}
 
 
@@ -451,20 +432,15 @@ def _resolve_start_fqn(
     # Convert 1-based line to 0-based for DB range query
     db_line = line - 1
 
-    rows = services.provider.execute_query(
-        "SELECT fqn FROM symbols WHERE file_path = ? "
-        "AND range_start <= ? AND range_end >= ? "
-        "ORDER BY (range_end - range_start) ASC LIMIT 1",
-        [relative_path, db_line, db_line],
-    )
+    row = services.provider.query_symbols_by_range(relative_path, db_line)
 
-    if not rows:
+    if row is None:
         return {
             "error": "no_symbol_at_position",
             "message": f"No symbol found at {file}:{line}:{character}",
         }
 
-    return rows[0]["fqn"]
+    return row["fqn"]
 
 
 def _annotate_type_signatures(
@@ -485,13 +461,7 @@ def _annotate_type_signatures(
         return []
 
     fqns = [n["fqn"] for n in nodes]
-    placeholders = ", ".join(["?"] * len(fqns))
-    rows = services.provider.execute_query(
-        f"SELECT fqn, type_signature FROM symbols WHERE fqn IN ({placeholders})",
-        fqns,
-    )
-
-    sig_map: dict[str, str | None] = {r["fqn"]: r["type_signature"] for r in rows}
+    sig_map = services.provider.query_symbol_type_signatures(fqns)
 
     for node in nodes:
         node["type_signature"] = sig_map.get(node["fqn"])

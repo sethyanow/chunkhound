@@ -2921,3 +2921,101 @@ class LanceDBProvider(SerialDatabaseProvider):
             return list({r["fqn"] for r in results})
         except Exception:
             return []
+
+    def search_symbols(
+        self,
+        query: str,
+        path: str | None,
+        type_filter: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Substring search on symbol name/fqn with path and type filters."""
+        return self._execute_in_db_thread_sync(
+            self._executor_search_symbols, query, path, type_filter, limit, offset
+        )
+
+    def _executor_search_symbols(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        query: str,
+        path: str | None,
+        type_filter: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        sym_tbl, _edge_tbl = self._ensure_symbol_tables(conn, state)
+        conditions: list[str] = []
+        if query:
+            q = query.replace("'", "''")
+            conditions.append(f"(name LIKE '%{q}%' OR fqn LIKE '%{q}%')")
+        if path:
+            p = path.replace("'", "''")
+            conditions.append(f"file_path LIKE '{p}%'")
+        if type_filter:
+            t = type_filter.replace("'", "''")
+            conditions.append(f"type_signature LIKE '%{t}%'")
+
+        try:
+            builder = sym_tbl.search()
+            if conditions:
+                builder = builder.where(" AND ".join(conditions))
+            all_rows = builder.to_list()
+        except Exception as e:
+            logger.error(f"search_symbols error: {e}")
+            return [], 0
+
+        all_rows.sort(key=lambda r: r.get("name", ""))
+        total = len(all_rows)
+        page = all_rows[offset : offset + limit]
+        return [dict(r) for r in page], total
+
+    def filter_chunks_by_symbol_type_signature(
+        self,
+        chunks: list[dict[str, Any]],
+        type_filter: str,
+    ) -> list[dict[str, Any]]:
+        """Return chunks overlapping a symbol whose type_signature matches."""
+        if not chunks:
+            return []
+        return self._execute_in_db_thread_sync(
+            self._executor_filter_chunks_by_symbol_type_signature, chunks, type_filter
+        )
+
+    def _executor_filter_chunks_by_symbol_type_signature(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        chunks: list[dict[str, Any]],
+        type_filter: str,
+    ) -> list[dict[str, Any]]:
+        if not chunks:
+            return []
+        sym_tbl, _edge_tbl = self._ensure_symbol_tables(conn, state)
+        t = type_filter.replace("'", "''")
+        try:
+            matching_symbols = (
+                sym_tbl.search()
+                .where(f"type_signature LIKE '%{t}%'")
+                .to_list()
+            )
+        except Exception:
+            return []
+
+        # Index symbols by file_path for efficient overlap check
+        by_file: dict[str, list[tuple[int, int]]] = {}
+        for s in matching_symbols:
+            fp = s.get("file_path")
+            if fp is None:
+                continue
+            by_file.setdefault(fp, []).append(
+                (int(s.get("range_start", 0)), int(s.get("range_end", 0)))
+            )
+
+        kept: list[dict[str, Any]] = []
+        for chunk in chunks:
+            ranges = by_file.get(chunk["file_path"], [])
+            if any(rs <= chunk["end_line"] and re >= chunk["start_line"] for rs, re in ranges):
+                kept.append(chunk)
+        return kept

@@ -2969,6 +2969,118 @@ class DuckDBProvider(SerialDatabaseProvider):
         ).fetchall()
         return [row[0] for row in rows]
 
+    def search_symbols(
+        self,
+        query: str,
+        path: str | None,
+        type_filter: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        """Substring search on symbol name/fqn with path and type filters."""
+        return self._execute_in_db_thread_sync(
+            self._executor_search_symbols, query, path, type_filter, limit, offset
+        )
+
+    def _executor_search_symbols(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        query: str,
+        path: str | None,
+        type_filter: str | None,
+        limit: int,
+        offset: int,
+    ) -> tuple[list[dict[str, Any]], int]:
+        conditions: list[str] = []
+        params: list[Any] = []
+
+        if query:
+            escaped = escape_like_pattern(query)
+            pattern = f"%{escaped}%"
+            conditions.append("(name LIKE ? ESCAPE '!' OR fqn LIKE ? ESCAPE '!')")
+            params.extend([pattern, pattern])
+
+        if path:
+            escaped_path = escape_like_pattern(path)
+            conditions.append("file_path LIKE ? ESCAPE '!'")
+            params.append(f"{escaped_path}%")
+
+        if type_filter:
+            escaped_type = escape_like_pattern(type_filter)
+            conditions.append("type_signature LIKE ? ESCAPE '!'")
+            params.append(f"%{escaped_type}%")
+
+        where_clause = " AND ".join(conditions) if conditions else "1 = 1"
+
+        search_sql = f"""
+            SELECT fqn, name, kind, language, file_path, range_start, range_end,
+                   type_signature
+            FROM symbols
+            WHERE {where_clause}
+            ORDER BY name
+            LIMIT ?
+            OFFSET ?
+        """
+        search_params = [*params, limit, offset]
+        rows = self._rows_to_dicts(conn, conn.execute(search_sql, search_params).fetchall())
+
+        count_sql = f"SELECT COUNT(*) AS total FROM symbols WHERE {where_clause}"
+        count_rows = conn.execute(count_sql, params).fetchall()
+        total = int(count_rows[0][0]) if count_rows else 0
+
+        return rows, total
+
+    def filter_chunks_by_symbol_type_signature(
+        self,
+        chunks: list[dict[str, Any]],
+        type_filter: str,
+    ) -> list[dict[str, Any]]:
+        """Return chunks overlapping a symbol whose type_signature matches."""
+        if not chunks:
+            return []
+        return self._execute_in_db_thread_sync(
+            self._executor_filter_chunks_by_symbol_type_signature, chunks, type_filter
+        )
+
+    def _executor_filter_chunks_by_symbol_type_signature(
+        self,
+        conn: Any,
+        state: dict[str, Any],
+        chunks: list[dict[str, Any]],
+        type_filter: str,
+    ) -> list[dict[str, Any]]:
+        if not chunks:
+            return []
+
+        escaped = escape_like_pattern(type_filter)
+        conditions: list[str] = []
+        params: list[Any] = []
+        for r in chunks:
+            conditions.append(
+                "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
+            )
+            params.extend([r["file_path"], r["end_line"], r["start_line"]])
+        params.append(f"%{escaped}%")
+
+        where_clause = " OR ".join(conditions)
+        sql = f"""
+            SELECT DISTINCT s.file_path, s.range_start, s.range_end
+            FROM symbols s
+            WHERE ({where_clause}) AND s.type_signature LIKE ? ESCAPE '!'
+        """
+        rows = conn.execute(sql, params).fetchall()
+        match_set = {(row[0], int(row[1]), int(row[2])) for row in rows}
+
+        return [
+            r
+            for r in chunks
+            if any(
+                fp == r["file_path"] and rs <= r["end_line"] and re >= r["start_line"]
+                for fp, rs, re in match_set
+            )
+        ]
+
     # ── Graph Query Protocol Methods ──────────────────────────────
 
     def graph_walk(

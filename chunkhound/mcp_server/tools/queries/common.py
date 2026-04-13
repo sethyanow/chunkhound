@@ -1,5 +1,9 @@
 """Reusable query fragments for MCP tool query builders.
 
+ch-nxu note: This module is transient. Step 15 removed its only production
+caller outside of queries/search.py. Step 16 deletes queries/search.py,
+which will let this file go with it. See .bones/tasks/ch-nxu.md.
+
 sqlglot is used here only for building complex AST fragments (bidirectional
 edges, cycle tracking). Query builders compose these rendered fragments via
 f-string — no final sqlglot round-trip.

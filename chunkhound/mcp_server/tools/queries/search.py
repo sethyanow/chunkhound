@@ -1,5 +1,12 @@
 """Query builders for search MCP tool operations.
 
+ch-nxu Step 16 removed ``build_symbol_search_query``, ``build_symbol_count_query``
+and ``build_type_filter_query`` — their logic moved into ``DuckDBProvider.
+search_symbols`` and ``filter_chunks_by_symbol_type_signature``. The remaining
+three builders (``build_symbol_overlap_query``, ``build_structural_walk_query``,
+``build_chunk_resolution_query``) are still used by
+``services/search/graph_walk_expander.py`` and will be removed by Step 17.
+
 Each function returns (sql, params) — pure functions with no side effects.
 Compose shared fragments from common.py for bidirectional edges, scope
 filtering, and cycle tracking.
@@ -9,86 +16,8 @@ from typing import Any
 
 from .common import (
     bidirectional_edges,
-    escape_like,
-    scope_filter,
     visited_tracking_columns,
 )
-
-
-def _build_symbol_conditions(
-    query: str,
-    path: str | None,
-    type_filter: str | None,
-) -> tuple[list[str], list[Any]]:
-    """Build WHERE conditions for symbol search/count queries.
-
-    Returns (conditions, params) — shared between search and count builders.
-    """
-    conditions: list[str] = []
-    params: list[Any] = []
-
-    if query:
-        escaped = escape_like(query)
-        like_pattern = f"%{escaped}%"
-        conditions.append("(name LIKE ? ESCAPE '!' OR fqn LIKE ? ESCAPE '!')")
-        params.extend([like_pattern, like_pattern])
-
-    if path:
-        scope_sql, scope_params = scope_filter(path)
-        conditions.append(scope_sql)
-        params.extend(scope_params)
-
-    if type_filter:
-        escaped_type = escape_like(type_filter)
-        conditions.append("type_signature LIKE ? ESCAPE '!'")
-        params.append(f"%{escaped_type}%")
-
-    return conditions, params
-
-
-def build_symbol_search_query(
-    query: str,
-    path: str | None,
-    type_filter: str | None,
-    limit: int,
-    offset: int,
-) -> tuple[str, list[Any]]:
-    """LIKE-based search on symbol name/fqn with optional path and type filters.
-
-    Returns (sql, params) where params vary based on which filters are active.
-    """
-    conditions, params = _build_symbol_conditions(query, path, type_filter)
-    where_clause = " AND ".join(conditions) if conditions else "1 = 1"
-
-    sql = f"""
-        SELECT fqn, name, kind, language, file_path, range_start, range_end,
-               type_signature
-        FROM symbols
-        WHERE {where_clause}
-        ORDER BY name
-        LIMIT ?
-        OFFSET ?
-    """
-    params.extend([limit, offset])
-
-    return sql, params
-
-
-def build_symbol_count_query(
-    query: str,
-    path: str | None,
-    type_filter: str | None,
-) -> tuple[str, list[Any]]:
-    """Count query for symbol search pagination.
-
-    Uses same WHERE conditions as build_symbol_search_query but returns COUNT(*).
-    """
-    conditions, params = _build_symbol_conditions(query, path, type_filter)
-    where_clause = " AND ".join(conditions) if conditions else "1 = 1"
-
-    sql = f"SELECT COUNT(*) AS total FROM symbols WHERE {where_clause}"
-
-    return sql, params
 
 
 def build_symbol_overlap_query(
@@ -207,34 +136,6 @@ def build_chunk_resolution_query(
     return sql, list(fqns)
 
 
-def build_type_filter_query(
-    results: list[dict],
-    type_filter: str,
-) -> tuple[str, list[Any]]:
-    """Batch symbol lookup for type_signature overlap with chunk results.
-
-    Each result dict must have 'file_path', 'start_line', 'end_line'.
-    Returns (sql, params) with 3 params per result + 1 for type_filter.
-    Column aliases: file_path, range_start, range_end.
-    """
-    if not results:
-        raise ValueError("results must not be empty")
-
-    escaped = escape_like(type_filter)
-
-    conditions: list[str] = []
-    params: list[Any] = []
-    for r in results:
-        conditions.append("(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)")
-        params.extend([r["file_path"], r["end_line"], r["start_line"]])
-
-    where_clause = " OR ".join(conditions)
-    params.append(f"%{escaped}%")
-
-    sql = f"""
-        SELECT DISTINCT s.file_path, s.range_start, s.range_end
-        FROM symbols s
-        WHERE ({where_clause}) AND s.type_signature LIKE ? ESCAPE '!'
-    """
-
-    return sql, params
+# build_type_filter_query removed by ch-nxu Step 16 — logic moved to
+# DuckDBProvider.filter_chunks_by_symbol_type_signature and
+# LanceDBProvider.filter_chunks_by_symbol_type_signature.

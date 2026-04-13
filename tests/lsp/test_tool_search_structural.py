@@ -333,15 +333,25 @@ class TestStructuralWithTypeFilter:
                 "end_line": 40,
             },
         ]
-        # type_filter query: only handler.py and validator.py have Result type
-        type_filter_matches = [
-            {"file_path": "src/handler.py", "range_start": 10, "range_end": 20},
-            {"file_path": "src/validator.py", "range_start": 30, "range_end": 40},
-        ]
-
         services = make_mock_services(
-            [symbol_rows, walk_rows, chunk_rows, type_filter_matches],
+            [symbol_rows, walk_rows, chunk_rows],
         )
+        # ch-nxu Step 16: _apply_type_filter now calls provider.filter_chunks_by_symbol_type_signature.
+        # Provider retains handler.py (from semantic) and validator.py (from graph), drops utils.py.
+        services.provider.filter_chunks_by_symbol_type_signature.return_value = [
+            {
+                "file_path": "src/handler.py",
+                "content": "def handle() -> Result: pass",
+                "start_line": 10,
+                "end_line": 20,
+            },
+            {
+                "file_path": "src/validator.py",
+                "content": "def validate() -> Result: pass",
+                "start_line": 30,
+                "end_line": 40,
+            },
+        ]
         services.search_service = MagicMock()
         services.search_service.search_semantic = AsyncMock(
             return_value=_make_semantic_results(semantic_chunks),

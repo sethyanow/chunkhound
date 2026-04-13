@@ -18,7 +18,11 @@ from tests.lsp.mcp_tool_helpers import call_search_tool, make_mock_services
 
 
 class TestSearchSymbols:
-    """search(type='symbols') queries the symbols table directly."""
+    """search(type='symbols') queries the symbols table via provider.search_symbols.
+
+    Post ch-nxu Step 16: search_impl calls provider.search_symbols (returning
+    ``(rows, total)``) instead of two raw execute_query calls.
+    """
 
     @pytest.mark.asyncio
     async def test_search_symbols_by_name(self) -> None:
@@ -45,9 +49,8 @@ class TestSearchSymbols:
                 "type_signature": "(Path) -> Config",
             },
         ]
-        # First call: symbol query, second call: count query
-        count_rows = [{"total": 2}]
-        services = make_mock_services([symbol_rows, count_rows])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = (symbol_rows, 2)
 
         result = await call_search_tool(
             services=services, type="symbols", query="parse",
@@ -67,7 +70,8 @@ class TestSearchSymbols:
     @pytest.mark.asyncio
     async def test_search_symbols_empty(self) -> None:
         """Empty symbols table returns empty results with pagination."""
-        services = make_mock_services([[], [{"total": 0}]])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = ([], 0)
 
         result = await call_search_tool(
             services=services, type="symbols", query="nonexistent",
@@ -91,7 +95,8 @@ class TestSearchSymbols:
                 "type_signature": None,
             },
         ]
-        services = make_mock_services([symbol_rows, [{"total": 1}]])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = (symbol_rows, 1)
 
         result = await call_search_tool(
             services=services, type="symbols", query="",
@@ -106,12 +111,16 @@ class TestSearchSymbols:
 
 
 class TestTypeFilter:
-    """type_filter parameter filters results by type_signature content."""
+    """type_filter parameter filters results by type_signature content.
+
+    Post ch-nxu Step 16: LIKE-escape semantics for query / path / type_filter
+    are provider internals and tested in
+    tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.
+    """
 
     @pytest.mark.asyncio
     async def test_search_symbols_with_type_filter(self) -> None:
-        """type_filter narrows symbols by type_signature substring."""
-        # Only symbols whose type_signature contains "Result" should be returned
+        """type_filter is forwarded to the provider method."""
         symbol_rows = [
             {
                 "fqn": "mod::parse_input",
@@ -124,7 +133,8 @@ class TestTypeFilter:
                 "type_signature": "(str) -> Result[ParseOutput, Error]",
             },
         ]
-        services = make_mock_services([symbol_rows, [{"total": 1}]])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = (symbol_rows, 1)
 
         result = await call_search_tool(
             services=services,
@@ -135,10 +145,13 @@ class TestTypeFilter:
 
         assert len(result["results"]) == 1
         assert "Result" in result["results"][0]["type_signature"]
+        # Provider call received the type_filter arg verbatim
+        kwargs = services.provider.search_symbols.call_args.kwargs
+        assert kwargs["type_filter"] == "Result"
 
     @pytest.mark.asyncio
     async def test_search_symbols_with_path_filter(self) -> None:
-        """path parameter filters symbols by file_path prefix."""
+        """path parameter is forwarded to the provider method."""
         symbol_rows = [
             {
                 "fqn": "auth::validate",
@@ -151,7 +164,8 @@ class TestTypeFilter:
                 "type_signature": "(Token) -> bool",
             },
         ]
-        services = make_mock_services([symbol_rows, [{"total": 1}]])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = (symbol_rows, 1)
 
         result = await call_search_tool(
             services=services,
@@ -162,45 +176,8 @@ class TestTypeFilter:
 
         assert len(result["results"]) == 1
         assert result["results"][0]["file_path"].startswith("src/auth")
-
-    @pytest.mark.asyncio
-    async def test_search_symbols_type_filter_escapes_like(self) -> None:
-        """LIKE metacharacters in type_filter are escaped — no wildcard injection."""
-        # type_filter "Result[int]" — brackets are safe in DuckDB LIKE, but
-        # underscores need escaping. Use "my_type" to test underscore escaping.
-        symbol_rows = [
-            {
-                "fqn": "mod::func",
-                "name": "func",
-                "kind": "Function",
-                "language": "python",
-                "file_path": "src/mod.py",
-                "range_start": 1,
-                "range_end": 10,
-                "type_signature": "(my_type) -> None",
-            },
-        ]
-        services = make_mock_services([symbol_rows, [{"total": 1}]])
-
-        result = await call_search_tool(
-            services=services,
-            type="symbols",
-            query="func",
-            type_filter="my_type",
-        )
-
-        # Verify the SQL was called with escaped LIKE pattern
-        calls = services.provider.execute_query.call_args_list
-        # The symbols query should contain the escaped type_filter
-        symbols_query = calls[0][0][0]
-        assert "LIKE" in symbols_query
-        # The parameter should have escaped underscores
-        params = calls[0][0][1]
-        # Find the type_filter param — should have !-escaped underscore
-        type_filter_params = [p for p in params if isinstance(p, str) and "my" in p]
-        assert len(type_filter_params) >= 1
-        # Escaped underscore: my!_type
-        assert "my!_type" in type_filter_params[0]
+        kwargs = services.provider.search_symbols.call_args.kwargs
+        assert kwargs["path"] == "src/auth"
 
 
 # ---------------------------------------------------------------------------
@@ -213,8 +190,7 @@ class TestTypeFilterCrossType:
 
     @pytest.mark.asyncio
     async def test_search_regex_with_type_filter(self) -> None:
-        """Regex search + type_filter post-filters by symbols join."""
-        # Mock regex search returning chunk results
+        """Regex search + type_filter post-filters via filter_chunks_by_symbol_type_signature."""
         chunk_results = [
             {
                 "file_path": "src/parser.py",
@@ -235,15 +211,9 @@ class TestTypeFilterCrossType:
         services.search_service.search_regex_async = pytest.importorskip(
             "unittest.mock"
         ).AsyncMock(return_value=(chunk_results, pagination))
-
-        # Symbols join: only src/parser.py has a symbol with "int" in type_signature
-        # The batch query returns matching (file_path, range_start, range_end) tuples
-        services.provider.execute_query.return_value = [
-            {
-                "file_path": "src/util.py",
-                "range_start": 5,
-                "range_end": 15,
-            },
+        # Provider retains only the util.py chunk
+        services.provider.filter_chunks_by_symbol_type_signature.return_value = [
+            chunk_results[1],
         ]
 
         result = await call_search_tool(
@@ -253,13 +223,13 @@ class TestTypeFilterCrossType:
             type_filter="int",
         )
 
-        # Only the chunk overlapping a symbol with "int" in type_signature survives
         assert len(result["results"]) == 1
         assert result["results"][0]["file_path"] == "src/util.py"
+        services.provider.filter_chunks_by_symbol_type_signature.assert_called_once()
 
     @pytest.mark.asyncio
     async def test_search_semantic_with_type_filter(self) -> None:
-        """Semantic search + type_filter post-filters by symbols join."""
+        """Semantic search + type_filter post-filters via filter_chunks_by_symbol_type_signature."""
         from unittest.mock import MagicMock
 
         chunk_results = [
@@ -282,14 +252,8 @@ class TestTypeFilterCrossType:
         services.search_service.search_semantic = pytest.importorskip(
             "unittest.mock"
         ).AsyncMock(return_value=(chunk_results, pagination))
-
-        # Symbols join: only handler.py has a symbol with "Handler" in type_signature
-        services.provider.execute_query.return_value = [
-            {
-                "file_path": "src/handler.py",
-                "range_start": 1,
-                "range_end": 50,
-            },
+        services.provider.filter_chunks_by_symbol_type_signature.return_value = [
+            chunk_results[0],
         ]
 
         # Need embedding_manager mock for semantic search
@@ -308,7 +272,6 @@ class TestTypeFilterCrossType:
             type_filter="Handler",
         )
 
-        # Only handler.py survives — logger.py has no matching symbol type
         assert len(result["results"]) == 1
         assert result["results"][0]["file_path"] == "src/handler.py"
 
@@ -351,56 +314,46 @@ class TestBuildFilteredToolDicts:
 
 
 class TestAdversarialSearchSymbols:
-    """Adversarial battery for _search_symbols and _apply_type_filter."""
+    """Adversarial battery for _search_symbols and _apply_type_filter.
+
+    Post ch-nxu Step 16: LIKE-escape metacharacter handling is provider-
+    internal. The DuckDB / LanceDB contract tests in
+    tests/integration/test_{duckdb,lancedb}_symbol_protocol.py cover query,
+    path, and type_filter escape semantics on real databases.
+    """
 
     @pytest.mark.asyncio
-    async def test_query_with_percent_sign(self) -> None:
-        """LIKE metacharacter % in query is escaped — doesn't match everything."""
-        services = make_mock_services([[], [{"total": 0}]])
+    async def test_query_forwarded_verbatim_to_provider(self) -> None:
+        """User-supplied query metacharacters are passed to the provider as-is;
+        the provider owns LIKE escaping."""
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = ([], 0)
 
-        result = await call_search_tool(
+        await call_search_tool(
             services=services, type="symbols", query="100%",
         )
 
-        # Verify the SQL parameter has escaped percent
-        calls = services.provider.execute_query.call_args_list
-        params = calls[0][0][1]
-        name_param = params[0]  # First LIKE param
-        assert "!%" in name_param
+        kwargs = services.provider.search_symbols.call_args.kwargs
+        assert kwargs["query"] == "100%"
 
     @pytest.mark.asyncio
-    async def test_query_with_underscore(self) -> None:
-        """Underscore in query is escaped — doesn't match single-char wildcard."""
-        services = make_mock_services([[], [{"total": 0}]])
+    async def test_path_forwarded_verbatim_to_provider(self) -> None:
+        """Path filter is forwarded to the provider verbatim."""
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = ([], 0)
 
-        result = await call_search_tool(
-            services=services, type="symbols", query="my_func",
-        )
-
-        calls = services.provider.execute_query.call_args_list
-        params = calls[0][0][1]
-        name_param = params[0]
-        assert "!_" in name_param
-
-    @pytest.mark.asyncio
-    async def test_path_with_underscore_escaped(self) -> None:
-        """Underscore in path filter is escaped for LIKE."""
-        services = make_mock_services([[], [{"total": 0}]])
-
-        result = await call_search_tool(
+        await call_search_tool(
             services=services, type="symbols", query="x", path="my_module",
         )
 
-        calls = services.provider.execute_query.call_args_list
-        params = calls[0][0][1]
-        # Path param should have !-escaped underscore
-        path_params = [p for p in params if isinstance(p, str) and "module" in p]
-        assert any("!_" in p for p in path_params)
+        kwargs = services.provider.search_symbols.call_args.kwargs
+        assert kwargs["path"] == "my_module"
 
     @pytest.mark.asyncio
     async def test_large_offset_beyond_total(self) -> None:
         """Offset beyond total returns empty results with correct pagination."""
-        services = make_mock_services([[], [{"total": 5}]])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = ([], 5)
 
         result = await call_search_tool(
             services=services, type="symbols", query="x", offset=1000,
@@ -411,8 +364,9 @@ class TestAdversarialSearchSymbols:
         assert result["pagination"]["has_more"] is False
 
     @pytest.mark.asyncio
-    async def test_type_filter_empty_string_treated_as_no_filter(self) -> None:
-        """Empty type_filter string should not add a LIKE clause."""
+    async def test_type_filter_empty_string_passed_to_provider(self) -> None:
+        """Empty type_filter passed to provider as empty string — provider
+        decides how to treat it (DuckDB matches any non-NULL signature)."""
         symbol_rows = [
             {
                 "fqn": "mod::foo",
@@ -425,13 +379,13 @@ class TestAdversarialSearchSymbols:
                 "type_signature": None,
             },
         ]
-        services = make_mock_services([symbol_rows, [{"total": 1}]])
+        services = make_mock_services()
+        services.provider.search_symbols.return_value = (symbol_rows, 1)
 
         result = await call_search_tool(
             services=services, type="symbols", query="foo", type_filter="",
         )
 
-        # Empty type_filter should not filter — symbol with None type_signature still returned
         assert len(result["results"]) == 1
 
     @pytest.mark.asyncio
@@ -459,8 +413,7 @@ class TestAdversarialSearchSymbols:
         services.search_service.search_regex_async = AsyncMock(
             return_value=(chunk_results, pagination),
         )
-        # Symbols join returns NOTHING — no matching type signatures
-        services.provider.execute_query.return_value = []
+        services.provider.filter_chunks_by_symbol_type_signature.return_value = []
 
         result = await call_search_tool(
             services=services, type="regex", query="def", type_filter="NonExistentType",
@@ -493,11 +446,7 @@ class TestAdversarialSearchSymbols:
         services.search_service.search_regex_async = AsyncMock(
             return_value=(chunk_results, pagination),
         )
-        # Both chunks have matching symbols
-        services.provider.execute_query.return_value = [
-            {"file_path": "src/a.py", "range_start": 1, "range_end": 5},
-            {"file_path": "src/b.py", "range_start": 10, "range_end": 15},
-        ]
+        services.provider.filter_chunks_by_symbol_type_signature.return_value = chunk_results
 
         result = await call_search_tool(
             services=services, type="regex", query="def", type_filter="int",
@@ -529,6 +478,6 @@ class TestAdversarialSearchSymbols:
             services=services, type="regex", query="class",
         )
 
-        # No type_filter — execute_query for symbols join should NOT be called
-        services.provider.execute_query.assert_not_called()
+        # No type_filter — filter_chunks_by_symbol_type_signature must not be called
+        services.provider.filter_chunks_by_symbol_type_signature.assert_not_called()
         assert len(result["results"]) == 1

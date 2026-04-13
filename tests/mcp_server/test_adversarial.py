@@ -2,20 +2,20 @@
 
 Structural patterns: empty, type boundaries, encoding boundaries,
 semantically hostile, dense, redundant.
+
+Note: ch-nxu Step 15 removed the escape_like / scope_filter /
+visited_tracking_columns adversarial classes — the underlying helpers
+were absorbed into DuckDBProvider and their behavioral coverage now lives
+in tests/integration/test_duckdb_graph_protocol.py and
+tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.
 """
 
 import pytest
-import sqlglot
 
 from chunkhound.mcp_server.tools.formatters import (
     _uri_to_path,
     format_edge,
     format_node,
-)
-from chunkhound.mcp_server.tools.queries.common import (
-    escape_like,
-    scope_filter,
-    visited_tracking_columns,
 )
 from chunkhound.mcp_server.tools.validation import clamp, require_param
 
@@ -163,69 +163,6 @@ class TestUriToPathAdversarial:
         assert "C:" in result
 
 
-# ---------------------------------------------------------------------------
-# escape_like — Dense
-# ---------------------------------------------------------------------------
-
-
-class TestEscapeLikeDense:
-    """Adversarial: strings made entirely of special characters."""
-
-    def test_all_percents(self) -> None:
-        assert escape_like("%%%") == "!%!%!%"
-
-    def test_all_underscores(self) -> None:
-        assert escape_like("___") == "!_!_!_"
-
-    def test_all_exclamation_marks(self) -> None:
-        """The escape char itself (!) is doubled."""
-        assert escape_like("!!!") == "!!!!!!"
-
-    def test_backslashes_pass_through(self) -> None:
-        """Backslash is not special with ! escape char."""
-        assert escape_like("\\\\\\") == "\\\\\\"
-
-    def test_alternating_specials(self) -> None:
-        assert escape_like("%_!\\") == "!%!_!!\\"
-
-
-# ---------------------------------------------------------------------------
-# scope_filter — Empty, Type boundaries
-# ---------------------------------------------------------------------------
-
-
-class TestScopeFilterAdversarial:
-    """Adversarial: empty scope, scope that is a wildcard."""
-
-    def test_empty_scope_matches_everything(self) -> None:
-        """Empty scope produces pattern '%' — matches all rows."""
-        sql, params = scope_filter("")
-        assert params[0] == "%"
-
-    def test_scope_is_percent(self) -> None:
-        """Scope '%' must be escaped so it doesn't match everything."""
-        sql, params = scope_filter("%")
-        assert params[0] == "!%%"
-
-    def test_scope_is_underscore(self) -> None:
-        _, params = scope_filter("_")
-        assert params[0] == "!_%"
-
-    def test_custom_column_name(self) -> None:
-        sql, _ = scope_filter("src", column="s.file_path")
-        assert "s.file_path" in sql
-
-
-# ---------------------------------------------------------------------------
-# visited_tracking_columns — Encoding boundaries
-# ---------------------------------------------------------------------------
-
-
-class TestVisitedTrackingAdversarial:
-    """Adversarial: unusual table/column names in expressions."""
-
-    def test_generates_valid_sql_with_alias(self) -> None:
-        append, contains = visited_tracking_columns("tbl", "col")
-        # Both should produce parseable SQL
-        sqlglot.parse_one(append.sql(dialect="duckdb"), dialect="duckdb")
-        sqlglot.parse_one(contains.sql(dialect="duckdb"), dialect="duckdb")
+# escape_like / scope_filter / visited_tracking_columns classes deleted by
+# ch-nxu Step 15 — helpers absorbed into DuckDBProvider; behavioral coverage
+# now lives in tests/integration/test_{duckdb,lancedb}_symbol_protocol.py.

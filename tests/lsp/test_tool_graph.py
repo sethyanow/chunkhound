@@ -15,7 +15,7 @@ import pytest
 
 pytestmark = pytest.mark.unit
 
-from chunkhound.mcp_server.tools.queries.common import escape_like as _escape_like
+# escape_like import removed by ch-nxu Step 15 — helper absorbed into providers.
 from tests.lsp.mcp_tool_helpers import call_graph_tool, make_mock_services
 
 
@@ -309,31 +309,9 @@ class TestGraphValidation:
 # ---------------------------------------------------------------------------
 
 
-class TestEscapeLike:
-    """_escape_like: pure function for LIKE-safe string encoding."""
-
-    def test_percent(self) -> None:
-        assert _escape_like("chunk%ound") == "chunk!%ound"
-
-    def test_underscore(self) -> None:
-        assert _escape_like("chunk_ound") == "chunk!_ound"
-
-    def test_escape_char_doubled(self) -> None:
-        """The escape char itself (!) is doubled."""
-        assert _escape_like("path!to") == "path!!to"
-
-    def test_backslash_not_special(self) -> None:
-        """Backslash is not a LIKE metacharacter — passes through unchanged."""
-        assert _escape_like("path\\to") == "path\\to"
-
-    def test_all_special_chars(self) -> None:
-        assert _escape_like("a%b_c!d") == "a!%b!_c!!d"
-
-    def test_empty_string(self) -> None:
-        assert _escape_like("") == ""
-
-    def test_unicode_passthrough(self) -> None:
-        assert _escape_like("パス/ファイル") == "パス/ファイル"
+# TestEscapeLike deleted by ch-nxu Step 15 — the escape_like helper was
+# absorbed into DuckDBProvider internals. LIKE-escape behavior is tested
+# via provider integration tests (test_{duckdb,lancedb}_symbol_protocol.py).
 
 
 class TestGraphAdversarial:
