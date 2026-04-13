@@ -222,6 +222,146 @@ class TestLanceDBGraphReachability:
         assert result == []
 
 
+def _build_cross_scope_graph(provider) -> None:
+    """Two files in different path prefixes with a cross-boundary edge."""
+    from chunkhound.core.models import File
+    from chunkhound.core.types.common import Language
+
+    inside_id = provider.insert_file(
+        File(path="src/inside/a.py", mtime=1.0, language=Language.PYTHON, size_bytes=100)
+    )
+    outside_id = provider.insert_file(
+        File(path="src/outside/b.py", mtime=1.0, language=Language.PYTHON, size_bytes=100)
+    )
+    symbols: list[SymbolRow] = [
+        SymbolRow(fqn="in::A", name="A", kind="Function", language="python",
+                  file_id=inside_id, file_path="src/inside/a.py",
+                  range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                  parent_fqn=None, type_signature=None),
+        SymbolRow(fqn="out::B", name="B", kind="Function", language="python",
+                  file_id=outside_id, file_path="src/outside/b.py",
+                  range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                  parent_fqn=None, type_signature=None),
+    ]
+    provider.insert_symbols_batch(symbols)
+    inside_fqn_id = provider.query_symbol_fqns_by_file(inside_id)["in::A"]
+    outside_fqn_id = provider.query_symbol_fqns_by_file(outside_id)["out::B"]
+
+    edges: list[EdgeRow] = [
+        EdgeRow(from_symbol_id=inside_fqn_id, from_fqn="in::A", from_file="src/inside/a.py",
+                to_symbol_id=outside_fqn_id, to_fqn="out::B", to_file="src/outside/b.py",
+                edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+    ]
+    provider.insert_edges_batch(edges)
+
+
+class TestLanceDBGraphBoundary:
+    """graph_boundary returns edges crossing a scope prefix boundary."""
+
+    def test_returns_cross_boundary_edges(self, lancedb_provider) -> None:
+        _build_cross_scope_graph(lancedb_provider)
+        edges = lancedb_provider.graph_boundary("src/inside/", limit=100)
+        assert len(edges) == 1
+        e = edges[0]
+        # Full field contract — MCP tool needs name/kind/file on both sides
+        assert e["from_fqn"] == "in::A"
+        assert e["from_name"] == "A"
+        assert e["from_kind"] == "Function"
+        assert e["from_file"] == "src/inside/a.py"
+        assert e["to_fqn"] == "out::B"
+        assert e["to_name"] == "B"
+        assert e["to_kind"] == "Function"
+        assert e["to_file"] == "src/outside/b.py"
+        assert e["edge_kind"] == "calls"
+
+    def test_internal_edges_excluded(self, lancedb_provider) -> None:
+        _build_graph(lancedb_provider)  # all in src/example.py
+        edges = lancedb_provider.graph_boundary("src/example", limit=100)
+        assert edges == []
+
+    def test_empty_tables_returns_empty(self, lancedb_provider) -> None:
+        assert lancedb_provider.graph_boundary("src/", limit=100) == []
+
+
+class TestLanceDBGraphOverview:
+    """graph_overview returns symbols ranked by total edge count."""
+
+    def test_ranks_by_edge_count(self, lancedb_provider) -> None:
+        _build_graph(lancedb_provider)  # A->B, B->C
+        result = lancedb_provider.graph_overview(scope=None, limit=10)
+
+        by_fqn = {r["fqn"]: r for r in result}
+        assert "mod::B" in by_fqn
+        assert by_fqn["mod::B"]["total_edges"] >= by_fqn.get("mod::A", {"total_edges": 0})["total_edges"]
+        assert by_fqn["mod::B"]["total_edges"] >= by_fqn.get("mod::C", {"total_edges": 0})["total_edges"]
+
+    def test_scope_filter(self, lancedb_provider) -> None:
+        _build_graph(lancedb_provider)
+        result = lancedb_provider.graph_overview(scope="src/example", limit=10)
+        assert all(r["file_path"].startswith("src/example") for r in result)
+
+        empty = lancedb_provider.graph_overview(scope="nonexistent/", limit=10)
+        assert empty == []
+
+    def test_respects_limit(self, lancedb_provider) -> None:
+        _build_graph(lancedb_provider)
+        result = lancedb_provider.graph_overview(scope=None, limit=2)
+        assert len(result) <= 2
+
+    def test_empty_tables_returns_empty(self, lancedb_provider) -> None:
+        assert lancedb_provider.graph_overview(scope=None, limit=10) == []
+
+
+class TestLanceDBGraphOverviewBreakdown:
+    """graph_overview_breakdown returns per-edge_kind counts for a list of FQNs."""
+
+    def test_counts_per_edge_kind(self, lancedb_provider) -> None:
+        _build_graph(lancedb_provider)  # A->B, B->C, both 'calls'
+
+        breakdown = lancedb_provider.graph_overview_breakdown(
+            ["mod::A", "mod::B", "mod::C"]
+        )
+        assert breakdown["mod::A"]["calls"] == 1
+        assert breakdown["mod::B"]["calls"] == 2
+        assert breakdown["mod::C"]["calls"] == 1
+
+    def test_multiple_edge_kinds(self, lancedb_provider) -> None:
+        file_id = _insert_test_file(lancedb_provider)
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mx::X", name="X", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="mx::Y", name="Y", kind="Function", language="python",
+                      file_id=file_id, file_path="src/example.py",
+                      range_start=10, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+        ]
+        lancedb_provider.insert_symbols_batch(symbols)
+        fqn_map = lancedb_provider.query_symbol_fqns_by_file(file_id)
+        edges: list[EdgeRow] = [
+            EdgeRow(from_symbol_id=fqn_map["mx::X"], from_fqn="mx::X", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mx::Y"], to_fqn="mx::Y", to_file="src/example.py",
+                    edge_kind="calls", confidence=1.0, lsp_server="pyright"),
+            EdgeRow(from_symbol_id=fqn_map["mx::X"], from_fqn="mx::X", from_file="src/example.py",
+                    to_symbol_id=fqn_map["mx::Y"], to_fqn="mx::Y", to_file="src/example.py",
+                    edge_kind="references", confidence=1.0, lsp_server="pyright"),
+        ]
+        lancedb_provider.insert_edges_batch(edges)
+
+        breakdown = lancedb_provider.graph_overview_breakdown(["mx::X"])
+        assert breakdown["mx::X"]["calls"] == 1
+        assert breakdown["mx::X"]["references"] == 1
+
+    def test_empty_fqns_returns_empty(self, lancedb_provider) -> None:
+        assert lancedb_provider.graph_overview_breakdown([]) == {}
+
+    def test_unknown_fqn_absent_from_result(self, lancedb_provider) -> None:
+        _build_graph(lancedb_provider)
+        breakdown = lancedb_provider.graph_overview_breakdown(["does::not::exist"])
+        assert "does::not::exist" not in breakdown
+
+
 class TestLanceDBSymbolOverlap:
     """symbol_overlap resolves chunks to symbol FQNs."""
 

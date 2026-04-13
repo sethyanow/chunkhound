@@ -2639,29 +2639,56 @@ class LanceDBProvider(SerialDatabaseProvider):
         self, conn: Any, state: dict[str, Any], scope: str, limit: int
     ) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        _escape_like_pattern(scope)
 
         try:
             all_edges = edge_tbl.search().to_list()
         except Exception:
             return []
 
-        results: list[dict[str, Any]] = []
+        # Collect crossing edges first; look up name/kind per FQN afterwards
+        crossing: list[dict[str, Any]] = []
+        needed_fqns: set[str] = set()
         for e in all_edges:
             from_in = e.get("from_file", "").startswith(scope)
             to_in = e.get("to_file", "").startswith(scope)
-            if from_in != to_in:  # One inside, one outside
-                results.append(
-                    {
-                        "from_fqn": e["from_fqn"],
-                        "to_fqn": e["to_fqn"],
-                        "edge_kind": e["edge_kind"],
-                        "from_file": e.get("from_file", ""),
-                        "to_file": e.get("to_file", ""),
-                    }
-                )
-                if len(results) >= limit:
+            if from_in != to_in:
+                crossing.append(e)
+                needed_fqns.add(e["from_fqn"])
+                needed_fqns.add(e["to_fqn"])
+                if len(crossing) >= limit:
                     break
+
+        # Batch-fetch symbol name/kind for all endpoints (single scan)
+        name_kind: dict[str, tuple[str, str]] = {}
+        if needed_fqns:
+            try:
+                sym_rows = sym_tbl.search().select(["fqn", "name", "kind"]).to_list()
+            except Exception:
+                sym_rows = []
+            for row in sym_rows:
+                fqn = row.get("fqn")
+                if fqn in needed_fqns:
+                    name_kind[fqn] = (row.get("name", ""), row.get("kind", ""))
+
+        results: list[dict[str, Any]] = []
+        for e in crossing:
+            from_fqn = e["from_fqn"]
+            to_fqn = e["to_fqn"]
+            from_name, from_kind = name_kind.get(from_fqn, ("", ""))
+            to_name, to_kind = name_kind.get(to_fqn, ("", ""))
+            results.append(
+                {
+                    "from_fqn": from_fqn,
+                    "from_name": from_name,
+                    "from_kind": from_kind,
+                    "from_file": e.get("from_file", ""),
+                    "to_fqn": to_fqn,
+                    "to_name": to_name,
+                    "to_kind": to_kind,
+                    "to_file": e.get("to_file", ""),
+                    "edge_kind": e["edge_kind"],
+                }
+            )
         return results
 
     def graph_overview(self, scope: str | None, limit: int) -> list[dict[str, Any]]:
@@ -2709,6 +2736,43 @@ class LanceDBProvider(SerialDatabaseProvider):
             except Exception:
                 pass
         return results
+
+    def graph_overview_breakdown(
+        self, fqns: list[str]
+    ) -> dict[str, dict[str, int]]:
+        """Per-edge-kind counts for the given FQNs."""
+        if not fqns:
+            return {}
+        return self._execute_in_db_thread_sync(
+            self._executor_graph_overview_breakdown, fqns
+        )
+
+    def _executor_graph_overview_breakdown(
+        self, conn: Any, state: dict[str, Any], fqns: list[str]
+    ) -> dict[str, dict[str, int]]:
+        if not fqns:
+            return {}
+        _sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
+
+        fqn_set = set(fqns)
+        result: dict[str, dict[str, int]] = {}
+        try:
+            all_edges = edge_tbl.search().to_list()
+        except Exception:
+            return {}
+
+        for e in all_edges:
+            edge_kind = e["edge_kind"]
+            from_fqn = e["from_fqn"]
+            to_fqn = e["to_fqn"]
+            # Mirrors DuckDB: count each edge once per matching endpoint
+            if from_fqn in fqn_set:
+                result.setdefault(from_fqn, {})
+                result[from_fqn][edge_kind] = result[from_fqn].get(edge_kind, 0) + 1
+            if to_fqn in fqn_set and to_fqn != from_fqn:
+                result.setdefault(to_fqn, {})
+                result[to_fqn][edge_kind] = result[to_fqn].get(edge_kind, 0) + 1
+        return result
 
     def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
         """Resolve seed chunks to symbol FQNs via range overlap."""

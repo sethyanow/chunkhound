@@ -69,24 +69,27 @@ def _make_full_client() -> AsyncMock:
 
 
 def _make_graph_services():
-    """Services with FQN lookup + graph walk canned responses."""
+    """Services with FQN lookup + graph walk canned responses.
+
+    FQN lookup still uses execute_query (migration pending in Step 15).
+    graph_walk goes through the provider protocol method (ch-nxu Step 14).
+    """
     services = MagicMock()
-    services.provider.execute_query.side_effect = [
-        # FQN lookup
-        [{"fqn": "module::my_func"}],
-        # graph_walk nodes
+    # FQN lookup (symbol at range) — still raw execute_query until later step
+    services.provider.execute_query.return_value = [{"fqn": "module::my_func"}]
+    # graph_walk now returns (nodes, edges) tuple via protocol method
+    services.provider.graph_walk.return_value = (
         [
             {"fqn": "module::my_func", "name": "my_func", "kind": "function",
              "file_path": "module.py", "depth": 0},
             {"fqn": "module::callee_func", "name": "callee_func", "kind": "function",
              "file_path": "callee.py", "depth": 1},
         ],
-        # graph_walk edges
         [
             {"from_fqn": "module::my_func", "to_fqn": "module::callee_func",
              "edge_kind": "calls", "from_file": "module.py", "to_file": "callee.py"},
         ],
-    ]
+    )
     return services
 
 
@@ -433,13 +436,15 @@ class TestSymbolContextAdversarial:
         config = make_mock_config()
 
         services = MagicMock()
-        services.provider.execute_query.side_effect = [
-            [{"fqn": "mod::recursive"}],
+        # FQN lookup still uses execute_query
+        services.provider.execute_query.return_value = [{"fqn": "mod::recursive"}]
+        # graph_walk goes through provider protocol method
+        services.provider.graph_walk.return_value = (
             [{"fqn": "mod::recursive", "name": "recursive", "kind": "function",
               "file_path": "mod.py", "depth": 0}],
             [{"from_fqn": "mod::recursive", "to_fqn": "mod::recursive",
               "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"}],
-        ]
+        )
 
         result = await call_symbol_context_tool(
             pool=pool, config=config, services=services,

@@ -1,8 +1,11 @@
-"""Tests for the `graph` MCP tool — DuckDB-backed symbol dependency queries.
+"""Tests for the `graph` MCP tool — provider-agnostic symbol dependency queries.
 
 Organized by operation (walk, reachability, boundary, overview) then by
 adversarial stress tests that probe boundary conditions, cycle handling,
 parameter clamping, and SQL injection safety.
+
+Post-ch-nxu Step 14: the tool calls DatabaseProvider graph methods directly.
+Tests mock provider return values, not execute_query sequences.
 """
 
 import asyncio
@@ -16,28 +19,51 @@ from chunkhound.mcp_server.tools.queries.common import escape_like as _escape_li
 from tests.lsp.mcp_tool_helpers import call_graph_tool, make_mock_services
 
 
+def _set_walk(services: Any, nodes: list[dict[str, Any]], edges: list[dict[str, Any]]) -> None:
+    services.provider.graph_walk.return_value = (nodes, edges)
+
+
+def _set_reachability(services: Any, unreachable: list[dict[str, Any]]) -> None:
+    services.provider.graph_reachability.return_value = unreachable
+
+
+def _set_boundary(services: Any, edges: list[dict[str, Any]]) -> None:
+    services.provider.graph_boundary.return_value = edges
+
+
+def _set_overview(
+    services: Any,
+    top_symbols: list[dict[str, Any]],
+    breakdown: dict[str, dict[str, int]] | None = None,
+) -> None:
+    services.provider.graph_overview.return_value = top_symbols
+    services.provider.graph_overview_breakdown.return_value = breakdown or {}
+
+
 # ---------------------------------------------------------------------------
 # Walk operation
 # ---------------------------------------------------------------------------
 
 
 class TestGraphWalk:
-    """Walk traverses connected symbols from a starting FQN via recursive CTE."""
+    """Walk traverses connected symbols from a starting FQN via provider.graph_walk."""
 
     @pytest.mark.asyncio
     async def test_walk_returns_nodes_and_edges(self) -> None:
         """Walk produces {results: [node], edges: [edge], count: N} with clean field names."""
-        services = make_mock_services([
-            [
+        services = make_mock_services()
+        _set_walk(
+            services,
+            nodes=[
                 {"fqn": "mod::A", "name": "A", "kind": "Class", "file_path": "mod.py", "depth": 0},
                 {"fqn": "mod::A::foo", "name": "foo", "kind": "Function", "file_path": "mod.py", "depth": 1},
                 {"fqn": "util::helper", "name": "helper", "kind": "Function", "file_path": "util.py", "depth": 2},
             ],
-            [
+            edges=[
                 {"from_fqn": "mod::A", "to_fqn": "mod::A::foo", "edge_kind": "defines", "from_file": "mod.py", "to_file": "mod.py"},
                 {"from_fqn": "mod::A::foo", "to_fqn": "util::helper", "edge_kind": "calls", "from_file": "mod.py", "to_file": "util.py"},
             ],
-        ])
+        )
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="mod::A", depth=2,
@@ -59,18 +85,26 @@ class TestGraphWalk:
         assert "edge_kind" in edge
         assert "from_symbol_id" not in edge
 
+        # Tool passed the symbol through unchanged
+        services.provider.graph_walk.assert_called_once()
+        kwargs = services.provider.graph_walk.call_args.kwargs
+        assert kwargs["seed_fqns"] == ["mod::A"]
+        assert kwargs["depth"] == 2
+
     @pytest.mark.asyncio
     async def test_walk_edge_kind_filter(self) -> None:
-        """edge_kind parameter filters traversal to only matching edges."""
-        services = make_mock_services([
-            [
+        """edge_kind parameter forwards to provider.graph_walk."""
+        services = make_mock_services()
+        _set_walk(
+            services,
+            nodes=[
                 {"fqn": "mod::A::foo", "name": "foo", "kind": "Function", "file_path": "mod.py", "depth": 0},
                 {"fqn": "util::helper", "name": "helper", "kind": "Function", "file_path": "util.py", "depth": 1},
             ],
-            [
+            edges=[
                 {"from_fqn": "mod::A::foo", "to_fqn": "util::helper", "edge_kind": "calls", "from_file": "mod.py", "to_file": "util.py"},
             ],
-        ])
+        )
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="mod::A::foo", depth=2, edge_kind="calls",
@@ -78,11 +112,13 @@ class TestGraphWalk:
 
         assert len(result["results"]) == 2
         assert all(e["edge_kind"] == "calls" for e in result["edges"])
+        assert services.provider.graph_walk.call_args.kwargs["edge_kind"] == "calls"
 
     @pytest.mark.asyncio
     async def test_walk_nonexistent_fqn_returns_empty(self) -> None:
         """Nonexistent FQN → empty results, not error."""
-        services = make_mock_services([[], []])
+        services = make_mock_services()
+        _set_walk(services, nodes=[], edges=[])
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="nonexistent::Symbol",
@@ -101,7 +137,7 @@ class TestGraphWalk:
         result = await call_graph_tool(services=services, operation="walk")
 
         assert result["error"] == "missing_parameter"
-        services.provider.execute_query.assert_not_called()
+        services.provider.graph_walk.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_walk_empty_string_symbol_returns_error(self) -> None:
@@ -113,21 +149,23 @@ class TestGraphWalk:
         )
 
         assert result["error"] == "missing_parameter"
-        services.provider.execute_query.assert_not_called()
+        services.provider.graph_walk.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_walk_cycle_terminates(self) -> None:
         """Cyclic graph (A→B→A) terminates without hanging."""
-        services = make_mock_services([
-            [
+        services = make_mock_services()
+        _set_walk(
+            services,
+            nodes=[
                 {"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0},
                 {"fqn": "mod::B", "name": "B", "kind": "Function", "file_path": "mod.py", "depth": 1},
             ],
-            [
+            edges=[
                 {"from_fqn": "mod::A", "to_fqn": "mod::B", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"},
                 {"from_fqn": "mod::B", "to_fqn": "mod::A", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"},
             ],
-        ])
+        )
 
         result = await asyncio.wait_for(
             call_graph_tool(
@@ -146,18 +184,14 @@ class TestGraphReachability:
 
     @pytest.mark.asyncio
     async def test_reachability_identifies_orphans(self) -> None:
-        """Symbols not in the reachable set appear in 'unreachable'."""
-        services = make_mock_services([
-            [
-                {"fqn": "pkg::main", "name": "main", "kind": "Function", "file_path": "pkg/main.py"},
-                {"fqn": "pkg::helper", "name": "helper", "kind": "Function", "file_path": "pkg/util.py"},
+        """Provider returns unreachable symbols directly; tool forwards them."""
+        services = make_mock_services()
+        _set_reachability(
+            services,
+            unreachable=[
                 {"fqn": "pkg::orphan", "name": "orphan", "kind": "Function", "file_path": "pkg/dead.py"},
             ],
-            [
-                {"fqn": "pkg::main"},
-                {"fqn": "pkg::helper"},
-            ],
-        ])
+        )
 
         result = await call_graph_tool(
             services=services, operation="reachability", scope="pkg/",
@@ -165,8 +199,8 @@ class TestGraphReachability:
 
         fqns = [s["fqn"] for s in result["unreachable"]]
         assert "pkg::orphan" in fqns
-        assert "pkg::main" not in fqns
         assert result["count"] == 1
+        services.provider.graph_reachability.assert_called_once_with("pkg/")
 
     @pytest.mark.asyncio
     async def test_reachability_missing_scope_returns_error(self) -> None:
@@ -175,7 +209,7 @@ class TestGraphReachability:
         result = await call_graph_tool(services=services, operation="reachability")
 
         assert result["error"] == "missing_parameter"
-        services.provider.execute_query.assert_not_called()
+        services.provider.graph_reachability.assert_not_called()
 
 
 class TestGraphBoundary:
@@ -184,8 +218,10 @@ class TestGraphBoundary:
     @pytest.mark.asyncio
     async def test_boundary_returns_cross_scope_edges(self) -> None:
         """Edge from inside scope to outside appears in result."""
-        services = make_mock_services([
-            [
+        services = make_mock_services()
+        _set_boundary(
+            services,
+            edges=[
                 {
                     "from_fqn": "pkg::client", "from_name": "client", "from_kind": "Function",
                     "from_file": "pkg/client.py",
@@ -194,7 +230,7 @@ class TestGraphBoundary:
                     "edge_kind": "calls",
                 },
             ],
-        ])
+        )
 
         result = await call_graph_tool(
             services=services, operation="boundary", scope="pkg/",
@@ -214,7 +250,7 @@ class TestGraphBoundary:
         result = await call_graph_tool(services=services, operation="boundary")
 
         assert result["error"] == "missing_parameter"
-        services.provider.execute_query.assert_not_called()
+        services.provider.graph_boundary.assert_not_called()
 
 
 class TestGraphOverview:
@@ -223,18 +259,18 @@ class TestGraphOverview:
     @pytest.mark.asyncio
     async def test_overview_returns_breakdown(self) -> None:
         """Each symbol gets a {edge_kind: count} breakdown dict."""
-        services = make_mock_services([
-            [
+        services = make_mock_services()
+        _set_overview(
+            services,
+            top_symbols=[
                 {"fqn": "mod::Hub", "name": "Hub", "kind": "Class", "file_path": "mod.py", "total_edges": 15},
                 {"fqn": "mod::Helper", "name": "Helper", "kind": "Function", "file_path": "mod.py", "total_edges": 8},
             ],
-            [
-                {"fqn": "mod::Hub", "edge_kind": "calls", "edge_count": 10},
-                {"fqn": "mod::Hub", "edge_kind": "defines", "edge_count": 5},
-                {"fqn": "mod::Helper", "edge_kind": "called_by", "edge_count": 6},
-                {"fqn": "mod::Helper", "edge_kind": "references", "edge_count": 2},
-            ],
-        ])
+            breakdown={
+                "mod::Hub": {"calls": 10, "defines": 5},
+                "mod::Helper": {"called_by": 6, "references": 2},
+            },
+        )
 
         result = await call_graph_tool(
             services=services, operation="overview", limit=10,
@@ -262,7 +298,10 @@ class TestGraphValidation:
         result = await call_graph_tool(services=services, operation="bogus")
 
         assert result["error"] == "invalid_operation"
-        services.provider.execute_query.assert_not_called()
+        services.provider.graph_walk.assert_not_called()
+        services.provider.graph_reachability.assert_not_called()
+        services.provider.graph_boundary.assert_not_called()
+        services.provider.graph_overview.assert_not_called()
 
 
 # ---------------------------------------------------------------------------
@@ -303,10 +342,12 @@ class TestGraphAdversarial:
     @pytest.mark.asyncio
     async def test_walk_self_loop_terminates(self) -> None:
         """Symbol with edge to itself → single result, no infinite expansion."""
-        services = make_mock_services([
-            [{"fqn": "mod::Self", "name": "Self", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [{"from_fqn": "mod::Self", "to_fqn": "mod::Self", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"}],
-        ])
+        services = make_mock_services()
+        _set_walk(
+            services,
+            nodes=[{"fqn": "mod::Self", "name": "Self", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            edges=[{"from_fqn": "mod::Self", "to_fqn": "mod::Self", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"}],
+        )
 
         result = await asyncio.wait_for(
             call_graph_tool(services=services, operation="walk", symbol="mod::Self", depth=10),
@@ -318,68 +359,66 @@ class TestGraphAdversarial:
 
     @pytest.mark.asyncio
     async def test_walk_dense_graph_respects_limit(self) -> None:
-        """50-node fan-out capped by limit parameter."""
-        nodes = [{"fqn": f"mod::N{i}", "name": f"N{i}", "kind": "Function", "file_path": "mod.py", "depth": 1} for i in range(50)]
-        nodes.insert(0, {"fqn": "mod::Root", "name": "Root", "kind": "Function", "file_path": "mod.py", "depth": 0})
-        edges = [{"from_fqn": "mod::Root", "to_fqn": f"mod::N{i}", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"} for i in range(50)]
-        services = make_mock_services([nodes[:5], edges[:5]])
+        """limit parameter forwards to provider.graph_walk."""
+        services = make_mock_services()
+        # Provider honours limit internally; tool passes it through
+        _set_walk(
+            services,
+            nodes=[{"fqn": f"mod::N{i}", "name": f"N{i}", "kind": "Function", "file_path": "mod.py", "depth": 1} for i in range(5)],
+            edges=[{"from_fqn": "mod::Root", "to_fqn": f"mod::N{i}", "edge_kind": "calls", "from_file": "mod.py", "to_file": "mod.py"} for i in range(5)],
+        )
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="mod::Root", depth=2, limit=5,
         )
 
         assert len(result["results"]) <= 5
+        assert services.provider.graph_walk.call_args.kwargs["limit"] == 5
 
     @pytest.mark.asyncio
     async def test_walk_depth_zero_clamped_to_minimum(self) -> None:
-        """depth=0 silently clamped to 1 — no error returned."""
-        services = make_mock_services([
-            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
-        ])
+        """depth=0 silently clamped to 1 — verified via call kwargs."""
+        services = make_mock_services()
+        _set_walk(services, nodes=[{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}], edges=[])
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="mod::A", depth=0,
         )
 
         assert "error" not in result
-        assert "results" in result
+        assert services.provider.graph_walk.call_args.kwargs["depth"] == 1
 
     @pytest.mark.asyncio
     async def test_walk_depth_huge_clamped_to_maximum(self) -> None:
-        """depth=9999 silently clamped to 20 — verified via query params."""
-        services = make_mock_services([
-            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
-        ])
+        """depth=9999 silently clamped to 20."""
+        services = make_mock_services()
+        _set_walk(services, nodes=[{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}], edges=[])
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="mod::A", depth=9999,
         )
 
         assert "error" not in result
-        call_args = services.provider.execute_query.call_args_list[0]
-        params = call_args[0][1]
-        assert params[1] == 20  # clamped
+        assert services.provider.graph_walk.call_args.kwargs["depth"] == 20
 
     @pytest.mark.asyncio
     async def test_walk_negative_limit_clamped(self) -> None:
         """limit=-5 clamped to 1."""
-        services = make_mock_services([
-            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
-        ])
+        services = make_mock_services()
+        _set_walk(services, nodes=[{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}], edges=[])
 
         result = await call_graph_tool(
             services=services, operation="walk", symbol="mod::A", limit=-5,
         )
 
         assert "error" not in result
+        assert services.provider.graph_walk.call_args.kwargs["limit"] == 1
 
     @pytest.mark.asyncio
     async def test_reachability_empty_scope(self) -> None:
-        """Scope with no symbols → empty unreachable list."""
-        services = make_mock_services([[], []])
+        """Scope with no unreachable symbols → empty list."""
+        services = make_mock_services()
+        _set_reachability(services, unreachable=[])
 
         result = await call_graph_tool(
             services=services, operation="reachability", scope="nonexistent/",
@@ -390,14 +429,9 @@ class TestGraphAdversarial:
 
     @pytest.mark.asyncio
     async def test_reachability_all_connected(self) -> None:
-        """All symbols reachable → unreachable list empty."""
-        services = make_mock_services([
-            [
-                {"fqn": "pkg::a", "name": "a", "kind": "Function", "file_path": "pkg/a.py"},
-                {"fqn": "pkg::b", "name": "b", "kind": "Function", "file_path": "pkg/b.py"},
-            ],
-            [{"fqn": "pkg::a"}, {"fqn": "pkg::b"}],
-        ])
+        """Provider returns [] when everything is reachable."""
+        services = make_mock_services()
+        _set_reachability(services, unreachable=[])
 
         result = await call_graph_tool(
             services=services, operation="reachability", scope="pkg/",
@@ -407,24 +441,25 @@ class TestGraphAdversarial:
         assert result["count"] == 0
 
     @pytest.mark.asyncio
-    async def test_boundary_scope_with_underscore_escaped(self) -> None:
-        """Scope with _ must be LIKE-escaped so 'a_b/' doesn't match 'aXb/'."""
-        services = make_mock_services([[]])
+    async def test_boundary_passes_scope_verbatim(self) -> None:
+        """Tool forwards scope to provider unchanged — LIKE-escaping is a provider concern."""
+        services = make_mock_services()
+        _set_boundary(services, edges=[])
 
         await call_graph_tool(
             services=services, operation="boundary", scope="chunk_ound/",
         )
 
-        call_args = services.provider.execute_query.call_args_list[0]
-        params = call_args[0][1]
-        assert "chunk!_ound/" in params[0]
+        services.provider.graph_boundary.assert_called_once_with("chunk_ound/", 20)
 
     @pytest.mark.asyncio
     async def test_overview_single_symbol(self) -> None:
-        services = make_mock_services([
-            [{"fqn": "mod::Only", "name": "Only", "kind": "Function", "file_path": "mod.py", "total_edges": 1}],
-            [{"fqn": "mod::Only", "edge_kind": "calls", "edge_count": 1}],
-        ])
+        services = make_mock_services()
+        _set_overview(
+            services,
+            top_symbols=[{"fqn": "mod::Only", "name": "Only", "kind": "Function", "file_path": "mod.py", "total_edges": 1}],
+            breakdown={"mod::Only": {"calls": 1}},
+        )
 
         result = await call_graph_tool(services=services, operation="overview")
 
@@ -433,21 +468,25 @@ class TestGraphAdversarial:
 
     @pytest.mark.asyncio
     async def test_overview_empty_graph(self) -> None:
-        services = make_mock_services([[]])
+        services = make_mock_services()
+        _set_overview(services, top_symbols=[], breakdown={})
 
         result = await call_graph_tool(services=services, operation="overview")
 
         assert result["symbols"] == []
         assert result["count"] == 0
+        # Short-circuit: breakdown lookup skipped when top_symbols empty
+        services.provider.graph_overview_breakdown.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_walk_idempotent(self) -> None:
         """Two identical walk calls return identical results (read-only queries)."""
-        mock_data: list[list[dict[str, Any]]] = [
-            [{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
-        ]
-        services = make_mock_services(mock_data + mock_data)
+        services = make_mock_services()
+        _set_walk(
+            services,
+            nodes=[{"fqn": "mod::A", "name": "A", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            edges=[],
+        )
 
         r1 = await call_graph_tool(services=services, operation="walk", symbol="mod::A")
         r2 = await call_graph_tool(services=services, operation="walk", symbol="mod::A")
@@ -455,16 +494,21 @@ class TestGraphAdversarial:
         assert r1 == r2
 
     @pytest.mark.asyncio
-    async def test_walk_sql_injection_safe(self) -> None:
-        """FQN containing SQL keywords passed as parameter, not interpolated."""
-        services = make_mock_services([[], []])
+    async def test_walk_symbol_passed_verbatim(self) -> None:
+        """FQN containing SQL keywords forwards to provider unchanged.
 
+        Injection safety is now the provider's responsibility (parameterized
+        queries in DuckDB, native filters in LanceDB). The tool just passes
+        the raw FQN through.
+        """
+        services = make_mock_services()
+        _set_walk(services, nodes=[], edges=[])
+
+        payload = "'; DROP TABLE symbols; --"
         result = await call_graph_tool(
-            services=services, operation="walk", symbol="'; DROP TABLE symbols; --",
+            services=services, operation="walk", symbol=payload,
         )
 
         assert result["results"] == []
         assert "error" not in result
-        call_args = services.provider.execute_query.call_args_list[0]
-        params = call_args[0][1]
-        assert "'; DROP TABLE symbols; --" in params
+        assert services.provider.graph_walk.call_args.kwargs["seed_fqns"] == [payload]

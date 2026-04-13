@@ -551,6 +551,17 @@ class DatabaseProvider(Protocol):
         """
         ...
 
+    def graph_overview_breakdown(
+        self, fqns: list[str]
+    ) -> dict[str, dict[str, int]]:
+        """Per-edge-kind counts for the given FQNs.
+
+        Returns a mapping ``{fqn: {edge_kind: count}}``. FQNs with no edges are
+        absent from the result (not present with an empty inner dict), matching
+        dict-get semantics for downstream merges.
+        """
+        ...
+
     def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
         """Resolve seed chunks to symbol FQNs via range overlap.
 

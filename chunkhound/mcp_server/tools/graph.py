@@ -1,26 +1,18 @@
-"""Graph MCP tool — thin functions composing validation, query builders, and formatters.
+"""Graph MCP tool — provider-agnostic symbol dependency queries.
 
-Each operation: validate params → build SQL via queries/graph.py → execute → format.
+Each operation delegates to DatabaseProvider graph methods. The tool has
+zero knowledge of SQL dialect — providers encapsulate all backend specifics.
 """
 
 from typing import Any
 
 from .formatters import format_edge, format_node
-from .queries.graph import (
-    build_boundary_query,
-    build_overview_breakdown_query,
-    build_overview_query,
-    build_reachability_all_symbols_query,
-    build_reachability_reachable_query,
-    build_walk_edges_query,
-    build_walk_query,
-)
 from .registry import register_tool
 from .validation import clamp, require_param
 
 GRAPH_DESCRIPTION = (
-    "Query the pre-computed symbol dependency graph from the DuckDB database. "
-    "All operations are deterministic DuckDB queries — no live LSP calls. "
+    "Query the pre-computed symbol dependency graph. "
+    "All operations are deterministic provider queries — no live LSP calls. "
     "Operations:\n"
     "  walk: Traverse connected symbols from a starting FQN. Returns nodes + edges. "
     "Params: symbol (required), depth (1-20, default 2), edge_kind (optional filter), limit (max nodes, 1-100, default 20).\n"
@@ -84,21 +76,16 @@ def _graph_walk(
 
     assert symbol is not None  # narrowing after require_param
 
-    sql, params = build_walk_query(
-        symbol=symbol,
+    nodes, raw_edges = services.provider.graph_walk(
+        seed_fqns=[symbol],
         depth=depth,
+        directed=directed,
         edge_kind=edge_kind,
         limit=limit,
-        directed=directed,
     )
-    nodes = services.provider.execute_query(sql, params)
 
-    fqns = [n["fqn"] for n in nodes]
-    if not fqns:
+    if not nodes:
         return {"results": [], "edges": [], "count": 0}
-
-    edges_sql, edges_params = build_walk_edges_query(fqns=fqns, edge_kind=edge_kind)
-    raw_edges = services.provider.execute_query(edges_sql, edges_params)
 
     return {
         "results": [format_node(n) for n in nodes],
@@ -119,16 +106,8 @@ def _graph_reachability(
 
     assert scope is not None
 
-    # Query 1: all symbols in scope
-    all_sql, all_params = build_reachability_all_symbols_query(scope=scope)
-    all_symbols = services.provider.execute_query(all_sql, all_params)
-
-    # Query 2: reachable FQNs via outbound-only CTE
-    reach_sql, reach_params = build_reachability_reachable_query(scope=scope)
-    reachable_rows = services.provider.execute_query(reach_sql, reach_params)
-    reachable_fqns = {r["fqn"] for r in reachable_rows}
-
-    # Set difference in Python
+    # Provider returns unreachable symbols directly; tool slices to limit
+    unreachable_rows = services.provider.graph_reachability(scope)
     unreachable = [
         {
             "fqn": s["fqn"],
@@ -136,9 +115,8 @@ def _graph_reachability(
             "kind": s["kind"],
             "file_path": s["file_path"],
         }
-        for s in all_symbols
-        if s["fqn"] not in reachable_fqns
-    ][:limit]
+        for s in unreachable_rows[:limit]
+    ]
 
     return {"unreachable": unreachable, "count": len(unreachable)}
 
@@ -155,8 +133,7 @@ def _graph_boundary(
 
     assert scope is not None
 
-    sql, params = build_boundary_query(scope=scope, limit=limit)
-    raw_edges = services.provider.execute_query(sql, params)
+    raw_edges = services.provider.graph_boundary(scope, limit)
 
     edges = [
         {
@@ -182,22 +159,13 @@ def _graph_overview(
     limit: int,
 ) -> dict[str, Any]:
     """Return most-connected symbols with edge_kind breakdown."""
-    sql, params = build_overview_query(scope=scope, limit=limit)
-    top_symbols = services.provider.execute_query(sql, params)
+    top_symbols = services.provider.graph_overview(scope, limit)
 
     if not top_symbols:
         return {"symbols": [], "count": 0}
 
     fqns = [s["fqn"] for s in top_symbols]
-    breakdown_sql, breakdown_params = build_overview_breakdown_query(fqns=fqns)
-    breakdown_rows = services.provider.execute_query(breakdown_sql, breakdown_params)
-
-    breakdown_map: dict[str, dict[str, int]] = {}
-    for row in breakdown_rows:
-        fqn = row["fqn"]
-        if fqn not in breakdown_map:
-            breakdown_map[fqn] = {}
-        breakdown_map[fqn][row["edge_kind"]] = row["edge_count"]
+    breakdown_map = services.provider.graph_overview_breakdown(fqns)
 
     symbols = [
         {

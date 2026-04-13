@@ -3174,6 +3174,36 @@ class DuckDBProvider(SerialDatabaseProvider):
         rows = conn.execute(sql, params).fetchall()
         return self._rows_to_dicts(conn, rows)
 
+    def graph_overview_breakdown(
+        self, fqns: list[str]
+    ) -> dict[str, dict[str, int]]:
+        """Per-edge-kind counts for the given FQNs."""
+        if not fqns:
+            return {}
+        return self._execute_in_db_thread_sync(
+            self._executor_graph_overview_breakdown, fqns
+        )
+
+    def _executor_graph_overview_breakdown(
+        self, conn: Any, state: dict[str, Any], fqns: list[str]
+    ) -> dict[str, dict[str, int]]:
+        if not fqns:
+            return {}
+        placeholders = ", ".join(["?"] * len(fqns))
+        sql = f"""
+            SELECT s.fqn, e.edge_kind, COUNT(*) AS edge_count
+            FROM symbols s
+            JOIN symbol_edges e ON e.from_fqn = s.fqn OR e.to_fqn = s.fqn
+            WHERE s.fqn IN ({placeholders})
+            GROUP BY s.fqn, e.edge_kind
+        """
+        rows = conn.execute(sql, list(fqns)).fetchall()
+        result: dict[str, dict[str, int]] = {}
+        for row in rows:
+            fqn, edge_kind, count = row[0], row[1], int(row[2])
+            result.setdefault(fqn, {})[edge_kind] = count
+        return result
+
     def symbol_overlap(self, chunks: list[dict[str, Any]]) -> list[str]:
         """Resolve seed chunks to symbol FQNs via range overlap."""
         if not chunks:

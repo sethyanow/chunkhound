@@ -188,21 +188,21 @@ class TestImpactCascadeImpl:
         services = make_mock_services([
             # 1. _resolve_start_fqn: symbol lookup
             [{"fqn": "mod::target"}],
-            # 2. _graph_walk: nodes from walk CTE
-            [
-                {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
-                {"fqn": "mod::caller_a", "name": "caller_a", "kind": "Function", "file_path": "mod.py", "depth": 1},
-            ],
-            # 3. _graph_walk: edges between discovered FQNs
-            [
-                {"from_fqn": "mod::target", "to_fqn": "mod::caller_a", "edge_kind": "called_by", "from_file": "mod.py", "to_file": "mod.py"},
-            ],
-            # 4. _annotate_type_signatures: type lookups
+            # 2. _annotate_type_signatures: type lookups
             [
                 {"fqn": "mod::target", "type_signature": "(int) -> str"},
                 {"fqn": "mod::caller_a", "type_signature": "(str) -> None"},
             ],
         ])
+        services.provider.graph_walk.return_value = (
+            [
+                {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
+                {"fqn": "mod::caller_a", "name": "caller_a", "kind": "Function", "file_path": "mod.py", "depth": 1},
+            ],
+            [
+                {"from_fqn": "mod::target", "to_fqn": "mod::caller_a", "edge_kind": "called_by", "from_file": "mod.py", "to_file": "mod.py"},
+            ],
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import impact_cascade_impl
@@ -228,10 +228,12 @@ class TestImpactCascadeImpl:
         """Root exists but has no callers — children: [], total_nodes: 1."""
         services = make_mock_services([
             [{"fqn": "mod::leaf"}],  # resolve
-            [{"fqn": "mod::leaf", "name": "leaf", "kind": "Function", "file_path": "mod.py", "depth": 0}],  # nodes
-            [],  # no edges
             [{"fqn": "mod::leaf", "type_signature": None}],  # signatures
         ])
+        services.provider.graph_walk.return_value = (
+            [{"fqn": "mod::leaf", "name": "leaf", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],  # no edges
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import impact_cascade_impl
@@ -250,10 +252,12 @@ class TestImpactCascadeImpl:
         """Nodes without type_signature get null, no crash."""
         services = make_mock_services([
             [{"fqn": "mod::func"}],
-            [{"fqn": "mod::func", "name": "func", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
             [],  # no signatures at all
         ])
+        services.provider.graph_walk.return_value = (
+            [{"fqn": "mod::func", "name": "func", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import impact_cascade_impl
@@ -369,10 +373,12 @@ class TestImpactCascadeAdversarial:
         """depth=0 is below minimum — clamped to 1."""
         services = make_mock_services([
             [{"fqn": "mod::f"}],
-            [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
             [],
         ])
+        services.provider.graph_walk.return_value = (
+            [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import impact_cascade_impl
@@ -390,10 +396,12 @@ class TestImpactCascadeAdversarial:
         """depth=999 is above maximum — clamped to 10."""
         services = make_mock_services([
             [{"fqn": "mod::f"}],
-            [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            [],
             [],
         ])
+        services.provider.graph_walk.return_value = (
+            [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import impact_cascade_impl
@@ -619,16 +627,16 @@ class TestTestTargetingImpl:
             [
                 {"fqn": "tests::test_foo", "name": "test_foo", "file_path": "tests/test_mod.py"},
             ],
-            # 2. _graph_walk for "mod::target": nodes (walk CTE)
+        ])
+        services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
                 {"fqn": "tests::test_foo", "name": "test_foo", "kind": "Function", "file_path": "tests/test_mod.py", "depth": 2},
             ],
-            # 3. _graph_walk for "mod::target": edges
             [
                 {"from_fqn": "mod::target", "to_fqn": "tests::test_foo", "edge_kind": "called_by", "from_file": "mod.py", "to_file": "tests/test_mod.py"},
             ],
-        ])
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -651,16 +659,16 @@ class TestTestTargetingImpl:
         services = make_mock_services([
             # 1. _collect_test_fqns: no test symbols
             [],
-            # 2. _graph_walk: nodes
+        ])
+        services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::target", "name": "target", "kind": "Function", "file_path": "mod.py", "depth": 0},
                 {"fqn": "mod::helper", "name": "helper", "kind": "Function", "file_path": "mod.py", "depth": 1},
             ],
-            # 3. _graph_walk: edges
             [
                 {"from_fqn": "mod::target", "to_fqn": "mod::helper", "edge_kind": "called_by", "from_file": "mod.py", "to_file": "mod.py"},
             ],
-        ])
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -683,16 +691,16 @@ class TestTestTargetingImpl:
             [
                 {"fqn": "tests::test_a", "name": "test_a", "file_path": "tests/test_a.py"},
             ],
-            # 3. _graph_walk for "mod::func_a": nodes
+        ])
+        services.provider.graph_walk.return_value = (
             [
                 {"fqn": "mod::func_a", "name": "func_a", "kind": "Function", "file_path": "mod.py", "depth": 0},
                 {"fqn": "tests::test_a", "name": "test_a", "kind": "Function", "file_path": "tests/test_a.py", "depth": 1},
             ],
-            # 4. _graph_walk for "mod::func_a": edges
             [
                 {"from_fqn": "mod::func_a", "to_fqn": "tests::test_a", "edge_kind": "called_by", "from_file": "mod.py", "to_file": "tests/test_a.py"},
             ],
-        ])
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -709,25 +717,28 @@ class TestTestTargetingImpl:
     async def test_min_hop_distance_across_symbols(self) -> None:
         """Two changed symbols reach same test — hop_distance is the minimum."""
         services = make_mock_services([
-            # 1. _collect_test_fqns
+            # _collect_test_fqns
             [
                 {"fqn": "tests::test_shared", "name": "test_shared", "file_path": "tests/test_s.py"},
             ],
-            # 2. _graph_walk for "mod::sym_a": nodes (test at depth 3)
-            [
-                {"fqn": "mod::sym_a", "name": "sym_a", "kind": "Function", "file_path": "mod.py", "depth": 0},
-                {"fqn": "tests::test_shared", "name": "test_shared", "kind": "Function", "file_path": "tests/test_s.py", "depth": 3},
-            ],
-            # 3. _graph_walk for "mod::sym_a": edges
-            [],
-            # 4. _graph_walk for "mod::sym_b": nodes (same test at depth 1)
-            [
-                {"fqn": "mod::sym_b", "name": "sym_b", "kind": "Function", "file_path": "mod.py", "depth": 0},
-                {"fqn": "tests::test_shared", "name": "test_shared", "kind": "Function", "file_path": "tests/test_s.py", "depth": 1},
-            ],
-            # 5. _graph_walk for "mod::sym_b": edges
-            [],
         ])
+        # Two graph_walk calls — one per changed symbol
+        services.provider.graph_walk.side_effect = [
+            (
+                [
+                    {"fqn": "mod::sym_a", "name": "sym_a", "kind": "Function", "file_path": "mod.py", "depth": 0},
+                    {"fqn": "tests::test_shared", "name": "test_shared", "kind": "Function", "file_path": "tests/test_s.py", "depth": 3},
+                ],
+                [],
+            ),
+            (
+                [
+                    {"fqn": "mod::sym_b", "name": "sym_b", "kind": "Function", "file_path": "mod.py", "depth": 0},
+                    {"fqn": "tests::test_shared", "name": "test_shared", "kind": "Function", "file_path": "tests/test_s.py", "depth": 1},
+                ],
+                [],
+            ),
+        ]
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -868,17 +879,17 @@ class TestTestTargetingAdversarial:
     async def test_changed_symbol_is_also_a_test(self) -> None:
         """Changed symbol is itself a test function → appears in output."""
         services = make_mock_services([
-            # 1. _collect_test_fqns: the changed symbol IS a test
+            # _collect_test_fqns: the changed symbol IS a test
             [
                 {"fqn": "tests::test_self", "name": "test_self", "file_path": "tests/test_s.py"},
             ],
-            # 2. _graph_walk: returns the symbol itself at depth 0
+        ])
+        services.provider.graph_walk.return_value = (
             [
                 {"fqn": "tests::test_self", "name": "test_self", "kind": "Function", "file_path": "tests/test_s.py", "depth": 0},
             ],
-            # 3. _graph_walk: edges
             [],
-        ])
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -896,13 +907,13 @@ class TestTestTargetingAdversarial:
     async def test_negative_depth_clamped(self) -> None:
         """Negative depth clamped to 1, no crash."""
         services = make_mock_services([
-            # 1. _collect_test_fqns
-            [],
-            # 2. _graph_walk: nodes
-            [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            # 3. _graph_walk: edges
+            # _collect_test_fqns
             [],
         ])
+        services.provider.graph_walk.return_value = (
+            [{"fqn": "mod::f", "name": "f", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+            [],
+        )
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -916,34 +927,27 @@ class TestTestTargetingAdversarial:
 
     @pytest.mark.asyncio
     async def test_graph_walk_error_skipped(self) -> None:
-        """_graph_walk returns error dict for one symbol — skipped, others processed."""
+        """One symbol returns empty walk, another returns a reachable test."""
         services = make_mock_services([
-            # 1. _collect_test_fqns
+            # _collect_test_fqns
             [
                 {"fqn": "tests::test_b", "name": "test_b", "file_path": "tests/test_b.py"},
             ],
-            # 2. _graph_walk for "mod::bad" — will be mocked to return error
-            # But _graph_walk calls execute_query internally (nodes query)
-            # When require_param fails, it returns error before querying.
-            # We need to mock _graph_walk directly here since the error path
-            # is inside _graph_walk, not in execute_query.
-            # Actually, _graph_walk returns {"results": [], "edges": [], "count": 0}
-            # on empty result, but {"error": ...} on missing symbol param.
-            # Since we pass a valid symbol string, require_param won't fail.
-            # Let's test with an empty walk (no reachable tests) for first symbol
-            # and a reachable test for second symbol:
-            # Walk for "mod::sym_a": nodes (no test reachable)
-            [{"fqn": "mod::sym_a", "name": "sym_a", "kind": "Function", "file_path": "mod.py", "depth": 0}],
-            # 3. Walk for "mod::sym_a": edges
-            [],
-            # 4. Walk for "mod::sym_b": nodes (test reachable)
-            [
-                {"fqn": "mod::sym_b", "name": "sym_b", "kind": "Function", "file_path": "mod.py", "depth": 0},
-                {"fqn": "tests::test_b", "name": "test_b", "kind": "Function", "file_path": "tests/test_b.py", "depth": 1},
-            ],
-            # 5. Walk for "mod::sym_b": edges
-            [],
         ])
+        # First walk: no test reachable. Second walk: test_b reachable.
+        services.provider.graph_walk.side_effect = [
+            (
+                [{"fqn": "mod::sym_a", "name": "sym_a", "kind": "Function", "file_path": "mod.py", "depth": 0}],
+                [],
+            ),
+            (
+                [
+                    {"fqn": "mod::sym_b", "name": "sym_b", "kind": "Function", "file_path": "mod.py", "depth": 0},
+                    {"fqn": "tests::test_b", "name": "test_b", "kind": "Function", "file_path": "tests/test_b.py", "depth": 1},
+                ],
+                [],
+            ),
+        ]
         config = make_mock_config(target_dir="/workspace")
 
         from chunkhound.mcp_server.tools.fusion import test_targeting_impl
@@ -1888,12 +1892,13 @@ class TestSemanticDiffImpl:
         services = make_mock_services([
             [sym_a],                          # map symbols for src/a.py
             [sym_b],                          # map symbols for src/b.py
-            [root_node_a, caller_node],       # graph walk nodes for func_a
-            [caller_edge],                    # graph walk edges for func_a
-            [root_node_b],                    # graph walk nodes for func_b (no callers)
-            [],                               # graph walk edges for func_b
             [{"fqn": "test::test_a", "type_signature": "() -> None"}],  # annotate sigs
         ])
+        # Two graph_walk calls — one per changed symbol
+        services.provider.graph_walk.side_effect = [
+            ([root_node_a, caller_node], [caller_edge]),
+            ([root_node_b], []),
+        ]
 
         config = make_mock_config("/workspace")
         result = await semantic_diff_impl(services=services, config=config, base="main", head="feature")
@@ -2215,10 +2220,10 @@ class TestSemanticDiffImplAdversarial:
         }
         services = make_mock_services([
             [sym],                    # map_lines_to_symbols
-            [],                       # graph walk: no nodes (empty → _graph_walk returns error-like)
-            [],                       # graph walk edges (also empty)
             [],                       # annotate type signatures (no callers)
         ])
+        # graph_walk returns empty → fusion treats it as no reachable callers
+        services.provider.graph_walk.return_value = ([], [])
         config = make_mock_config("/workspace")
 
         result = await semantic_diff_impl(
