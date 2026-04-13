@@ -4,8 +4,12 @@ GraphWalkExpander takes seed chunks from semantic search, resolves them to
 symbols via range overlap, walks the symbol_edges graph, resolves discovered
 symbols back to chunks, and deduplicates against the seed set.
 
-All tests mock DatabaseProvider.execute_query with sequential return values
-matching the three internal queries: overlap → walk → chunk resolution.
+ch-nxu Step 17: Tests mock the DatabaseProvider protocol methods
+(symbol_overlap, graph_walk, chunk_resolution) directly — the expander no
+longer calls execute_query. Every test asserts its three protocol methods
+were called to prevent regressions where the expander silently skips a
+pipeline stage (see skeleton Step 17 failure catalog, "Test mock rewrite
+masks sequence bugs").
 """
 
 from typing import Any
@@ -19,12 +23,33 @@ pytestmark = pytest.mark.unit
 
 
 def _make_mock_provider(
-    query_results: list[list[dict[str, Any]]],
+    *,
+    overlap_fqns: list[str],
+    walk_nodes: list[dict[str, Any]],
+    chunk_rows: list[dict[str, Any]],
+    walk_edges: list[dict[str, Any]] | None = None,
 ) -> MagicMock:
-    """Create mock DatabaseProvider with sequential execute_query results."""
+    """Create a DatabaseProvider mock wired for a full expander pipeline run.
+
+    Args:
+        overlap_fqns: Return value of provider.symbol_overlap(chunks).
+        walk_nodes: "nodes" member of provider.graph_walk(...) return tuple.
+        chunk_rows: Return value of provider.chunk_resolution(fqns).
+        walk_edges: "edges" member of the graph_walk return tuple (usually
+            unused by the expander; defaults to empty).
+    """
     provider = MagicMock()
-    provider.execute_query.side_effect = query_results
+    provider.symbol_overlap.return_value = overlap_fqns
+    provider.graph_walk.return_value = (walk_nodes, walk_edges or [])
+    provider.chunk_resolution.return_value = chunk_rows
     return provider
+
+
+def _assert_called_once_each(provider: MagicMock) -> None:
+    """Every stage of the expander pipeline must fire exactly once per run."""
+    assert provider.symbol_overlap.call_count == 1
+    assert provider.graph_walk.call_count == 1
+    assert provider.chunk_resolution.call_count == 1
 
 
 class TestChunkToSymbolResolution:
@@ -33,13 +58,10 @@ class TestChunkToSymbolResolution:
     @pytest.mark.asyncio
     async def test_seeds_resolve_to_overlapping_symbols(self) -> None:
         """Seed chunk overlapping a symbol produces that symbol's graph neighbors as chunks."""
-        provider = _make_mock_provider([
-            # Call 1 - overlap: seed chunk in main.py:1-20 maps to mod::func_a
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            # Call 2 - walk: func_a's neighbor is func_b
-            [{"fqn": "mod::func_b"}],
-            # Call 3 - chunk resolution: func_b maps to chunk in other.py
-            [
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "other.py"}],
+            chunk_rows=[
                 {
                     "file_path": "other.py",
                     "content": "def func_b(): pass",
@@ -47,7 +69,7 @@ class TestChunkToSymbolResolution:
                     "end_line": 10,
                 }
             ],
-        ])
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -57,6 +79,24 @@ class TestChunkToSymbolResolution:
         assert len(result) == 1
         assert result[0]["file_path"] == "other.py"
         assert result[0]["start_line"] == 5
+        _assert_called_once_each(provider)
+
+    @pytest.mark.asyncio
+    async def test_symbol_overlap_receives_seed_chunks_verbatim(self) -> None:
+        """Seed chunk dicts are forwarded to provider.symbol_overlap unchanged."""
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_a", "name": "func_a", "kind": "Function", "file_path": "main.py"}],
+            chunk_rows=[],
+        )
+        seeds = [
+            {"file_path": "main.py", "start_line": 1, "end_line": 20},
+            {"file_path": "other.py", "start_line": 5, "end_line": 25},
+        ]
+
+        await GraphWalkExpander(provider).expand(seeds)
+
+        provider.symbol_overlap.assert_called_once_with(seeds)
 
 
 class TestSymbolGraphWalk:
@@ -65,17 +105,17 @@ class TestSymbolGraphWalk:
     @pytest.mark.asyncio
     async def test_walk_discovers_multi_hop_neighbors(self) -> None:
         """Walk at depth=2 discovers both 1-hop and 2-hop neighbors."""
-        provider = _make_mock_provider([
-            # overlap: seed maps to func_a
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            # walk: func_a → func_b (1-hop) → func_c (2-hop)
-            [{"fqn": "mod::func_b"}, {"fqn": "mod::func_c"}],
-            # resolution: both neighbors map to chunks
-            [
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[
+                {"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "b.py"},
+                {"fqn": "mod::func_c", "name": "func_c", "kind": "Function", "file_path": "c.py"},
+            ],
+            chunk_rows=[
                 {"file_path": "b.py", "content": "def func_b(): ...", "start_line": 1, "end_line": 5},
                 {"file_path": "c.py", "content": "def func_c(): ...", "start_line": 1, "end_line": 5},
             ],
-        ])
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -83,8 +123,29 @@ class TestSymbolGraphWalk:
         ])
 
         assert len(result) == 2
-        result_paths = {r["file_path"] for r in result}
-        assert result_paths == {"b.py", "c.py"}
+        assert {r["file_path"] for r in result} == {"b.py", "c.py"}
+        _assert_called_once_each(provider)
+
+    @pytest.mark.asyncio
+    async def test_walk_called_with_bidirectional_directed_false(self) -> None:
+        """expand() must pass directed=False so graph_walk traverses both edge directions.
+
+        Guards the failure-catalog "directed=False contract drift" on LanceDB.
+        """
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_a", "name": "func_a", "kind": "Function", "file_path": "a.py"}],
+            chunk_rows=[],
+        )
+
+        await GraphWalkExpander(provider).expand([
+            {"file_path": "a.py", "start_line": 1, "end_line": 10},
+        ])
+
+        kwargs = provider.graph_walk.call_args.kwargs
+        assert kwargs.get("directed") is False, (
+            f"graph_walk must be called with directed=False, got kwargs={kwargs}"
+        )
 
 
 class TestSymbolToChunkResolution:
@@ -93,10 +154,10 @@ class TestSymbolToChunkResolution:
     @pytest.mark.asyncio
     async def test_discovered_symbols_resolve_to_chunks(self) -> None:
         """Walked symbols produce chunks with file_path, content, start_line, end_line."""
-        provider = _make_mock_provider([
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            [{"fqn": "mod::helper"}],
-            [
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::helper", "name": "helper", "kind": "Function", "file_path": "helpers.py"}],
+            chunk_rows=[
                 {
                     "file_path": "helpers.py",
                     "content": "def helper(x):\n    return x + 1",
@@ -104,7 +165,7 @@ class TestSymbolToChunkResolution:
                     "end_line": 12,
                 }
             ],
-        ])
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -117,17 +178,32 @@ class TestSymbolToChunkResolution:
         assert chunk["content"] == "def helper(x):\n    return x + 1"
         assert chunk["start_line"] == 10
         assert chunk["end_line"] == 12
+        _assert_called_once_each(provider)
 
+    @pytest.mark.asyncio
+    async def test_chunk_resolution_receives_walked_fqns(self) -> None:
+        """provider.chunk_resolution is called with the FQNs extracted from walk nodes.
 
-    def test_resolution_query_selects_chunk_id(self) -> None:
-        """_build_resolution_query SELECT includes c.id AS chunk_id."""
-        from chunkhound.services.search.graph_walk_expander import (
-            _build_resolution_query,
+        Guards "graph_walk tuple shape miscompile" — if the expander forgets
+        to extract .fqn from node dicts, this test fails loudly.
+        """
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[
+                {"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "b.py"},
+                {"fqn": "mod::func_c", "name": "func_c", "kind": "Function", "file_path": "c.py"},
+            ],
+            chunk_rows=[],
         )
 
-        sql, params = _build_resolution_query(["mod::func_a"])
-        assert "c.id AS chunk_id" in sql
-        assert params == ["mod::func_a"]
+        await GraphWalkExpander(provider).expand([
+            {"file_path": "a.py", "start_line": 1, "end_line": 10},
+        ])
+
+        call_args = provider.chunk_resolution.call_args
+        # Positional or keyword — accept either.
+        fqns_arg = call_args.args[0] if call_args.args else call_args.kwargs["fqns"]
+        assert fqns_arg == ["mod::func_b", "mod::func_c"]
 
 
 class TestDeduplication:
@@ -136,15 +212,14 @@ class TestDeduplication:
     @pytest.mark.asyncio
     async def test_seed_chunk_excluded_from_results(self) -> None:
         """Chunk matching a seed (same file_path + lines) is not in output."""
-        provider = _make_mock_provider([
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            [{"fqn": "mod::func_b"}],
-            # resolution returns the seed chunk itself AND a new chunk
-            [
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "other.py"}],
+            chunk_rows=[
                 {"file_path": "main.py", "content": "...", "start_line": 1, "end_line": 10},
                 {"file_path": "other.py", "content": "...", "start_line": 5, "end_line": 15},
             ],
-        ])
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -153,6 +228,7 @@ class TestDeduplication:
 
         assert len(result) == 1
         assert result[0]["file_path"] == "other.py"
+        _assert_called_once_each(provider)
 
 
 class TestGracefulEmptyGraph:
@@ -161,9 +237,11 @@ class TestGracefulEmptyGraph:
     @pytest.mark.asyncio
     async def test_no_symbols_returns_empty(self) -> None:
         """Empty symbols table → overlap returns nothing → []."""
-        provider = _make_mock_provider([
-            [],  # overlap returns nothing
-        ])
+        provider = _make_mock_provider(
+            overlap_fqns=[],
+            walk_nodes=[],
+            chunk_rows=[],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -171,17 +249,18 @@ class TestGracefulEmptyGraph:
         ])
 
         assert result == []
+        provider.symbol_overlap.assert_called_once()
+        provider.graph_walk.assert_not_called()
+        provider.chunk_resolution.assert_not_called()
 
     @pytest.mark.asyncio
-    async def test_no_edges_returns_empty(self) -> None:
-        """symbol_edges empty → walk returns only seed FQNs → all deduped → []."""
-        provider = _make_mock_provider([
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            # walk returns only the seed FQN itself (no neighbors)
-            [{"fqn": "mod::func_a"}],
-            # resolution returns the seed chunk back
-            [{"file_path": "main.py", "content": "...", "start_line": 1, "end_line": 10}],
-        ])
+    async def test_no_walk_nodes_returns_empty(self) -> None:
+        """Walk returns no nodes → [] without calling chunk_resolution."""
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[],
+            chunk_rows=[],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -189,31 +268,35 @@ class TestGracefulEmptyGraph:
         ])
 
         assert result == []
+        provider.symbol_overlap.assert_called_once()
+        provider.graph_walk.assert_called_once()
+        provider.chunk_resolution.assert_not_called()
 
     @pytest.mark.asyncio
     async def test_empty_seed_chunks_returns_empty(self) -> None:
         """Empty seed_chunks input → [] immediately, no queries."""
-        provider = _make_mock_provider([])
+        provider = MagicMock()
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([])
 
         assert result == []
-        provider.execute_query.assert_not_called()
+        provider.symbol_overlap.assert_not_called()
+        provider.graph_walk.assert_not_called()
+        provider.chunk_resolution.assert_not_called()
 
 
 class TestEdgeKindFiltering:
     """expand(edge_kind=...) restricts walk to specific edge types."""
 
     @pytest.mark.asyncio
-    async def test_edge_kind_passed_to_walk_query(self) -> None:
-        """edge_kind="calls" filters the walk to calls edges only."""
-        provider = _make_mock_provider([
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            # walk: only calls-reachable neighbor
-            [{"fqn": "mod::callee"}],
-            [{"file_path": "callee.py", "content": "...", "start_line": 1, "end_line": 5}],
-        ])
+    async def test_edge_kind_passed_to_graph_walk(self) -> None:
+        """edge_kind="calls" is forwarded to provider.graph_walk."""
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::callee", "name": "callee", "kind": "Function", "file_path": "callee.py"}],
+            chunk_rows=[{"file_path": "callee.py", "content": "...", "start_line": 1, "end_line": 5}],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand(
@@ -223,26 +306,21 @@ class TestEdgeKindFiltering:
 
         assert len(result) == 1
         assert result[0]["file_path"] == "callee.py"
-
-        # Verify the walk query SQL contains edge_kind filter
-        walk_call = provider.execute_query.call_args_list[1]
-        walk_sql = walk_call[0][0]
-        walk_params = walk_call[0][1]
-        assert "edge_kind" in walk_sql
-        assert "calls" in walk_params
+        kwargs = provider.graph_walk.call_args.kwargs
+        assert kwargs.get("edge_kind") == "calls"
 
 
 class TestDepthConfiguration:
     """expand(depth=N) limits walk to N hops."""
 
     @pytest.mark.asyncio
-    async def test_depth_passed_to_walk_query(self) -> None:
-        """depth=1 limits walk to direct neighbors only."""
-        provider = _make_mock_provider([
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            [{"fqn": "mod::direct_neighbor"}],
-            [{"file_path": "neighbor.py", "content": "...", "start_line": 1, "end_line": 5}],
-        ])
+    async def test_depth_passed_to_graph_walk(self) -> None:
+        """depth=1 forwards to provider.graph_walk."""
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::direct_neighbor", "name": "direct_neighbor", "kind": "Function", "file_path": "neighbor.py"}],
+            chunk_rows=[{"file_path": "neighbor.py", "content": "...", "start_line": 1, "end_line": 5}],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand(
@@ -251,11 +329,8 @@ class TestDepthConfiguration:
         )
 
         assert len(result) == 1
-
-        # Verify the walk query received depth=1
-        walk_call = provider.execute_query.call_args_list[1]
-        walk_params = walk_call[0][1]
-        assert 1 in walk_params
+        kwargs = provider.graph_walk.call_args.kwargs
+        assert kwargs.get("depth") == 1
 
 
 # =============================================================================
@@ -264,22 +339,22 @@ class TestDepthConfiguration:
 
 
 class TestAdversarialSelfReferential:
-    """Walk CTE always includes seed FQNs in base case — realistic scenario."""
+    """Walk always includes seed FQNs in base case — realistic scenario."""
 
     @pytest.mark.asyncio
     async def test_walk_returning_seed_fqns_dedupes_correctly(self) -> None:
         """Walk returns seed FQN + neighbor. Seed's chunk is deduped; neighbor's stays."""
-        provider = _make_mock_provider([
-            # overlap: seed maps to func_a
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            # walk: returns seed FQN (base case) AND neighbor (realistic CTE output)
-            [{"fqn": "mod::func_a"}, {"fqn": "mod::func_b"}],
-            # resolution: chunks for BOTH func_a (= seed) and func_b (= new)
-            [
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[
+                {"fqn": "mod::func_a", "name": "func_a", "kind": "Function", "file_path": "main.py"},
+                {"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "other.py"},
+            ],
+            chunk_rows=[
                 {"file_path": "main.py", "content": "def func_a(): ...", "start_line": 1, "end_line": 10},
                 {"file_path": "other.py", "content": "def func_b(): ...", "start_line": 5, "end_line": 15},
             ],
-        ])
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -297,12 +372,11 @@ class TestAdversarialRedundant:
     @pytest.mark.asyncio
     async def test_duplicate_seed_chunks_produce_single_result(self) -> None:
         """Same seed chunk twice doesn't duplicate output."""
-        provider = _make_mock_provider([
-            # overlap: both seeds map to same FQN (DISTINCT handles it in real DB)
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            [{"fqn": "mod::func_b"}],
-            [{"file_path": "other.py", "content": "...", "start_line": 1, "end_line": 5}],
-        ])
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "other.py"}],
+            chunk_rows=[{"file_path": "other.py", "content": "...", "start_line": 1, "end_line": 5}],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -315,12 +389,11 @@ class TestAdversarialRedundant:
     @pytest.mark.asyncio
     async def test_multiple_seeds_overlapping_same_symbol(self) -> None:
         """Two different seed chunks overlapping the same symbol."""
-        provider = _make_mock_provider([
-            # overlap: both seeds map to same FQN
-            [{"fqn": "mod::big_func", "file_id": 1}],
-            [{"fqn": "mod::helper"}],
-            [{"file_path": "util.py", "content": "...", "start_line": 1, "end_line": 5}],
-        ])
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::big_func"],
+            walk_nodes=[{"fqn": "mod::helper", "name": "helper", "kind": "Function", "file_path": "util.py"}],
+            chunk_rows=[{"file_path": "util.py", "content": "...", "start_line": 1, "end_line": 5}],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -338,12 +411,11 @@ class TestAdversarialSparseWithGaps:
     @pytest.mark.asyncio
     async def test_seeds_with_no_symbol_coverage_skipped(self) -> None:
         """Seeds in files without symbols don't prevent other seeds from expanding."""
-        provider = _make_mock_provider([
-            # overlap: only one of two seeds maps to a symbol
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            [{"fqn": "mod::func_b"}],
-            [{"file_path": "found.py", "content": "...", "start_line": 1, "end_line": 5}],
-        ])
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "found.py"}],
+            chunk_rows=[{"file_path": "found.py", "content": "...", "start_line": 1, "end_line": 5}],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand([
@@ -351,8 +423,6 @@ class TestAdversarialSparseWithGaps:
             {"file_path": "no_symbols.py", "start_line": 1, "end_line": 10},
         ])
 
-        # The overlap query runs on both seeds but only finds symbols for one.
-        # The walk still proceeds with the found FQN.
         assert len(result) == 1
         assert result[0]["file_path"] == "found.py"
 
@@ -362,19 +432,12 @@ class TestAdversarialTypeBoundaries:
 
     @pytest.mark.asyncio
     async def test_depth_zero_returns_seed_symbol_chunks_only(self) -> None:
-        """depth=0 means no walk — resolve seed FQNs but don't traverse edges.
-
-        If seed FQN's chunk differs from the seed chunk, it appears in results.
-        If it matches, it's deduped away.
-        """
-        provider = _make_mock_provider([
-            # overlap: seed maps to func_a
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            # walk at depth=0: CTE base case returns seed FQN only (no recursion)
-            [{"fqn": "mod::func_a"}],
-            # resolution: func_a maps to a chunk that IS the seed → deduped
-            [{"file_path": "main.py", "content": "...", "start_line": 1, "end_line": 10}],
-        ])
+        """depth=0 means base case only — walk returns seed FQN, resolution maps to seed chunk, dedup empties."""
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_a", "name": "func_a", "kind": "Function", "file_path": "main.py"}],
+            chunk_rows=[{"file_path": "main.py", "content": "...", "start_line": 1, "end_line": 10}],
+        )
 
         expander = GraphWalkExpander(provider)
         result = await expander.expand(
@@ -383,6 +446,8 @@ class TestAdversarialTypeBoundaries:
         )
 
         assert result == []
+        kwargs = provider.graph_walk.call_args.kwargs
+        assert kwargs.get("depth") == 0
 
 
 class TestAdversarialStateTransitions:
@@ -391,13 +456,11 @@ class TestAdversarialStateTransitions:
     @pytest.mark.asyncio
     async def test_second_run_produces_identical_results(self) -> None:
         """Calling expand() twice on same instance produces same results."""
-        results_batch = [
-            [{"fqn": "mod::func_a", "file_id": 1}],
-            [{"fqn": "mod::func_b"}],
-            [{"file_path": "other.py", "content": "...", "start_line": 1, "end_line": 5}],
-        ]
-
-        provider = _make_mock_provider(results_batch + results_batch)
+        provider = _make_mock_provider(
+            overlap_fqns=["mod::func_a"],
+            walk_nodes=[{"fqn": "mod::func_b", "name": "func_b", "kind": "Function", "file_path": "other.py"}],
+            chunk_rows=[{"file_path": "other.py", "content": "...", "start_line": 1, "end_line": 5}],
+        )
 
         expander = GraphWalkExpander(provider)
         seeds = [{"file_path": "main.py", "start_line": 1, "end_line": 10}]
@@ -406,4 +469,6 @@ class TestAdversarialStateTransitions:
         result2 = await expander.expand(seeds)
 
         assert result1 == result2
-        assert provider.execute_query.call_count == 6  # 3 calls × 2 runs
+        assert provider.symbol_overlap.call_count == 2
+        assert provider.graph_walk.call_count == 2
+        assert provider.chunk_resolution.call_count == 2

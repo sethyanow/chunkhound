@@ -38,10 +38,31 @@ def make_mock_services(
     """Create mock services with execute_query returning sequential results.
 
     Each element in query_results is returned for successive execute_query calls.
+
+    ch-nxu Step 17: When ``query_results`` is the 3-list graph-pipeline format
+    ``[symbol_rows, walk_rows, chunk_rows]`` — used by the structural search
+    and graph walk expander tests — this helper ALSO wires the protocol
+    methods so the migrated expander sees the expected data:
+
+    - ``provider.symbol_overlap(chunks)`` → ``[row["fqn"] for row in symbol_rows]``
+    - ``provider.graph_walk(...)`` → ``(walk_rows, [])``
+    - ``provider.chunk_resolution(fqns)`` → ``chunk_rows``
+
+    Legacy ``execute_query.side_effect`` wiring is preserved for any test that
+    still reads results directly through the raw SQL path.
     """
     services = MagicMock()
     if query_results:
         services.provider.execute_query.side_effect = query_results
+        # Wire the graph-pipeline protocol methods when the 3-list format is
+        # passed (structural + graph-expander tests). Other shapes pass through.
+        if len(query_results) == 3:
+            symbol_rows, walk_rows, chunk_rows = query_results
+            services.provider.symbol_overlap.return_value = [
+                row["fqn"] for row in symbol_rows if "fqn" in row
+            ]
+            services.provider.graph_walk.return_value = (walk_rows, [])
+            services.provider.chunk_resolution.return_value = chunk_rows
     else:
         services.provider.execute_query.return_value = []
     return services

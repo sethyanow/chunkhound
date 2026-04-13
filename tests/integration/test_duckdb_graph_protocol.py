@@ -626,6 +626,119 @@ class TestDuckDBChunkResolution:
         provider.disconnect()
 
 
+class TestDuckDBGraphWalkExpanderEndToEnd:
+    """ch-nxu Step 17: GraphWalkExpander runs end-to-end against a real DuckDB.
+
+    These tests guard the protocol-method wiring in ``graph_walk_expander.py``.
+    They seed a real graph, insert real chunks, run ``expander.expand()``, and
+    assert the discovered chunks — verifying the full pipeline (symbol_overlap
+    → graph_walk → chunk_resolution) works on the real backend.
+    """
+
+    def _seed_two_file_graph(self, provider: DuckDBProvider) -> tuple[int, int]:
+        """Build two files where func_a (file1) has a 'calls' edge to func_b (file2).
+
+        Returns (file1_id, file2_id).
+        """
+        file1_id = _insert_file(provider, "src/caller.py")
+        file2_id = _insert_file(provider, "src/callee.py")
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mod::func_a", name="func_a", kind="Function", language="python",
+                      file_id=file1_id, file_path="src/caller.py",
+                      range_start=1, range_end=10, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature="() -> None"),
+            SymbolRow(fqn="mod::func_b", name="func_b", kind="Function", language="python",
+                      file_id=file2_id, file_path="src/callee.py",
+                      range_start=1, range_end=8, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature="() -> int"),
+        ]
+        provider.insert_symbols_batch(symbols)
+        fqn_map = provider.query_symbol_fqns_by_file(file1_id)
+        fqn_map.update(provider.query_symbol_fqns_by_file(file2_id))
+
+        edges: list[EdgeRow] = [
+            EdgeRow(
+                from_symbol_id=fqn_map["mod::func_a"], from_fqn="mod::func_a",
+                from_file="src/caller.py",
+                to_symbol_id=fqn_map["mod::func_b"], to_fqn="mod::func_b",
+                to_file="src/callee.py",
+                edge_kind="calls", confidence=1.0, lsp_server="pyright",
+            ),
+        ]
+        provider.insert_edges_batch(edges)
+
+        # Insert chunks for both functions so chunk_resolution can find them.
+        provider.execute_query(
+            "INSERT INTO chunks (file_id, chunk_type, symbol, code, start_line, end_line, "
+            "start_byte, end_byte, language) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [file1_id, "function", "func_a", "def func_a(): func_b()", 1, 10, 0, 40, "python"],
+        )
+        provider.execute_query(
+            "INSERT INTO chunks (file_id, chunk_type, symbol, code, start_line, end_line, "
+            "start_byte, end_byte, language) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+            [file2_id, "function", "func_b", "def func_b(): return 1", 1, 8, 0, 30, "python"],
+        )
+        return file1_id, file2_id
+
+    @pytest.mark.asyncio
+    async def test_forward_expansion_discovers_callee(self, tmp_path: Path) -> None:
+        """Seed on caller chunk expands forward across 'calls' edge to callee."""
+        import asyncio
+
+        from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
+
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed_two_file_graph(provider)
+
+            expander = GraphWalkExpander(provider)
+            seed_chunk = {"file_path": "src/caller.py", "start_line": 1, "end_line": 10}
+            discovered = await expander.expand([seed_chunk], depth=2)
+
+            discovered_paths = {c["file_path"] for c in discovered}
+            assert "src/callee.py" in discovered_paths, (
+                f"expander failed to reach callee across forward edge; got {discovered_paths}"
+            )
+            # Seed chunk should be deduped away
+            assert "src/caller.py" not in discovered_paths
+        finally:
+            provider.disconnect()
+            # Give thread pool time to shut down cleanly on back-to-back tests
+            await asyncio.sleep(0)
+
+    @pytest.mark.asyncio
+    async def test_reverse_expansion_discovers_caller(self, tmp_path: Path) -> None:
+        """Seed on callee chunk expands REVERSE across 'calls' edge to caller.
+
+        This is the `directed=False` bidirectional contract test from the
+        failure catalog: if the expander ever passes ``directed=True`` (or
+        drops the kwarg so the default changes), this test fails because
+        the reverse direction stops working.
+        """
+        import asyncio
+
+        from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
+
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed_two_file_graph(provider)
+
+            expander = GraphWalkExpander(provider)
+            seed_chunk = {"file_path": "src/callee.py", "start_line": 1, "end_line": 8}
+            discovered = await expander.expand([seed_chunk], depth=2)
+
+            discovered_paths = {c["file_path"] for c in discovered}
+            assert "src/caller.py" in discovered_paths, (
+                "bidirectional expansion failed — expander must traverse "
+                f"reverse edges with directed=False; got {discovered_paths}"
+            )
+            assert "src/callee.py" not in discovered_paths
+        finally:
+            provider.disconnect()
+            await asyncio.sleep(0)
+
+
 class TestDuckDBSymbolStats:
     """symbol_stats returns counts."""
 

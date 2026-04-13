@@ -419,6 +419,114 @@ class TestLanceDBChunkResolution:
         assert result[0]["file_path"] == "src/example.py"
 
 
+class TestLanceDBGraphWalkExpanderEndToEnd:
+    """ch-nxu Step 17: GraphWalkExpander runs end-to-end against real LanceDB.
+
+    Mirrors TestDuckDBGraphWalkExpanderEndToEnd — guards the same protocol
+    wiring on the other backend. Catches the "directed=False contract drift"
+    failure mode from the Step 17 catalog (LanceDB's BFS ``_bfs_get_neighbors``
+    branches on ``if not directed`` and would silently go one-way if the
+    expander forgot the kwarg).
+    """
+
+    def _seed_two_file_graph(self, provider) -> None:
+        """Insert caller.py calls callee.py ('calls' edge)."""
+        from chunkhound.core.models import Chunk, File
+        from chunkhound.core.types.common import ChunkType, Language
+
+        file1_id = provider.insert_file(
+            File(path="src/caller.py", mtime=1234567890.0,
+                 language=Language.PYTHON, size_bytes=100),
+        )
+        file2_id = provider.insert_file(
+            File(path="src/callee.py", mtime=1234567890.0,
+                 language=Language.PYTHON, size_bytes=100),
+        )
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="mod::func_a", name="func_a", kind="Function", language="python",
+                      file_id=file1_id, file_path="src/caller.py",
+                      range_start=1, range_end=10, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature="() -> None"),
+            SymbolRow(fqn="mod::func_b", name="func_b", kind="Function", language="python",
+                      file_id=file2_id, file_path="src/callee.py",
+                      range_start=1, range_end=8, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature="() -> int"),
+        ]
+        provider.insert_symbols_batch(symbols)
+        fqn_map = provider.query_symbol_fqns_by_file(file1_id)
+        fqn_map.update(provider.query_symbol_fqns_by_file(file2_id))
+
+        edges: list[EdgeRow] = [
+            EdgeRow(
+                from_symbol_id=fqn_map["mod::func_a"], from_fqn="mod::func_a",
+                from_file="src/caller.py",
+                to_symbol_id=fqn_map["mod::func_b"], to_fqn="mod::func_b",
+                to_file="src/callee.py",
+                edge_kind="calls", confidence=1.0, lsp_server="pyright",
+            ),
+        ]
+        provider.insert_edges_batch(edges)
+
+        provider.insert_chunks_batch([
+            Chunk(
+                file_id=file1_id,
+                code="def func_a(): func_b()",
+                start_line=1, end_line=10,
+                chunk_type=ChunkType.FUNCTION,
+                language=Language.PYTHON,
+                symbol="func_a",
+            ),
+            Chunk(
+                file_id=file2_id,
+                code="def func_b(): return 1",
+                start_line=1, end_line=8,
+                chunk_type=ChunkType.FUNCTION,
+                language=Language.PYTHON,
+                symbol="func_b",
+            ),
+        ])
+
+    @pytest.mark.asyncio
+    async def test_forward_expansion_discovers_callee(self, lancedb_provider) -> None:
+        """Seed on caller chunk expands forward across 'calls' edge to callee."""
+        from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
+
+        self._seed_two_file_graph(lancedb_provider)
+
+        expander = GraphWalkExpander(lancedb_provider)
+        seed_chunk = {"file_path": "src/caller.py", "start_line": 1, "end_line": 10}
+        discovered = await expander.expand([seed_chunk], depth=2)
+
+        discovered_paths = {c["file_path"] for c in discovered}
+        assert "src/callee.py" in discovered_paths, (
+            f"expander failed to reach callee across forward edge; got {discovered_paths}"
+        )
+        assert "src/caller.py" not in discovered_paths
+
+    @pytest.mark.asyncio
+    async def test_reverse_expansion_discovers_caller(self, lancedb_provider) -> None:
+        """Seed on callee chunk expands REVERSE across 'calls' edge to caller.
+
+        Bidirectional contract test — fails loudly if expander passes
+        directed=True or drops the kwarg.
+        """
+        from chunkhound.services.search.graph_walk_expander import GraphWalkExpander
+
+        self._seed_two_file_graph(lancedb_provider)
+
+        expander = GraphWalkExpander(lancedb_provider)
+        seed_chunk = {"file_path": "src/callee.py", "start_line": 1, "end_line": 8}
+        discovered = await expander.expand([seed_chunk], depth=2)
+
+        discovered_paths = {c["file_path"] for c in discovered}
+        assert "src/caller.py" in discovered_paths, (
+            "bidirectional expansion failed on LanceDB — expander must "
+            f"traverse reverse edges with directed=False; got {discovered_paths}"
+        )
+        assert "src/callee.py" not in discovered_paths
+
+
 class TestLanceDBSymbolStats:
     """symbol_stats returns counts."""
 
