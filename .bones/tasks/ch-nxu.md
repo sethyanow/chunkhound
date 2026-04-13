@@ -1,11 +1,12 @@
 ---
 id: ch-nxu
 title: Abstract graph layer behind DatabaseProvider protocol
-status: active
+status: closed
 type: task
 priority: 0
 owner: Seth
 ---
+
 
 
 
