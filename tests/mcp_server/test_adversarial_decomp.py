@@ -89,15 +89,21 @@ class TestLspDispatchAdversarial:
 
 
 class TestStatsAdversarial:
-    """Adversarial patterns on stats guard functions."""
+    """Adversarial patterns on stats guard functions.
+
+    ch-nxu Step 18: stats.py is provider-agnostic — tests mock
+    ``provider.get_stats`` and ``provider.symbol_stats`` instead of
+    ``execute_query``.
+    """
 
     @pytest.mark.asyncio
     async def test_all_tables_missing(self):
-        """Every query fails — should return all zeros, not crash."""
+        """Both provider methods raise — should return all zeros, not crash."""
         from chunkhound.mcp_server.tools.stats import get_stats_impl
 
         services = MagicMock()
-        services.provider.execute_query.side_effect = Exception("table missing")
+        services.provider.get_stats.side_effect = Exception("table missing")
+        services.provider.symbol_stats.side_effect = Exception("table missing")
 
         result = await get_stats_impl(services=services)
         assert result["files"] == 0
@@ -111,30 +117,42 @@ class TestStatsAdversarial:
         """Running stats twice returns same result — no state mutation."""
         from chunkhound.mcp_server.tools.stats import get_stats_impl
 
-        call_count = 0
-
-        def mock_query(sql, params):
-            nonlocal call_count
-            call_count += 1
-            return [{"count": 42}] if "COUNT" in sql else []
-
         services = MagicMock()
-        services.provider.execute_query.side_effect = mock_query
+        services.provider.get_stats.return_value = {
+            "files": 42,
+            "chunks": 100,
+            "embeddings": 0,
+            "providers": 0,
+        }
+        services.provider.symbol_stats.return_value = {
+            "symbol_count": 7,
+            "edge_count": 3,
+            "languages": [{"language": "python", "count": 7}],
+        }
 
         r1 = await get_stats_impl(services=services)
         r2 = await get_stats_impl(services=services)
-        assert r1["files"] == r2["files"]
-        assert r1["symbols"] == r2["symbols"]
+        assert r1["files"] == r2["files"] == 42
+        assert r1["symbols"] == r2["symbols"] == 7
+        assert r1["languages"] == r2["languages"]
 
     @pytest.mark.asyncio
-    async def test_empty_query_result(self):
-        """execute_query returns empty list — _safe_count returns 0."""
-        from chunkhound.mcp_server.tools.stats import _safe_count
+    async def test_empty_provider_stats(self):
+        """provider.get_stats returns minimal dict — result uses 0 fallback."""
+        from chunkhound.mcp_server.tools.stats import get_stats_impl
 
         services = MagicMock()
-        services.provider.execute_query.return_value = []
+        services.provider.get_stats.return_value = {}
+        services.provider.symbol_stats.return_value = {
+            "symbol_count": 0,
+            "edge_count": 0,
+            "languages": [],
+        }
 
-        assert _safe_count(services, "SELECT COUNT(*) as count FROM files") == 0
+        result = await get_stats_impl(services=services)
+        assert result["files"] == 0
+        assert result["chunks"] == 0
+        assert result["symbols"] == 0
 
 
 # ---------------------------------------------------------------------------

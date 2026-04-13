@@ -11,6 +11,7 @@ owner: Seth
 
 
 
+
 ## Context
 
 Phases 1-5 of ch-8e7 built the graph intelligence layer (symbols, symbol_edges, graph walks, fusion tools) directly against DuckDB SQL — raw `execute_query()` calls, sqlglot query builders generating DuckDB-dialect CTEs. None of it goes through the `DatabaseProvider` protocol. Result: LanceDB provider (2400+ lines, concurrent writes, persistent HNSW) has no graph support. The daemon/proxy/IPC architecture exists solely because DuckDB is the only viable backend for graph features.
@@ -235,13 +236,13 @@ Replace 3 inlined SQL calls with: `provider.symbol_overlap()`, `provider.graph_w
 - [x] `lsp_population.py` is fully provider-agnostic: typed against `DatabaseProvider`, no `import duckdb`, no raw SQL, uses `SymbolRow`/`EdgeRow` not tuples
 - [x] `get_all_files` (+ async) protocol method exists and both providers implement it
 - [x] `ProviderError` exception added to protocol; executor wraps backend exceptions so callers can catch one type
-- [ ] `mcp_server/tools/` is provider-agnostic: zero `execute_query` calls, zero sqlglot imports for symbol/edge/graph
+- [x] `mcp_server/tools/` is provider-agnostic: zero `execute_query` calls, zero sqlglot imports for symbol/edge/graph
 - [x] `services/search/graph_walk_expander.py` is provider-agnostic: uses protocol methods, no inlined SQL, circular import eliminated
-- [ ] `mcp_server/tools/queries/graph.py` and `common.py` deleted (logic absorbed into providers)
+- [x] `mcp_server/tools/queries/graph.py` and `common.py` deleted (logic absorbed into providers)
 - [x] Tautological tests deleted: `test_database_provider_protocol.py` (23 existence checks), `test_lsp_population_protocol_migration.py` (string-checking)
 - [x] All existing tests pass: 2999 unit+integration green after Step 13
 - [x] Integration tests pass on both DuckDB and LanceDB backends (new: 6 get_all_files tests + 7 DuckDB read-query tests)
-- [ ] `chunkhound mcp` with `"provider": "lancedb"` returns graph tool results
+- [x] `chunkhound mcp` with `"provider": "lancedb"` returns graph tool results (proven by `tests/integration/test_lancedb_mcp_graph_tool.py` — execute_tool("graph"/"get_stats") against real LanceDB provider returns correct data; also found and fixed contract gap where LanceDB `_executor_graph_walk` was missing `depth` field required by `format_node`)
 - [x] Graph walk with cyclic edges (A→B→A) terminates correctly on both providers
 - [x] Batch insert handles large symbol sets (>1000 rows) via internal chunking
 
@@ -311,3 +312,4 @@ Replace 3 inlined SQL calls with: `provider.symbol_overlap()`, `provider.graph_w
 
 Step 16 complete: search.py fully provider-agnostic. Added 2 new protocol methods: search_symbols (returns (rows, total)) and filter_chunks_by_symbol_type_signature. Implemented on DuckDBProvider + LanceDBProvider. 20 pre-flight contract tests pass on both backends. Migrated _search_symbols and _apply_type_filter. Deleted 3 builders from queries/search.py (build_symbol_search_query, build_symbol_count_query, build_type_filter_query). Deleted test_escape_regression.py + test_query_common.py (tautological SQL fragment tests, behavioral coverage now in provider integration tests). Removed 3 test classes from test_queries_search.py and 3 from test_adversarial.py. Cleaned up test_tool_graph.py TestEscapeLike class. Full suite: 2927 passed 0 failed. common.py still lives because the 3 remaining builders (overlap/walk/resolution) used by graph_walk_expander still need it — Step 17 will finish the job.
 - [2026-04-13T18:38:21Z] [Seth] Step 17 complete: graph_walk_expander.py fully provider-agnostic. 3 inlined SQL calls → provider.symbol_overlap / graph_walk(directed=False) / chunk_resolution. 3 local _build_*_query helpers deleted. New coverage: 5 new unit tests (bidirectional contract assertion, fqn-extraction contract, explicit per-stage call-count assertions via _assert_called_once_each helper) + 4 real-DB integration tests (2 on DuckDB, 2 on LanceDB) covering forward AND reverse expansion — the reverse test directly guards the directed=False failure-catalog item. make_mock_services extended to wire protocol methods when the 3-list graph-pipeline format is passed, which fixed all 6 structural-search tests automatically. Full suite: 2933 passed 0 failed. common.py still lives pending Step 18 — it only hosts bidirectional_edges/visited_tracking_columns/scope_filter/escape_like used by the 3 remaining queries/search.py builders, which die in Step 18 alongside queries/graph.py.
+- [2026-04-13T19:18:50Z] [Seth] Step 18 complete. All SC met. stats.py + lsp_tools.py migrated to provider methods. queries/common.py + queries/search.py deleted. symbol_stats extended with languages field. Contract fix: LanceDB _executor_graph_walk now tracks fqn->depth mapping to match DuckDB's recursive CTE depth column (found by SC3 acceptance test, matches Adversarial Failure Catalog 'Dependency Treachery' entry). New tests: test_lancedb_mcp_graph_tool.py (SC3 e2e). Suite: 2916 passed 0 failed.

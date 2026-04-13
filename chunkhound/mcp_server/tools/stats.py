@@ -11,28 +11,6 @@ GET_STATS_DESCRIPTION = (
 )
 
 
-def _safe_count(services: Any, sql: str) -> int:
-    """Execute a COUNT query, returning 0 if the table doesn't exist."""
-    try:
-        rows = services.provider.execute_query(sql, [])
-        return rows[0]["count"] if rows else 0
-    except Exception:
-        # CatalogException for missing tables (pre-population state)
-        return 0
-
-
-def _safe_language_breakdown(services: Any) -> list[dict[str, Any]]:
-    """Get per-language symbol counts, returning [] if table doesn't exist."""
-    try:
-        rows = services.provider.execute_query(
-            "SELECT language, COUNT(*) as count FROM symbols GROUP BY language ORDER BY count DESC",
-            [],
-        )
-        return [{"language": row["language"], "count": row["count"]} for row in rows]
-    except Exception:
-        return []
-
-
 @register_tool(
     description=GET_STATS_DESCRIPTION,
     name="get_stats",
@@ -43,16 +21,29 @@ async def get_stats_impl(
 ) -> dict[str, Any]:
     """Return database and LSP statistics summary.
 
-    Args:
-        services: Database services bundle
-        lsp_client_pool: Optional LSP client pool for server status
+    ch-nxu: provider-agnostic — uses ``provider.get_stats()`` for file/chunk
+    counts and ``provider.symbol_stats()`` for symbol/edge counts plus
+    per-language breakdown. Degrades gracefully when either raises
+    (pre-population or schema-missing state).
     """
+    # Database-level counts — files, chunks.
+    try:
+        provider_stats = services.provider.get_stats()
+    except Exception:
+        provider_stats = {}
+
+    # Symbol/edge counts + language breakdown.
+    try:
+        sym_stats = services.provider.symbol_stats()
+    except Exception:
+        sym_stats = {"symbol_count": 0, "edge_count": 0, "languages": []}
+
     result: dict[str, Any] = {
-        "files": _safe_count(services, "SELECT COUNT(*) as count FROM files"),
-        "chunks": _safe_count(services, "SELECT COUNT(*) as count FROM chunks"),
-        "symbols": _safe_count(services, "SELECT COUNT(*) as count FROM symbols"),
-        "symbol_edges": _safe_count(services, "SELECT COUNT(*) as count FROM symbol_edges"),
-        "languages": _safe_language_breakdown(services),
+        "files": int(provider_stats.get("files", 0)),
+        "chunks": int(provider_stats.get("chunks", 0)),
+        "symbols": int(sym_stats.get("symbol_count", 0)),
+        "symbol_edges": int(sym_stats.get("edge_count", 0)),
+        "languages": list(sym_stats.get("languages", [])),
         "lsp_servers": None,
     }
 

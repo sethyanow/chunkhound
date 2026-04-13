@@ -71,12 +71,16 @@ def _make_full_client() -> AsyncMock:
 def _make_graph_services():
     """Services with FQN lookup + graph walk canned responses.
 
-    FQN lookup still uses execute_query (migration pending in Step 15).
-    graph_walk goes through the provider protocol method (ch-nxu Step 14).
+    ch-nxu Step 18: FQN lookup goes through provider.query_symbols_by_range
+    (dict | None), graph_walk through the provider protocol method.
     """
     services = MagicMock()
-    # FQN lookup (symbol at range) — still raw execute_query until later step
-    services.provider.execute_query.return_value = [{"fqn": "module::my_func"}]
+    # FQN lookup (innermost symbol at range) — provider method returns dict | None
+    services.provider.query_symbols_by_range.return_value = {"fqn": "module::my_func"}
+    # Guard: the tool must not reach for raw execute_query.
+    services.provider.execute_query.side_effect = AssertionError(
+        "lsp_tools must not call execute_query — use query_symbols_by_range"
+    )
     # graph_walk now returns (nodes, edges) tuple via protocol method
     services.provider.graph_walk.return_value = (
         [
@@ -96,7 +100,10 @@ def _make_graph_services():
 def _make_no_fqn_services():
     """Services where FQN lookup returns nothing."""
     services = MagicMock()
-    services.provider.execute_query.return_value = []
+    services.provider.query_symbols_by_range.return_value = None
+    services.provider.execute_query.side_effect = AssertionError(
+        "lsp_tools must not call execute_query — use query_symbols_by_range"
+    )
     return services
 
 
@@ -291,17 +298,12 @@ class TestSymbolContextDegradation:
         pool = make_mock_pool(client)
         config = make_mock_config()
 
-        call_count = 0
-
-        def fqn_then_fail(*args, **kwargs):
-            nonlocal call_count
-            call_count += 1
-            if call_count == 1:
-                return [{"fqn": "module::my_func"}]
-            raise RuntimeError("DuckDB schema error")
-
         services = MagicMock()
-        services.provider.execute_query.side_effect = fqn_then_fail
+        services.provider.query_symbols_by_range.return_value = {"fqn": "module::my_func"}
+        services.provider.graph_walk.side_effect = RuntimeError("DuckDB schema error")
+        services.provider.execute_query.side_effect = AssertionError(
+            "lsp_tools must not call execute_query — use query_symbols_by_range"
+        )
 
         result = await call_symbol_context_tool(
             pool=pool, config=config, services=services,
@@ -436,9 +438,10 @@ class TestSymbolContextAdversarial:
         config = make_mock_config()
 
         services = MagicMock()
-        # FQN lookup still uses execute_query
-        services.provider.execute_query.return_value = [{"fqn": "mod::recursive"}]
-        # graph_walk goes through provider protocol method
+        services.provider.query_symbols_by_range.return_value = {"fqn": "mod::recursive"}
+        services.provider.execute_query.side_effect = AssertionError(
+            "lsp_tools must not call execute_query — use query_symbols_by_range"
+        )
         services.provider.graph_walk.return_value = (
             [{"fqn": "mod::recursive", "name": "recursive", "kind": "function",
               "file_path": "mod.py", "depth": 0}],

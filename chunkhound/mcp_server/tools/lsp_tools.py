@@ -369,21 +369,19 @@ async def symbol_context_impl(
     callers = [call_item_to_dict(item) for item in callers_raw]
     callees = [call_item_to_dict(item) for item in callees_raw]
 
-    # FQN lookup for graph neighborhood
+    # FQN lookup for graph neighborhood — provider-agnostic (ch-nxu)
     relative_path = os.path.relpath(str(Path(resolved_file).resolve()), workspace_root)
-    fqn_rows = services.provider.execute_query(
-        "SELECT fqn FROM symbols WHERE file_path = ? "
-        "AND range_start <= ? AND range_end >= ? "
-        "ORDER BY (range_end - range_start) ASC LIMIT 1",
-        [relative_path, line, line],
-    )
+    try:
+        fqn_row = services.provider.query_symbols_by_range(relative_path, line)
+    except Exception:
+        fqn_row = None
 
     graph_neighborhood = None
-    if fqn_rows:
+    if fqn_row and fqn_row.get("fqn"):
         try:
             from .graph import _graph_walk
 
-            graph_neighborhood = _graph_walk(services, fqn_rows[0]["fqn"], depth=1, edge_kind=None, limit=20)
+            graph_neighborhood = _graph_walk(services, fqn_row["fqn"], depth=1, edge_kind=None, limit=20)
         except Exception:
             graph_neighborhood = None
 

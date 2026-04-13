@@ -578,7 +578,14 @@ class DatabaseProvider(Protocol):
         ...
 
     def symbol_stats(self) -> dict[str, Any]:
-        """Return symbol and edge counts for get_stats."""
+        """Return symbol and edge counts plus per-language breakdown.
+
+        Keys:
+        - symbol_count (int): total symbols across all languages
+        - edge_count (int): total edges in symbol_edges
+        - languages (list[dict[str, Any]]): [{"language": str, "count": int}, ...]
+          sorted by count desc. Empty list when no symbols.
+        """
         ...
 
     # Symbol Read Query Operations (used by fusion/search tools)

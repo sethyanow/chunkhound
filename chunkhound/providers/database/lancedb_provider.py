@@ -2437,7 +2437,30 @@ class LanceDBProvider(SerialDatabaseProvider):
             edge_count = edge_tbl.count_rows()
         except Exception:
             edge_count = 0
-        return {"symbol_count": sym_count, "edge_count": edge_count}
+
+        languages: list[dict[str, Any]] = []
+        if sym_count > 0:
+            try:
+                rows = sym_tbl.search().select(["language"]).limit(sym_count).to_list()
+                counts: dict[str, int] = {}
+                for row in rows:
+                    lang = row.get("language")
+                    if lang is None:
+                        continue
+                    counts[lang] = counts.get(lang, 0) + 1
+                languages = [
+                    {"language": lang, "count": count}
+                    for lang, count in sorted(
+                        counts.items(), key=lambda kv: (-kv[1], kv[0])
+                    )
+                ]
+            except Exception:
+                languages = []
+        return {
+            "symbol_count": sym_count,
+            "edge_count": edge_count,
+            "languages": languages,
+        }
 
     # ── Graph Query Protocol Methods (Python BFS) ────────────────
 
@@ -2470,17 +2493,19 @@ class LanceDBProvider(SerialDatabaseProvider):
             return [], []
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
-        # BFS: frontier is a set of FQNs to expand, visited tracks seen FQNs
-        visited: set[str] = set()
+        # BFS: frontier is a set of FQNs to expand, visited maps FQN → depth
+        # (depth at which the FQN was first discovered). Matches DuckDB's
+        # recursive-CTE contract which returns a ``depth`` column.
+        fqn_depth: dict[str, int] = {}
         frontier: set[str] = set(seed_fqns)
         all_node_fqns: list[str] = []
 
         for d in range(depth + 1):
             new_frontier: set[str] = set()
             for fqn in frontier:
-                if fqn in visited:
+                if fqn in fqn_depth:
                     continue
-                visited.add(fqn)
+                fqn_depth[fqn] = d
                 all_node_fqns.append(fqn)
                 if len(all_node_fqns) >= limit:
                     break
@@ -2490,10 +2515,12 @@ class LanceDBProvider(SerialDatabaseProvider):
 
             if d < depth:
                 # Find neighbors via edges
-                for fqn in list(frontier - (frontier - visited)):
+                for fqn in list(frontier):
+                    if fqn not in fqn_depth:
+                        continue
                     neighbors = self._bfs_get_neighbors(edge_tbl, fqn, directed, edge_kind)
                     for n in neighbors:
-                        if n not in visited:
+                        if n not in fqn_depth:
                             new_frontier.add(n)
                     if len(new_frontier) > self._BFS_FRONTIER_CAP:
                         break
@@ -2513,6 +2540,7 @@ class LanceDBProvider(SerialDatabaseProvider):
                             "name": r["name"],
                             "kind": r["kind"],
                             "file_path": r["file_path"],
+                            "depth": fqn_depth[fqn],
                         }
                     )
             except Exception:

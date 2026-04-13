@@ -756,4 +756,46 @@ class TestDuckDBSymbolStats:
         stats = provider.symbol_stats()
         assert stats["symbol_count"] == 0
         assert stats["edge_count"] == 0
+        assert stats["languages"] == []
+        provider.disconnect()
+
+    def test_languages_breakdown(self, tmp_path: Path) -> None:
+        """symbol_stats returns languages field: list of {language, count} desc."""
+        provider = _connect_fresh(tmp_path)
+        py_file = _insert_file(provider, path="src/a.py")
+        # Insert a second file with a different language
+        provider.execute_query(
+            "INSERT INTO files (path, name, extension, language, size) VALUES (?, ?, ?, ?, ?)",
+            ["src/b.ts", "b.ts", ".ts", "typescript", 100],
+        )
+        ts_file = provider.execute_query("SELECT id FROM files WHERE path = ?", ["src/b.ts"])[0]["id"]
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="a::one", name="one", kind="Function", language="python",
+                      file_id=py_file, file_path="src/a.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="a::two", name="two", kind="Function", language="python",
+                      file_id=py_file, file_path="src/a.py",
+                      range_start=6, range_end=10, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="a::three", name="three", kind="Function", language="python",
+                      file_id=py_file, file_path="src/a.py",
+                      range_start=11, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="b::one", name="one", kind="Function", language="typescript",
+                      file_id=ts_file, file_path="src/b.ts",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="tsserver",
+                      parent_fqn=None, type_signature=None),
+        ]
+        provider.insert_symbols_batch(symbols)
+
+        stats = provider.symbol_stats()
+        assert stats["symbol_count"] == 4
+        assert "languages" in stats
+        languages = stats["languages"]
+        assert isinstance(languages, list)
+        # Python (3) should come first, typescript (1) second — sorted desc by count
+        assert languages[0] == {"language": "python", "count": 3}
+        assert languages[1] == {"language": "typescript", "count": 1}
         provider.disconnect()

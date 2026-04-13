@@ -541,3 +541,44 @@ class TestLanceDBSymbolStats:
         stats = lancedb_provider.symbol_stats()
         assert stats["symbol_count"] == 0
         assert stats["edge_count"] == 0
+        assert stats["languages"] == []
+
+    def test_languages_breakdown(self, lancedb_provider) -> None:
+        """symbol_stats returns languages field: list of {language, count} desc."""
+        from chunkhound.core.models import File
+        from chunkhound.core.types.common import Language
+
+        py_file = lancedb_provider.insert_file(
+            File(path="src/a.py", mtime=1.0, language=Language.PYTHON, size_bytes=100)
+        )
+        ts_file = lancedb_provider.insert_file(
+            File(path="src/b.ts", mtime=1.0, language=Language.TYPESCRIPT, size_bytes=100)
+        )
+
+        symbols: list[SymbolRow] = [
+            SymbolRow(fqn="a::one", name="one", kind="Function", language="python",
+                      file_id=py_file, file_path="src/a.py",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="a::two", name="two", kind="Function", language="python",
+                      file_id=py_file, file_path="src/a.py",
+                      range_start=6, range_end=10, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="a::three", name="three", kind="Function", language="python",
+                      file_id=py_file, file_path="src/a.py",
+                      range_start=11, range_end=15, confidence=1.0, lsp_server="pyright",
+                      parent_fqn=None, type_signature=None),
+            SymbolRow(fqn="b::one", name="one", kind="Function", language="typescript",
+                      file_id=ts_file, file_path="src/b.ts",
+                      range_start=0, range_end=5, confidence=1.0, lsp_server="tsserver",
+                      parent_fqn=None, type_signature=None),
+        ]
+        lancedb_provider.insert_symbols_batch(symbols)
+
+        stats = lancedb_provider.symbol_stats()
+        assert stats["symbol_count"] == 4
+        assert "languages" in stats
+        languages = stats["languages"]
+        assert isinstance(languages, list)
+        assert languages[0] == {"language": "python", "count": 3}
+        assert languages[1] == {"language": "typescript", "count": 1}

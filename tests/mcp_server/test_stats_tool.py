@@ -1,8 +1,7 @@
 """Tests for stats.py — get_stats_impl moved to its own module.
 
-Existing tests in tests/lsp/test_tool_get_stats.py cover the tool through
-execute_tool. These tests verify the module-level import and the new
-missing-table graceful degradation.
+ch-nxu Step 18: stats.py is provider-agnostic — graceful degradation when
+the provider raises on symbol_stats/get_stats (pre-population state).
 """
 
 from unittest.mock import MagicMock
@@ -29,28 +28,18 @@ def test_stats_module_exports_description():
 
 @pytest.mark.asyncio
 async def test_stats_handles_missing_symbol_tables():
-    """get_stats_impl returns 0 for symbol/edge counts when tables don't exist."""
-    from duckdb import CatalogException
-
+    """get_stats_impl returns 0 for symbol/edge counts when symbol_stats raises."""
     from chunkhound.mcp_server.tools.stats import get_stats_impl
 
     services = MagicMock()
-
-    # files and chunks succeed, symbols and edges raise CatalogException
-    def mock_execute_query(sql, params):
-        if "FROM files" in sql:
-            return [{"count": 10}]
-        elif "FROM chunks" in sql:
-            return [{"count": 50}]
-        elif "FROM symbols" in sql and "GROUP BY" not in sql:
-            raise CatalogException("Table 'symbols' does not exist")
-        elif "FROM symbol_edges" in sql:
-            raise CatalogException("Table 'symbol_edges' does not exist")
-        elif "GROUP BY language" in sql:
-            raise CatalogException("Table 'symbols' does not exist")
-        return []
-
-    services.provider.execute_query.side_effect = mock_execute_query
+    services.provider.get_stats.return_value = {
+        "files": 10,
+        "chunks": 50,
+        "embeddings": 0,
+        "providers": 0,
+    }
+    # Symbol tables missing — symbol_stats raises
+    services.provider.symbol_stats.side_effect = RuntimeError("symbols table missing")
 
     result = await get_stats_impl(services=services)
 
@@ -59,3 +48,25 @@ async def test_stats_handles_missing_symbol_tables():
     assert result["symbols"] == 0
     assert result["symbol_edges"] == 0
     assert result["languages"] == []
+
+
+@pytest.mark.asyncio
+async def test_stats_handles_get_stats_failure():
+    """get_stats_impl returns 0 for files/chunks when provider.get_stats raises."""
+    from chunkhound.mcp_server.tools.stats import get_stats_impl
+
+    services = MagicMock()
+    services.provider.get_stats.side_effect = RuntimeError("db locked")
+    services.provider.symbol_stats.return_value = {
+        "symbol_count": 5,
+        "edge_count": 7,
+        "languages": [{"language": "python", "count": 5}],
+    }
+
+    result = await get_stats_impl(services=services)
+
+    assert result["files"] == 0
+    assert result["chunks"] == 0
+    assert result["symbols"] == 5
+    assert result["symbol_edges"] == 7
+    assert result["languages"] == [{"language": "python", "count": 5}]

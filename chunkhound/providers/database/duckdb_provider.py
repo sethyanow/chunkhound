@@ -3366,4 +3366,13 @@ class DuckDBProvider(SerialDatabaseProvider):
     def _executor_symbol_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, Any]:
         sym_count = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
         edge_count = conn.execute("SELECT COUNT(*) FROM symbol_edges").fetchone()[0]
-        return {"symbol_count": sym_count, "edge_count": edge_count}
+        lang_rows = conn.execute(
+            "SELECT language, COUNT(*) AS count FROM symbols "
+            "GROUP BY language ORDER BY count DESC, language ASC"
+        ).fetchall()
+        languages = [{"language": row[0], "count": row[1]} for row in lang_rows]
+        return {
+            "symbol_count": sym_count,
+            "edge_count": edge_count,
+            "languages": languages,
+        }
