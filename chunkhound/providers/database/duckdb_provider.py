@@ -1733,6 +1733,14 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Get all chunks with their metadata including file paths - delegate to chunk repository."""
         return self._execute_in_db_thread_sync(self._executor_get_all_chunks_with_metadata)
 
+    def get_all_files(self) -> list[dict[str, Any]]:
+        """Return all indexed file records (id + path at minimum)."""
+        return self._execute_in_db_thread_sync(self._executor_get_all_files)
+
+    def _executor_get_all_files(self, conn: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
+        rows = conn.execute("SELECT id, path FROM files").fetchall()
+        return [{"id": row[0], "path": row[1]} for row in rows]
+
     def get_scope_stats(self, scope_prefix: str | None) -> tuple[int, int]:
         """Return (total_files, total_chunks) under an optional scope prefix.
 
@@ -2881,6 +2889,85 @@ class DuckDBProvider(SerialDatabaseProvider):
                     ]
                 )
             conn.execute(f"INSERT INTO symbol_edges ({cols}) VALUES {placeholders}", flat)
+
+    # ── Symbol Read Query Methods ────────────────────────────────
+
+    def query_symbols_by_scope(self, scope: str) -> list[dict[str, Any]]:
+        """Return all symbols whose file_path begins with the given scope prefix."""
+        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_scope, scope)
+
+    def _executor_query_symbols_by_scope(
+        self, conn: Any, state: dict[str, Any], scope: str
+    ) -> list[dict[str, Any]]:
+        escaped = escape_like_pattern(scope)
+        rows = conn.execute(
+            "SELECT * FROM symbols WHERE file_path LIKE ? ESCAPE '!'",
+            [f"{escaped}%"],
+        ).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def query_test_symbols(self, scope: str | None) -> list[dict[str, Any]]:
+        """Return test function symbols (kind='Function', name LIKE 'test_%').
+
+        Optional scope restricts to files under a path prefix.
+        """
+        return self._execute_in_db_thread_sync(self._executor_query_test_symbols, scope)
+
+    def _executor_query_test_symbols(
+        self, conn: Any, state: dict[str, Any], scope: str | None
+    ) -> list[dict[str, Any]]:
+        if scope:
+            escaped = escape_like_pattern(scope)
+            rows = conn.execute(
+                "SELECT * FROM symbols "
+                "WHERE kind = 'Function' AND name LIKE 'test_%' "
+                "AND file_path LIKE ? ESCAPE '!'",
+                [f"{escaped}%"],
+            ).fetchall()
+        else:
+            rows = conn.execute(
+                "SELECT * FROM symbols WHERE kind = 'Function' AND name LIKE 'test_%'",
+            ).fetchall()
+        return self._rows_to_dicts(conn, rows)
+
+    def query_symbol_type_signatures(self, fqns: list[str]) -> dict[str, str | None]:
+        """Batch lookup FQN → type_signature mapping.
+
+        Missing FQNs are absent from the result (not None entries) so callers
+        can distinguish "no signature collected" from "symbol not found".
+        """
+        if not fqns:
+            return {}
+        return self._execute_in_db_thread_sync(self._executor_query_symbol_type_signatures, fqns)
+
+    def _executor_query_symbol_type_signatures(
+        self, conn: Any, state: dict[str, Any], fqns: list[str]
+    ) -> dict[str, str | None]:
+        if not fqns:
+            return {}
+        placeholders = ", ".join(["?"] * len(fqns))
+        rows = conn.execute(
+            f"SELECT fqn, type_signature FROM symbols WHERE fqn IN ({placeholders})",
+            list(fqns),
+        ).fetchall()
+        result: dict[str, str | None] = {}
+        for row in rows:
+            ts = row[1]
+            result[row[0]] = ts if ts else None
+        return result
+
+    def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
+        """Return distinct FQNs for all symbols in a file."""
+        return self._execute_in_db_thread_sync(self._executor_query_distinct_fqns_by_file_path, file_path)
+
+    def _executor_query_distinct_fqns_by_file_path(
+        self, conn: Any, state: dict[str, Any], file_path: str
+    ) -> list[str]:
+        rows = conn.execute(
+            "SELECT DISTINCT fqn FROM symbols WHERE file_path = ?",
+            [file_path],
+        ).fetchall()
+        return [row[0] for row in rows]
 
     # ── Graph Query Protocol Methods ──────────────────────────────
 

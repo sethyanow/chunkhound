@@ -130,9 +130,16 @@ def test_regex_pagination(lancedb_provider, tmp_path):
 
 
 def test_regex_invalid_pattern_raises(lancedb_provider, tmp_path):
-    """Invalid regex raises RuntimeError (aligned with semantic search)."""
+    """Invalid regex raises ProviderError at the protocol boundary.
+
+    The executor wraps all backend-layer exceptions (lance, duckdb, etc.)
+    as ProviderError so callers catch one type regardless of backend. The
+    original cause (a RuntimeError from lance's parser) is chained via
+    ``__cause__``.
+    """
     from chunkhound.core.models import Chunk, File
     from chunkhound.core.types.common import ChunkType, Language
+    from chunkhound.interfaces.database_provider import ProviderError
 
     # Insert file and chunk so regex is actually evaluated
     test_file = File(
@@ -154,5 +161,5 @@ def test_regex_invalid_pattern_raises(lancedb_provider, tmp_path):
     )
     lancedb_provider.insert_chunks_batch([chunk])
 
-    with pytest.raises(RuntimeError, match="Regex search failed"):
+    with pytest.raises(ProviderError, match="Regex search failed"):
         lancedb_provider.search_regex("[invalid(regex")

@@ -1360,6 +1360,20 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Get all chunks with their metadata including file paths (provider-agnostic)."""
         return self._execute_in_db_thread_sync(self._executor_get_all_chunks_with_metadata)
 
+    def get_all_files(self) -> list[dict[str, Any]]:
+        """Return all indexed file records (id + path at minimum)."""
+        return self._execute_in_db_thread_sync(self._executor_get_all_files)
+
+    def _executor_get_all_files(self, conn: Any, state: dict[str, Any]) -> list[dict[str, Any]]:
+        if not self._files_table:
+            return []
+        try:
+            rows = self._files_table.search().select(["id", "path"]).to_list()
+        except Exception as e:
+            logger.error(f"Error loading all files from LanceDB: {e}")
+            return []
+        return [{"id": int(r["id"]), "path": r["path"]} for r in rows]
+
     def get_scope_stats(self, scope_prefix: str | None) -> tuple[int, int]:
         """Return (total_files, total_chunks) under an optional scope prefix.
 

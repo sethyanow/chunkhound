@@ -161,7 +161,7 @@ class TestPopulateFileEdgeCollectionFailure:
         )
 
         with patch.object(service, "_collect_edges", side_effect=RuntimeError("LSP crashed")):
-            with patch.object(service, "_batch_insert_edges") as mock_insert_edges:
+            with patch.object(provider, "insert_edges_batch_async") as mock_insert_edges:
                 with pytest.raises(RuntimeError, match="LSP crashed"):
                     await service.populate_file(
                         file_path=Path("src/greeter.py"), file_id=1, language="python",
@@ -425,8 +425,8 @@ class TestDeleteFileSymbols:
         before = provider.execute_query("SELECT COUNT(*) as cnt FROM symbols")
         assert before[0]["cnt"] == 6  # 3 symbols × 2 files
 
-        # Delete file 1's symbols
-        await service.delete_file_symbols(1)
+        # Delete file 1's symbols via the provider directly
+        await provider.delete_symbols_by_file_async(1)
 
         after = provider.execute_query("SELECT COUNT(*) as cnt FROM symbols")
         assert after[0]["cnt"] == 3  # Only file 2 remains

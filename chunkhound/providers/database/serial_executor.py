@@ -79,6 +79,36 @@ def track_operation(state: dict[str, Any]) -> None:
     state["operations_since_checkpoint"] += 1
 
 
+def _run_and_wrap(
+    provider: Any,
+    operation: str | Callable[..., Any],
+    conn: Any,
+    state: dict[str, Any],
+    args: tuple[Any, ...],
+    kwargs: dict[str, Any],
+) -> Any:
+    """Run a provider operation and wrap backend exceptions as ProviderError.
+
+    Any exception raised by the operation is re-raised as
+    ``ProviderError`` (preserving the original as ``__cause__``) so that
+    callers can catch a single type regardless of backend. Already-
+    ``ProviderError`` exceptions pass through unchanged to avoid
+    double-wrapping.
+    """
+    # Lazy import to avoid circular dependency with interface module.
+    from chunkhound.interfaces.database_provider import ProviderError
+
+    try:
+        if callable(operation):
+            return operation(conn, state, *args, **kwargs)
+        op_func = getattr(provider, f"_executor_{operation}")
+        return op_func(conn, state, *args, **kwargs)
+    except ProviderError:
+        raise
+    except Exception as exc:
+        raise ProviderError(f"{type(exc).__name__}: {exc}") from exc
+
+
 class SerialDatabaseExecutor:
     """Thread-safe executor for database operations requiring single-threaded execution.
 
@@ -131,10 +161,7 @@ class SerialDatabaseExecutor:
             if hasattr(provider, "get_base_directory"):
                 state["base_directory"] = provider.get_base_directory()
 
-            if callable(operation):
-                return operation(conn, state, *args, **kwargs)
-            op_func = getattr(provider, f"_executor_{operation}")
-            return op_func(conn, state, *args, **kwargs)
+            return _run_and_wrap(provider, operation, conn, state, args, kwargs)
 
         operation_label = getattr(operation, "__name__", str(operation))
 
@@ -188,10 +215,7 @@ class SerialDatabaseExecutor:
             if hasattr(provider, "get_base_directory"):
                 state["base_directory"] = provider.get_base_directory()
 
-            if callable(operation):
-                return operation(conn, state, *args, **kwargs)
-            op_func = getattr(provider, f"_executor_{operation}")
-            return op_func(conn, state, *args, **kwargs)
+            return _run_and_wrap(provider, operation, conn, state, args, kwargs)
 
         # Capture context for async compatibility
         ctx = contextvars.copy_context()

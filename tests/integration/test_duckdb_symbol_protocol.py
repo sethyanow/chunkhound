@@ -384,3 +384,142 @@ class TestDuckDBQuerySymbolsByFqnExists:
         assert provider.query_symbols_by_fqn_exists("example::exists", "src/example.py") is True
         assert provider.query_symbols_by_fqn_exists("example::nope", "src/example.py") is False
         provider.disconnect()
+
+
+class TestDuckDBSymbolReadQueries:
+    """Symbol read query methods used by fusion.py and search.py helpers.
+
+    These methods were declared in the protocol in Steps 1-4 but were not
+    implemented on DuckDBProvider in Steps 5-8. ch-nxu Step 13 surfaced the
+    gap when lsp_population.py was retyped against the protocol.
+    """
+
+    def _seed(self, provider: DuckDBProvider) -> int:
+        file_id = _insert_test_file(provider)
+        symbols: list[SymbolRow] = [
+            SymbolRow(
+                fqn="example::Cls",
+                name="Cls",
+                kind="Class",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=0,
+                range_end=50,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature=None,
+            ),
+            SymbolRow(
+                fqn="example::Cls::method",
+                name="method",
+                kind="Method",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=5,
+                range_end=20,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn="example::Cls",
+                type_signature="(self) -> int",
+            ),
+            SymbolRow(
+                fqn="example::test_thing",
+                name="test_thing",
+                kind="Function",
+                language="python",
+                file_id=file_id,
+                file_path="src/example.py",
+                range_start=60,
+                range_end=70,
+                confidence=1.0,
+                lsp_server="pyright",
+                parent_fqn=None,
+                type_signature="() -> None",
+            ),
+        ]
+        provider.insert_symbols_batch(symbols)
+        return file_id
+
+    def test_query_symbols_by_scope_returns_prefix_matches(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            results = provider.query_symbols_by_scope("src/")
+            assert len(results) == 3
+            assert {r["fqn"] for r in results} == {
+                "example::Cls",
+                "example::Cls::method",
+                "example::test_thing",
+            }
+        finally:
+            provider.disconnect()
+
+    def test_query_symbols_by_scope_excludes_non_matches(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            assert provider.query_symbols_by_scope("other/") == []
+        finally:
+            provider.disconnect()
+
+    def test_query_test_symbols_filters_test_functions(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            results = provider.query_test_symbols(scope=None)
+            assert len(results) == 1
+            assert results[0]["fqn"] == "example::test_thing"
+            # Method named "method" is not a test function — must be excluded
+            assert all(r["name"].startswith("test_") for r in results)
+        finally:
+            provider.disconnect()
+
+    def test_query_test_symbols_with_scope_restricts(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            results = provider.query_test_symbols(scope="src/")
+            assert len(results) == 1
+            assert provider.query_test_symbols(scope="other/") == []
+        finally:
+            provider.disconnect()
+
+    def test_query_symbol_type_signatures_batch_lookup(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            result = provider.query_symbol_type_signatures(
+                ["example::Cls::method", "example::test_thing", "example::missing"]
+            )
+            assert result["example::Cls::method"] == "(self) -> int"
+            assert result["example::test_thing"] == "() -> None"
+            # Missing FQN must be absent from the result, not a None entry.
+            # Caller distinguishes "no signature collected" (None) from
+            # "symbol not found" (missing key).
+            assert "example::missing" not in result
+        finally:
+            provider.disconnect()
+
+    def test_query_symbol_type_signatures_empty_input(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            assert provider.query_symbol_type_signatures([]) == {}
+        finally:
+            provider.disconnect()
+
+    def test_query_distinct_fqns_by_file_path(self, tmp_path: Path) -> None:
+        provider = _connect_fresh(tmp_path)
+        try:
+            self._seed(provider)
+            fqns = provider.query_distinct_fqns_by_file_path("src/example.py")
+            assert set(fqns) == {
+                "example::Cls",
+                "example::Cls::method",
+                "example::test_thing",
+            }
+            assert provider.query_distinct_fqns_by_file_path("src/missing.py") == []
+        finally:
+            provider.disconnect()

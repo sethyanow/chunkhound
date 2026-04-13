@@ -373,6 +373,18 @@ class SerialDatabaseProvider(ABC):
             return
         await self._execute_in_db_thread(self._executor_insert_edges_batch, edges)
 
+    async def get_all_files_async(self) -> list[dict[str, Any]]:
+        """Async variant of get_all_files."""
+        return await self._execute_in_db_thread(self._executor_get_all_files)
+
+    async def query_symbols_by_fqn_exists_async(self, fqn: str, file_path: str) -> bool:
+        """Async variant of query_symbols_by_fqn_exists."""
+        return await self._execute_in_db_thread(self._executor_query_symbols_by_fqn_exists, fqn, file_path)
+
+    async def query_symbols_by_range_async(self, file_path: str, line: int) -> dict[str, Any] | None:
+        """Async variant of query_symbols_by_range."""
+        return await self._execute_in_db_thread(self._executor_query_symbols_by_range, file_path, line)
+
     def search_chunks_regex(self, pattern: str, file_path: str | None = None) -> list[dict[str, Any]]:
         """Backward compatibility wrapper for legacy search_chunks_regex calls."""
         results, _ = self.search_regex(

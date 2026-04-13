@@ -1,7 +1,8 @@
 """LSP Population Service — writes documentSymbol results to the symbols table.
 
 Background service that runs after tree-sitter chunking to populate the
-symbols table with LSP-derived structure data.
+symbols table with LSP-derived structure data. Provider-agnostic: talks to
+any DatabaseProvider implementation through the protocol.
 """
 
 from __future__ import annotations
@@ -12,8 +13,8 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 from urllib.parse import unquote, urlparse
 
-import duckdb
-
+from chunkhound.core.models.symbol import EdgeRow, SymbolRow
+from chunkhound.interfaces.database_provider import ProviderError
 from chunkhound.lsp.constants import symbol_kind_name
 from chunkhound.lsp.types import LSPCapability, LSPError, SymbolInfo
 
@@ -21,9 +22,9 @@ if TYPE_CHECKING:
     from collections.abc import Callable, Coroutine
     from typing import Any
 
+    from chunkhound.interfaces.database_provider import DatabaseProvider
     from chunkhound.lsp.client import LSPClient, LSPClientPool
     from chunkhound.lsp.types import CallHierarchyItem, Location
-    from chunkhound.providers.database.duckdb_provider import DuckDBProvider
 
     _EdgeOp = Callable[
         [str, int, int],
@@ -42,12 +43,13 @@ class PopulateResult(enum.Enum):
 
 
 class LSPPopulationService:
-    """Populates the DuckDB symbols table from LSP documentSymbol results."""
+    """Populates the symbols/symbol_edges tables from LSP results via the
+    DatabaseProvider protocol."""
 
     def __init__(
         self,
         pool: LSPClientPool,
-        provider: DuckDBProvider,
+        provider: DatabaseProvider,
         workspace_root: Path,
     ) -> None:
         self._pool = pool
@@ -93,11 +95,11 @@ class LSPPopulationService:
                 return PopulateResult.SKIPPED
 
             # Delete edges before symbols (edges reference symbol IDs via FK)
-            await self.delete_file_edges(file_id)
-            await self.delete_file_symbols(file_id)
+            await self._provider.delete_edges_by_file_async(file_id)
+            await self._provider.delete_symbols_by_file_async(file_id)
 
-            # Flatten nested symbols into rows and insert
-            rows = self._flatten_symbols(
+            # Flatten nested symbols into SymbolRow dicts and batch insert
+            symbol_rows = self._flatten_symbols(
                 symbols=symbols,
                 file_id=file_id,
                 file_path=str(file_path),
@@ -107,14 +109,11 @@ class LSPPopulationService:
                 type_signatures=type_signatures,
             )
 
-            if rows:
-                await self._batch_insert(rows)
+            if symbol_rows:
+                await self._provider.insert_symbols_batch_async(symbol_rows)
 
             # Query back symbol IDs for edge collection
-            fqn_rows = await self._provider.execute_query_async(
-                "SELECT id, fqn FROM symbols WHERE file_id = ?", [file_id]
-            )
-            fqn_to_id = {row["fqn"]: row["id"] for row in fqn_rows}
+            fqn_to_id = await self._provider.query_symbol_fqns_by_file_async(file_id)
 
             # Collect edges (LSP operations need file open)
             edges = await self._collect_edges(
@@ -123,13 +122,14 @@ class LSPPopulationService:
                 symbols,
                 str(file_path),
                 fqn_to_id,
+                language,
             )
         finally:
             await client.notify_did_close(uri)
 
         # Batch insert edges (pure DB write — safe after didClose)
         if edges:
-            await self._batch_insert_edges(edges)
+            await self._provider.insert_edges_batch_async(edges)
 
         return PopulateResult.POPULATED
 
@@ -184,26 +184,26 @@ class LSPPopulationService:
         lsp_server: str,
         parent_fqn: str | None,
         type_signatures: dict[tuple[int, int], str] | None = None,
-    ) -> list[tuple]:
-        """Recursively flatten SymbolInfo tree into insert-ready tuples."""
+    ) -> list[SymbolRow]:
+        """Recursively flatten SymbolInfo tree into SymbolRow dicts."""
         ts = type_signatures or {}
-        rows: list[tuple] = []
+        rows: list[SymbolRow] = []
         for sym in symbols:
             fqn = f"{parent_fqn}::{sym.name}" if parent_fqn else sym.name
             rows.append(
-                (
-                    fqn,
-                    sym.name,
-                    symbol_kind_name(sym.kind),
-                    language,
-                    file_id,
-                    file_path,
-                    sym.range_start_line,
-                    sym.range_end_line,
-                    parent_fqn,
-                    1.0,  # confidence: compiler_grade
-                    lsp_server,
-                    ts.get((sym.range_start_line, sym.range_start_char)),
+                SymbolRow(
+                    fqn=fqn,
+                    name=sym.name,
+                    kind=symbol_kind_name(sym.kind),
+                    language=language,
+                    file_id=file_id,
+                    file_path=file_path,
+                    range_start=sym.range_start_line,
+                    range_end=sym.range_end_line,
+                    parent_fqn=parent_fqn,
+                    confidence=1.0,  # compiler-grade
+                    lsp_server=lsp_server,
+                    type_signature=ts.get((sym.range_start_line, sym.range_start_char)),
                 )
             )
             if sym.children:
@@ -220,20 +220,6 @@ class LSPPopulationService:
                 )
         return rows
 
-    async def _batch_insert(self, rows: list[tuple]) -> None:
-        """Single batch INSERT for all symbols from one file."""
-        if not rows:
-            return
-        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(rows))
-        flat_params = [val for row in rows for val in row]
-        await self._provider.execute_query_async(
-            "INSERT INTO symbols "
-            "(fqn, name, kind, language, file_id, file_path, "
-            "range_start, range_end, parent_fqn, confidence, lsp_server, "
-            f"type_signature) VALUES {placeholders}",
-            flat_params,
-        )
-
     def _server_name(self, language: str) -> str:
         """Look up the LSP server command name for a language."""
         from chunkhound.lsp.registry import LANGUAGE_SERVER_REGISTRY
@@ -245,31 +231,34 @@ class LSPPopulationService:
         """Populate symbols for all indexed files. Used by batch indexing path."""
         from chunkhound.core.types.common import Language
 
-        rows = await self._provider.execute_query_async("SELECT id, path FROM files")
+        file_records = await self._provider.get_all_files_async()
         languages_seen: set[str] = set()
         populated = 0
         failed = 0
         skipped = 0
 
-        for row in rows:
+        for file_record in file_records:
             try:
-                file_path = Path(row["path"])
+                file_path = Path(file_record["path"])
                 lang = Language.from_file_extension(file_path).value
                 languages_seen.add(lang)
                 result = await self.populate_file(
                     file_path=file_path,
-                    file_id=row["id"],
+                    file_id=file_record["id"],
                     language=lang,
                 )
                 if result is PopulateResult.POPULATED:
                     populated += 1
                 elif result is PopulateResult.SKIPPED:
                     skipped += 1
-            except (LSPError, OSError, UnicodeDecodeError, duckdb.Error) as exc:
+            except (LSPError, OSError, UnicodeDecodeError, ProviderError) as exc:
+                # Expected per-file failure types. Unexpected exception types
+                # (RuntimeError, AssertionError, etc.) propagate and abort the
+                # batch so internal bugs stay visible.
                 failed += 1
                 logger.warning(
                     "Population failed for %s: %s: %s",
-                    row["path"],
+                    file_record["path"],
                     type(exc).__name__,
                     exc,
                 )
@@ -303,6 +292,7 @@ class LSPPopulationService:
 
             lsp_server = self._server_name(language)
             seen: set[tuple[str, str]] = set()  # (fqn, file_path) dedup within batch
+            new_rows: list[SymbolRow] = []
 
             for sym in symbols:
                 if sym.location_uri is None:
@@ -320,14 +310,13 @@ class LSPPopulationService:
 
                 file_path_str = str(rel_path)
 
-                # Look up file_id — skip symbols for files not in the DB
-                file_rows = await self._provider.execute_query_async(
-                    "SELECT id FROM files WHERE path = ?", [file_path_str]
-                )
-                if not file_rows:
+                # Look up file_id — skip symbols for files not in the DB.
+                # Default as_model=False so the protocol returns a dict.
+                file_record = await self._provider.get_file_by_path_async(file_path_str)
+                if not file_record or not isinstance(file_record, dict):
                     continue
+                file_id = file_record["id"]
 
-                file_id = file_rows[0]["id"]
                 fqn = sym.name  # workspaceSymbol returns flat results, no parent context
 
                 # In-batch dedup
@@ -337,32 +326,30 @@ class LSPPopulationService:
                 seen.add(dedup_key)
 
                 # Skip if symbol already exists (from documentSymbol pass)
-                existing = await self._provider.execute_query_async(
-                    "SELECT id FROM symbols WHERE fqn = ? AND file_path = ? LIMIT 1",
-                    [fqn, file_path_str],
-                )
-                if existing:
+                if await self._provider.query_symbols_by_fqn_exists_async(fqn, file_path_str):
                     continue
 
-                # Insert with lower confidence (workspace symbols are less precise)
-                await self._batch_insert(
-                    [
-                        (
-                            fqn,
-                            sym.name,
-                            symbol_kind_name(sym.kind),
-                            language,
-                            file_id,
-                            file_path_str,
-                            sym.range_start_line,
-                            sym.range_end_line,
-                            None,  # parent_fqn — flat results, no parent context
-                            0.9,  # confidence: workspace symbol (less precise than documentSymbol)
-                            lsp_server,
-                            None,  # type_signature — not collected for workspace symbols
-                        )
-                    ]
+                # Stage row for batch insert (workspace symbols use lower confidence)
+                new_rows.append(
+                    SymbolRow(
+                        fqn=fqn,
+                        name=sym.name,
+                        kind=symbol_kind_name(sym.kind),
+                        language=language,
+                        file_id=file_id,
+                        file_path=file_path_str,
+                        range_start=sym.range_start_line,
+                        range_end=sym.range_end_line,
+                        parent_fqn=None,
+                        confidence=0.9,  # less precise than documentSymbol
+                        lsp_server=lsp_server,
+                        type_signature=None,
+                    )
                 )
+
+            # Batch insert all new workspace symbols for this language at once
+            if new_rows:
+                await self._provider.insert_symbols_batch_async(new_rows)
 
     async def _collect_edges(
         self,
@@ -371,11 +358,12 @@ class LSPPopulationService:
         symbols: list[SymbolInfo],
         file_path: str,
         fqn_to_id: dict[str, int],
-    ) -> list[tuple]:
+        language: str,
+    ) -> list[EdgeRow]:
         """Collect edges from LSP operations for all symbols in a file.
 
         Calls definition/references/implementation/calls per symbol, resolves
-        targets via _resolve_symbol, and returns deduplicated edge tuples.
+        targets via _resolve_symbol, and returns deduplicated edge dicts.
 
         Args:
             client: Active LSP client (file must be open).
@@ -383,23 +371,15 @@ class LSPPopulationService:
             symbols: Symbol tree from documentSymbol.
             file_path: Relative path of the source file.
             fqn_to_id: Mapping of FQN → symbol_id for the source file's symbols.
+            language: Language identifier (caller already knows it; previous
+                code looked it up via SQL — that defect is now removed).
 
         Returns:
-            List of 9-element tuples ready for batch insert into symbol_edges.
+            List of EdgeRow dicts ready for insert_edges_batch_async.
         """
-        # Dedup dict: (from_fqn, to_fqn, edge_kind) → edge tuple
-        edges: dict[tuple[str, str, str], tuple] = {}
-        # Infer language from fqn_to_id keys — look up any symbol's language from DB
-        # This is called from populate_file which knows the language, but the interface
-        # doesn't pass it. Use _server_name with a DB lookup as fallback.
-        lsp_server = "unknown"
-        if fqn_to_id:
-            any_id = next(iter(fqn_to_id.values()))
-            lang_rows = await self._provider.execute_query_async(
-                "SELECT language FROM symbols WHERE id = ? LIMIT 1", [any_id]
-            )
-            if lang_rows and lang_rows[0]["language"]:
-                lsp_server = self._server_name(lang_rows[0]["language"])
+        # Dedup dict: (from_fqn, to_fqn, edge_kind) → EdgeRow
+        edges: dict[tuple[str, str, str], EdgeRow] = {}
+        lsp_server = self._server_name(language)
         await self._edges_recursive(
             client,
             uri,
@@ -421,7 +401,7 @@ class LSPPopulationService:
         fqn_to_id: dict[str, int],
         parent_fqn: str | None,
         lsp_server: str,
-        edges: dict[tuple[str, str, str], tuple],
+        edges: dict[tuple[str, str, str], EdgeRow],
     ) -> None:
         """Recursively walk symbols and collect edges from LSP operations."""
         # Build operation list gated by capabilities
@@ -487,16 +467,16 @@ class LSPPopulationService:
                             continue
 
                         dedup_key = (fqn, to_fqn, edge_kind)
-                        edges[dedup_key] = (
-                            from_id,
-                            fqn,
-                            file_path,
-                            to_id,
-                            to_fqn,
-                            to_file,
-                            edge_kind,
-                            1.0,
-                            lsp_server,
+                        edges[dedup_key] = EdgeRow(
+                            from_symbol_id=from_id,
+                            from_fqn=fqn,
+                            from_file=file_path,
+                            to_symbol_id=to_id,
+                            to_fqn=to_fqn,
+                            to_file=to_file,
+                            edge_kind=edge_kind,
+                            confidence=1.0,
+                            lsp_server=lsp_server,
                         )
             except Exception:
                 logger.debug(
@@ -539,39 +519,7 @@ class LSPPopulationService:
             return None
 
         file_path_str = str(rel_path)
-        rows = await self._provider.execute_query_async(
-            "SELECT id, fqn, file_path FROM symbols "
-            "WHERE file_path = ? AND range_start <= ? AND range_end >= ? "
-            "ORDER BY (range_end - range_start) ASC LIMIT 1",
-            [file_path_str, line, line],
-        )
-        if not rows:
+        row = await self._provider.query_symbols_by_range_async(file_path_str, line)
+        if row is None:
             return None
-        row = rows[0]
         return (row["id"], row["fqn"], row["file_path"])
-
-    async def _batch_insert_edges(self, edges: list[tuple]) -> None:
-        """Single batch INSERT for all edges from one file."""
-        if not edges:
-            return
-        placeholders = ", ".join(["(?, ?, ?, ?, ?, ?, ?, ?, ?)"] * len(edges))
-        flat_params = [val for edge in edges for val in edge]
-        await self._provider.execute_query_async(
-            "INSERT INTO symbol_edges "
-            "(from_symbol_id, from_fqn, from_file, to_symbol_id, to_fqn, "
-            f"to_file, edge_kind, confidence, lsp_server) VALUES {placeholders}",
-            flat_params,
-        )
-
-    async def delete_file_edges(self, file_id: int) -> None:
-        """Remove all edges that reference symbols belonging to this file."""
-        await self._provider.execute_query_async(
-            "DELETE FROM symbol_edges WHERE "
-            "from_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?) OR "
-            "to_symbol_id IN (SELECT id FROM symbols WHERE file_id = ?)",
-            [file_id, file_id],
-        )
-
-    async def delete_file_symbols(self, file_id: int) -> None:
-        """Remove all symbols for a given file_id."""
-        await self._provider.execute_query_async("DELETE FROM symbols WHERE file_id = ?", [file_id])

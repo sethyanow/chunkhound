@@ -148,23 +148,23 @@ class TestCollectEdges:
 
         main_uri = (tmp_path / "src" / "main.py").as_uri()
         edges = await service._collect_edges(
-            client, main_uri, symbols, "src/main.py", fqn_to_id,
+            client, main_uri, symbols, "src/main.py", fqn_to_id, "python",
         )
 
         # Should have exactly 1 edge (defines and references resolve to same target,
         # but edge_kind differs so they're both kept)
-        edge_kinds = {e[6] for e in edges}  # index 6 = edge_kind
+        edge_kinds = {e["edge_kind"] for e in edges}
         assert "defines" in edge_kinds
         assert "references" in edge_kinds
 
         # Verify from/to fields on a 'defines' edge
-        defines_edge = [e for e in edges if e[6] == "defines"][0]
-        assert defines_edge[0] == src_ids[0]     # from_symbol_id
-        assert defines_edge[1] == "caller"        # from_fqn
-        assert defines_edge[2] == "src/main.py"   # from_file
-        assert defines_edge[3] == tgt_ids[0]      # to_symbol_id
-        assert defines_edge[4] == "Greeter"       # to_fqn
-        assert defines_edge[5] == "src/greeter.py" # to_file
+        defines_edge = [e for e in edges if e["edge_kind"] == "defines"][0]
+        assert defines_edge["from_symbol_id"] == src_ids[0]
+        assert defines_edge["from_fqn"] == "caller"
+        assert defines_edge["from_file"] == "src/main.py"
+        assert defines_edge["to_symbol_id"] == tgt_ids[0]
+        assert defines_edge["to_fqn"] == "Greeter"
+        assert defines_edge["to_file"] == "src/greeter.py"
 
     @pytest.mark.asyncio
     async def test_skips_operations_for_missing_capabilities(
@@ -214,11 +214,11 @@ class TestCollectEdges:
 
         main_uri = (tmp_path / "src" / "main.py").as_uri()
         edges = await service._collect_edges(
-            client, main_uri, symbols, "src/main.py", fqn_to_id,
+            client, main_uri, symbols, "src/main.py", fqn_to_id, "python",
         )
 
         # Only 'defines' edges — others skipped due to missing capabilities
-        edge_kinds = {e[6] for e in edges}
+        edge_kinds = {e["edge_kind"] for e in edges}
         assert edge_kinds == {"defines"}
 
         # Verify skipped operations were never called
@@ -280,12 +280,12 @@ class TestCollectEdges:
 
         main_uri = (tmp_path / "src" / "main.py").as_uri()
         edges = await service._collect_edges(
-            client, main_uri, symbols, "src/main.py", fqn_to_id,
+            client, main_uri, symbols, "src/main.py", fqn_to_id, "python",
         )
 
         # func_a's edge lost to exception, but func_b's edge is collected
         assert len(edges) >= 1
-        from_fqns = {e[1] for e in edges}
+        from_fqns = {e["from_fqn"] for e in edges}
         assert "func_b" in from_fqns
         assert "func_a" not in from_fqns
 
@@ -424,11 +424,9 @@ class TestDeleteFileEdges:
         # Verify both edges exist
         assert len(provider.execute_query("SELECT * FROM symbol_edges")) == 2
 
-        service = LSPPopulationService(
-            pool=AsyncMock(), provider=provider, workspace_root=tmp_path,
-        )
-
-        await service.delete_file_edges(1)  # Delete edges for file 1
+        # Delete edges via the provider directly — service is just a thin
+        # orchestration layer over the protocol method.
+        provider.delete_edges_by_file(1)
 
         # Both edges removed — one had from_symbol in file 1, other had to_symbol in file 1
         remaining = provider.execute_query("SELECT * FROM symbol_edges")
@@ -505,13 +503,13 @@ class TestEdgeDeduplication:
 
         main_uri = (tmp_path / "src" / "main.py").as_uri()
         edges = await service._collect_edges(
-            client, main_uri, symbols, "src/main.py", fqn_to_id,
+            client, main_uri, symbols, "src/main.py", fqn_to_id, "python",
         )
 
         # 2 unique edges: (func_a, helper, defines) + (func_a, helper, references)
         # The duplicate 'defines' from the two go_to_definition results is deduped
         assert len(edges) == 2
-        edge_kinds = {e[6] for e in edges}
+        edge_kinds = {e["edge_kind"] for e in edges}
         assert edge_kinds == {"defines", "references"}
 
 
@@ -534,7 +532,7 @@ class TestAdversarialEdges:
         )
 
         edges = await service._collect_edges(
-            client, "file:///test.py", [], "test.py", {},
+            client, "file:///test.py", [], "test.py", {}, "python",
         )
 
         assert edges == []
@@ -578,7 +576,7 @@ class TestAdversarialEdges:
         )
 
         edges = await service._collect_edges(
-            client, self_uri, symbols, "src/self.py", fqn_to_id,
+            client, self_uri, symbols, "src/self.py", fqn_to_id, "python",
         )
 
         # Self-edge (MyClass → MyClass, defines) should be filtered
@@ -690,7 +688,7 @@ class TestAdversarialEdges:
 
         # fqn_to_id is empty — "ghost" has no ID mapping
         edges = await service._collect_edges(
-            client, "file:///test.py", symbols, "test.py", {},
+            client, "file:///test.py", symbols, "test.py", {}, "python",
         )
 
         assert edges == []
@@ -742,7 +740,7 @@ class TestAdversarialEdges:
 
         main_uri = (tmp_path / "src" / "main.py").as_uri()
         edges = await service._collect_edges(
-            client, main_uri, symbols, "src/main.py", fqn_to_id,
+            client, main_uri, symbols, "src/main.py", fqn_to_id, "python",
         )
 
         # All targets outside workspace → _resolve_symbol returns None → zero edges
@@ -800,15 +798,15 @@ class TestAdversarialEdges:
 
         cls_uri = (tmp_path / "src" / "cls.py").as_uri()
         edges = await service._collect_edges(
-            client, cls_uri, [cls], "src/cls.py", fqn_to_id,
+            client, cls_uri, [cls], "src/cls.py", fqn_to_id, "python",
         )
 
         # Only method→dep_func edge (class definition returned empty)
         assert len(edges) == 1
         edge = edges[0]
-        assert edge[1] == "MyClass::method"  # from_fqn preserves parent::child
-        assert edge[4] == "dep_func"          # to_fqn
-        assert edge[6] == "defines"           # edge_kind
+        assert edge["from_fqn"] == "MyClass::method"  # parent::child preserved
+        assert edge["to_fqn"] == "dep_func"
+        assert edge["edge_kind"] == "defines"
 
 
 class TestDeleteSymbolsWithCrossFileEdges:
@@ -998,10 +996,12 @@ class TestDeleteSymbolsWithCrossFileEdges:
         pool, _client = _make_mock_pool(_sample_symbols())
         service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
 
-        # Track call order
+        # Track call order at the provider layer — populate_file now calls
+        # provider.delete_edges_by_file_async / delete_symbols_by_file_async
+        # directly, so monkey-patching belongs on the provider.
         call_order: list[str] = []
-        original_edges = service.delete_file_edges
-        original_symbols = service.delete_file_symbols
+        original_edges = provider.delete_edges_by_file_async
+        original_symbols = provider.delete_symbols_by_file_async
 
         async def tracked_edges(file_id: int) -> None:
             call_order.append("edges")
@@ -1011,8 +1011,8 @@ class TestDeleteSymbolsWithCrossFileEdges:
             call_order.append("symbols")
             await original_symbols(file_id)
 
-        service.delete_file_edges = tracked_edges  # type: ignore[assignment]
-        service.delete_file_symbols = tracked_symbols  # type: ignore[assignment]
+        provider.delete_edges_by_file_async = tracked_edges  # type: ignore[method-assign]
+        provider.delete_symbols_by_file_async = tracked_symbols  # type: ignore[method-assign]
 
         (tmp_path / "src" / "a.py").parent.mkdir(parents=True, exist_ok=True)
         (tmp_path / "src" / "a.py").write_text("class Foo:\n    def bar(self): ...\n")

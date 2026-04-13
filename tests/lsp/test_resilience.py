@@ -218,14 +218,16 @@ class TestPopulateFilesResilience:
     """
 
     @pytest.mark.asyncio
-    async def test_loop_continues_after_db_constraint_error(
+    async def test_loop_continues_after_provider_error(
         self, tmp_path: Path
     ) -> None:
         """
-        Scenario: DB ConstraintError on one file must not abort the loop.
-        This is the exact error type that escaped the original catch clause.
+        Scenario: ProviderError on one file must not abort the loop.
+        ProviderError is the protocol-level wrapper for backend DB errors
+        (e.g. FK violation, constraint error), so catching it here gives
+        callers one type regardless of backend (DuckDB, LanceDB, etc.).
         """
-        import duckdb
+        from chunkhound.interfaces.database_provider import ProviderError
 
         provider = _make_provider(tmp_path)
         _insert_file(provider, 1, "src/a.py")
@@ -242,7 +244,7 @@ class TestPopulateFilesResilience:
 
         service = LSPPopulationService(pool, provider, workspace_root=tmp_path)
 
-        # Monkeypatch populate_file to raise ConstraintError on first file only
+        # Monkeypatch populate_file to raise ProviderError on first file only
         original_populate = service.populate_file
         call_count = 0
 
@@ -250,20 +252,20 @@ class TestPopulateFilesResilience:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                raise duckdb.ConstraintException(
+                raise ProviderError(
                     "Constraint Error: Violates foreign key constraint"
                 )
             return await original_populate(file_path, file_id, language)
 
         service.populate_file = patched_populate  # type: ignore[assignment]
 
-        # Should NOT raise — loop must catch the DB error and continue
+        # Should NOT raise — loop must catch the provider error and continue
         await service.populate_files()
 
         # Second file should still be populated
         rows = provider.execute_query("SELECT file_id FROM symbols")
         file_ids = {r["file_id"] for r in rows}
-        assert 2 in file_ids, "Second file should be populated despite first file's DB error"
+        assert 2 in file_ids, "Second file should be populated despite first file's provider error"
 
     @pytest.mark.asyncio
     async def test_loop_continues_after_mid_loop_transport_error(
@@ -462,9 +464,9 @@ class TestPopulateFilesTypedCatch:
             await service.populate_files()
 
     @pytest.mark.asyncio
-    async def test_duckdb_error_is_caught(self, tmp_path: Path) -> None:
-        """duckdb.Error subclasses should be caught — loop continues."""
-        import duckdb
+    async def test_provider_error_is_caught(self, tmp_path: Path) -> None:
+        """ProviderError (the backend-agnostic wrapper) is caught — loop continues."""
+        from chunkhound.interfaces.database_provider import ProviderError
 
         provider = _make_provider(tmp_path)
         _insert_file(provider, 1, "src/a.py")
@@ -485,13 +487,13 @@ class TestPopulateFilesTypedCatch:
             nonlocal call_count
             call_count += 1
             if call_count == 1:
-                raise duckdb.ConstraintException("FK violation")
+                raise ProviderError("FK violation")
             return await service._original_populate(file_path, file_id, language)
 
         service._original_populate = service.populate_file  # type: ignore[attr-defined]
         service.populate_file = patched  # type: ignore[assignment]
 
-        # Should NOT raise — duckdb.Error is caught
+        # Should NOT raise — ProviderError is caught
         await service.populate_files()
 
 

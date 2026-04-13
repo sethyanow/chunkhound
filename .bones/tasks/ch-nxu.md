@@ -6,6 +6,8 @@ type: task
 priority: 0
 owner: Seth
 ---
+
+
 ## Context
 
 Phases 1-5 of ch-8e7 built the graph intelligence layer (symbols, symbol_edges, graph walks, fusion tools) directly against DuckDB SQL — raw `execute_query()` calls, sqlglot query builders generating DuckDB-dialect CTEs. None of it goes through the `DatabaseProvider` protocol. Result: LanceDB provider (2400+ lines, concurrent writes, persistent HNSW) has no graph support. The daemon/proxy/IPC architecture exists solely because DuckDB is the only viable backend for graph features.
@@ -53,10 +55,19 @@ Phases 1-5 of ch-8e7 built the graph intelligence layer (symbols, symbol_edges, 
 4. No raw `execute_query()` calls for symbol/edge operations outside provider implementations
 5. No sqlglot query builders outside provider implementations
 6. MCP tools and LSP population call provider methods, not SQL
+7. All callers (lsp_population, MCP tools, graph_walk_expander) typed against `DatabaseProvider` protocol, not concrete provider classes
+8. No DuckDB-specific imports (`import duckdb`, `duckdb.Error`) in provider-agnostic modules
+9. Data passed as typed structures (`SymbolRow`, `EdgeRow`), not positional tuples
 
 ## Design
 
 New protocol methods derived from current raw SQL calls:
+
+**File queries (missing from original protocol):**
+- `get_all_files() -> list[dict[str, Any]]` (returns all indexed file records with id, path)
+- Async variant: `get_all_files_async()`
+- DuckDB: `SELECT id, path FROM files`
+- LanceDB: scan files table
 
 **Symbol/edge CRUD:**
 - `insert_symbols_batch(symbols: list[SymbolRow]) -> None`
@@ -91,20 +102,10 @@ DuckDB: existing SQL logic moves into `_executor_*` methods. LanceDB: Lance tabl
 
 ## Implementation
 
-### Step 1: Write failing test — protocol has symbol methods
-File: `tests/unit/test_database_provider_protocol.py` (new)
-Test that `DatabaseProvider` protocol declares: `insert_symbols_batch`, `delete_symbols_by_file`, `delete_edges_by_file`, `query_symbols_by_file`, `query_symbols_by_range`, `insert_edges_batch`, `query_symbol_fqns_by_file`. Use structural check. Fails because methods don't exist on protocol.
+### Steps 1-4: Protocol declaration (DONE — with cleanup needed)
+Protocol methods declared on `DatabaseProvider`, `SymbolRow`/`EdgeRow` TypedDicts in `chunkhound/core/models/symbol.py`. Both sync and async variants on `SerialDatabaseProvider`.
 
-### Step 2: Add symbol/edge CRUD methods to DatabaseProvider protocol
-File: `chunkhound/interfaces/database_provider.py`
-Add abstract methods with signatures from Design section. Define `SymbolRow` and `EdgeRow` in `chunkhound/core/models/`.
-
-### Step 3: Write failing test — protocol has graph query methods
-Same test file. Test that protocol declares: `graph_walk`, `graph_reachability`, `graph_boundary`, `graph_overview`, `symbol_overlap`, `chunk_resolution`. Fails because methods don't exist.
-
-### Step 4: Add graph query methods to DatabaseProvider protocol
-File: `chunkhound/interfaces/database_provider.py`
-Signatures from Design section.
+**Cleanup:** Delete `tests/unit/test_database_provider_protocol.py` — 23 tautological "does this method exist" checks. If the method doesn't exist, callers won't import and integration tests on both providers will fail. These tests add zero value.
 
 ### Step 5: Write failing test — DuckDB provider implements symbol CRUD
 File: `tests/integration/test_duckdb_symbol_protocol.py` (new)
@@ -144,46 +145,74 @@ Same shape as Step 7 against LanceDB. Fails because methods not implemented.
 File: `chunkhound/providers/database/lancedb_provider.py`
 Graph walk: Python BFS/DFS over Lance query results (no recursive CTEs). Query edges by FQN, walk in Python, return same shape as DuckDB. Reachability, boundary, overview: Lance queries with Python post-processing.
 
-### Step 13: Switch lsp_population.py to protocol methods
+### Step 13: Make lsp_population.py provider-agnostic
 File: `chunkhound/services/lsp_population.py`
-Replace all 10 raw `execute_query_async` calls with protocol method calls. Delete raw SQL methods from `LSPPopulationService`.
+This isn't just "swap call sites." The module is hardwired to DuckDB:
+- `provider: DuckDBProvider` → `DatabaseProvider` (the protocol)
+- Remove `import duckdb` and `duckdb.Error` exception handling
+- `_flatten_symbols` returns `list[tuple]` → `list[SymbolRow]` (TypedDict, not positional)
+- `_collect_edges` / `_edges_recursive` return `list[tuple]` → `list[EdgeRow]`
+- Delete `_batch_insert` and `_batch_insert_edges` entirely — replaced by `insert_symbols_batch_async` / `insert_edges_batch_async`
+- Delete `delete_file_edges` and `delete_file_symbols` — replaced by `delete_edges_by_file_async` / `delete_symbols_by_file_async`
+- `_resolve_symbol` → `query_symbols_by_range_async`
+- `populate_file` L114 fqn query → `query_symbol_fqns_by_file_async`
+- `populate_files` L248 all-files query → `get_all_files_async` (new protocol method, see below)
+- `_populate_workspace_symbols` L324 file lookup → `get_file_by_path_async`
+- `_populate_workspace_symbols` L340 dedup check → `query_symbols_by_fqn_exists_async`
+- `_populate_workspace_symbols` batching anti-pattern: collect rows per language, single `insert_symbols_batch_async` call
+- `_collect_edges` L398 language lookup → `query_symbols_by_file_async` (get first symbol's language)
 
-### Step 14: Switch MCP graph tools to protocol methods
+**New protocol method needed:** `get_all_files() -> list[dict]` (+ async variant). Returns all indexed file records with id and path. Add to `DatabaseProvider` protocol, implement on both providers. This was missing because lsp_population.py was cheating through the concrete DuckDB type.
+
+Also delete `tests/unit/test_lsp_population_protocol_migration.py` — source-code string-checking test, same tautological problem as the protocol existence tests.
+
+### Step 14: Make MCP graph tools provider-agnostic
 File: `chunkhound/mcp_server/tools/graph.py`
-Replace all 7 `execute_query` calls in `_graph_walk`, `_graph_reachability`, `_graph_boundary`, `_graph_overview` with provider graph query methods. Delete `mcp_server/tools/queries/graph.py`.
+Replace all 7 `execute_query` calls in `_graph_walk`, `_graph_reachability`, `_graph_boundary`, `_graph_overview` with provider graph query methods. Remove all sqlglot query builder imports. The tools call `provider.graph_walk()`, `provider.graph_reachability()`, etc. and get dicts back — zero knowledge of SQL dialect.
 
-### Step 15: Switch fusion.py helpers to protocol methods
+Delete `mcp_server/tools/queries/graph.py` — sqlglot builders already absorbed into DuckDBProvider `_executor_*` methods.
+
+### Step 15: Make fusion.py helpers provider-agnostic
 File: `chunkhound/mcp_server/tools/fusion.py`
-Replace raw SQL in 6 internal helpers:
+Replace raw SQL in 6 internal helpers with protocol method calls:
 - `_map_lines_to_symbols` → `provider.query_symbols_by_range_overlap()`
 - `_query_scope_symbols` → `provider.query_symbols_by_scope()`
 - `_resolve_changed_to_fqns` → `provider.query_distinct_fqns_by_file_path()`
 - `_collect_test_fqns` → `provider.query_test_symbols()`
 - `_resolve_start_fqn` → `provider.query_symbols_by_range()`
 - `_annotate_type_signatures` → `provider.query_symbol_type_signatures()`
-Delete `mcp_server/tools/queries/common.py` (scope_filter, escape_like absorbed into providers; bidirectional_edges/visited_tracking absorbed into DuckDB graph queries).
+Remove all sqlglot/execute_query imports. Delete `mcp_server/tools/queries/common.py` (scope_filter, escape_like, bidirectional_edges, visited_tracking all absorbed into providers).
 
-### Step 16: Switch MCP search tools to protocol methods
+### Step 16: Make MCP search tools provider-agnostic
 File: `chunkhound/mcp_server/tools/search.py`
-Replace `_search_symbols` (2 execute_query) and `_apply_type_filter` (1) with provider methods. Delete symbol/graph parts of `mcp_server/tools/queries/search.py`.
+Replace `_search_symbols` (2 execute_query via query builders) and `_apply_type_filter` (1) with provider methods. Remove sqlglot imports. Delete symbol/graph parts of `mcp_server/tools/queries/search.py` (pure semantic/regex search queries may remain if they don't touch symbols).
 
-### Step 17: Switch graph_walk_expander.py to protocol methods
+### Step 17: Make graph_walk_expander.py provider-agnostic
 File: `chunkhound/services/search/graph_walk_expander.py`
-Replace 3 inlined SQL calls with: `provider.symbol_overlap()`, `provider.graph_walk()`, `provider.chunk_resolution()`. Delete the local `_build_overlap_query`, `_build_walk_query`, `_build_resolution_query` functions. This also eliminates the circular import that forced the SQL duplication.
+Replace 3 inlined SQL calls with: `provider.symbol_overlap()`, `provider.graph_walk()`, `provider.chunk_resolution()`. Delete the local query-building functions. This eliminates the circular import between services and mcp_server (memory `reference_circular_import_services_mcp.md`) that forced the SQL duplication in the first place — the architectural defect, not just the SQL.
 
-### Step 18: Verify no symbol/edge/graph SQL outside providers
-Grep for `execute_query` calls touching symbols/symbol_edges tables. Verify zero remain outside provider implementations. Also verify `mcp_server/tools/queries/` directory has no remaining symbol/graph/edge SQL (pure search queries like semantic/regex may remain if they don't touch symbols).
+### Step 18: Verify full provider-agnosticism
+- Zero `execute_query` calls touching symbols/symbol_edges outside provider implementations
+- Zero sqlglot imports outside provider implementations
+- No `import duckdb` in any module that should be provider-agnostic
+- `mcp_server/tools/queries/graph.py` and `common.py` deleted
+- `tests/unit/test_database_provider_protocol.py` deleted (tautological)
+- `tests/unit/test_lsp_population_protocol_migration.py` deleted (tautological)
+- LSPPopulationService typed against `DatabaseProvider`, not `DuckDBProvider`
 
 ## Success Criteria
 - [x] `DatabaseProvider` protocol declares all symbol/edge/graph methods (CRUD + read queries + graph queries)
-- [x] `DuckDBProvider` implements all new protocol methods (existing SQL in `_executor_*`)
+- [x] `DuckDBProvider` implements all new protocol methods (CRUD + graph queries + 4 read-query methods that were missing from prior session)
 - [x] `LanceDBProvider` implements all new protocol methods (Lance tables + Python graph walk with visited tracking)
-- [ ] `lsp_population.py` has zero `execute_query` calls — protocol methods only
-- [ ] `mcp_server/tools/` has zero `execute_query` calls for symbol/edge/graph operations
-- [ ] `services/search/graph_walk_expander.py` has zero raw SQL — uses protocol methods only
+- [x] `lsp_population.py` is fully provider-agnostic: typed against `DatabaseProvider`, no `import duckdb`, no raw SQL, uses `SymbolRow`/`EdgeRow` not tuples
+- [x] `get_all_files` (+ async) protocol method exists and both providers implement it
+- [x] `ProviderError` exception added to protocol; executor wraps backend exceptions so callers can catch one type
+- [ ] `mcp_server/tools/` is provider-agnostic: zero `execute_query` calls, zero sqlglot imports for symbol/edge/graph
+- [ ] `services/search/graph_walk_expander.py` is provider-agnostic: uses protocol methods, no inlined SQL, circular import eliminated
 - [ ] `mcp_server/tools/queries/graph.py` and `common.py` deleted (logic absorbed into providers)
-- [ ] All existing tests pass on DuckDB backend
-- [ ] New protocol tests pass on both DuckDB and LanceDB backends
+- [x] Tautological tests deleted: `test_database_provider_protocol.py` (23 existence checks), `test_lsp_population_protocol_migration.py` (string-checking)
+- [x] All existing tests pass: 2999 unit+integration green after Step 13
+- [x] Integration tests pass on both DuckDB and LanceDB backends (new: 6 get_all_files tests + 7 DuckDB read-query tests)
 - [ ] `chunkhound mcp` with `"provider": "lancedb"` returns graph tool results
 - [x] Graph walk with cyclic edges (A→B→A) terminates correctly on both providers
 - [x] Batch insert handles large symbol sets (>1000 rows) via internal chunking
@@ -247,3 +276,5 @@ Grep for `execute_query` calls touching symbols/symbol_edges tables. Verify zero
 - [2026-04-05T23:17:10Z] [Seth] Adversarial planning complete. 6 failure catalog entries: (1) DuckDB batch param limits — chunk at 500 rows. (2) LanceDB BFS frontier explosion — cap frontier at 10K. (3) Delete-insert atomicity gap — document caller responsibility. (4) Return shape contracts — test dict keys on both providers. (5) workspace symbols TOCTOU race — accept-and-dedup. (6) LanceDB LIKE/ESCAPE semantics — test explicitly, fall back to startswith. Added 2 new success criteria: cyclic edge termination, large batch chunking.
 - [2026-04-05T23:22:01Z] [Seth] Steps 1-4 complete. Protocol fully declared: 9 symbol/edge CRUD methods (+ 6 async variants), 7 graph query methods, 4 symbol read query methods, 2 data types (SymbolRow, EdgeRow). 23 unit tests passing. Committed and pushed. SC1 checked.
 - [2026-04-05T23:51:02Z] [Seth] Steps 5-8 complete. DuckDB provider implements all symbol CRUD + graph query protocol methods. 20 integration tests + 23 unit tests passing. Fixed 6 pre-existing Pyright diagnostics (FilePath/Timestamp types, Language None, count_params typing, TransactionException stubs, search_text override mismatch, unused asyncio import). Extracted _rows_to_dicts helper. SC2 checked. Adversarial findings validated: batch chunking at 500 rows tested with 600-row insert; cyclic edge termination tested with A→B→A cycle. Latent bug found: graph_reachability CTE seeds all scope symbols so unreachable set is always empty — matches existing behavior, logged for future fix.
+- [2026-04-12T20:59:40Z] [Seth] Skeleton rewrite for Steps 13-18. Prior framing was 'swap execute_query call sites' — correct framing is 'make modules provider-agnostic.' Key additions: (1) lsp_population.py type annotation DuckDBProvider→DatabaseProvider, remove import duckdb, convert tuples→SymbolRow/EdgeRow. (2) New get_all_files protocol method — was missing because lsp_population cheated through concrete type. (3) Delete tautological tests: test_database_provider_protocol.py (23 existence checks) and test_lsp_population_protocol_migration.py (string-checking). (4) MCP tools: remove sqlglot imports entirely, not just execute_query swaps. (5) graph_walk_expander: provider-agnosticism eliminates the circular import defect. (6) Requirements expanded: R7 (typed against protocol), R8 (no DuckDB imports in agnostic modules), R9 (typed structures not tuples).
+- [2026-04-13T14:00:55Z] [Seth] Step 13 complete: lsp_population.py fully provider-agnostic. Added get_all_files protocol method + ProviderError base class + executor exception wrapping. Filled prior-session gap: 4 missing DuckDB read-query methods. Fixed SymbolRow/EdgeRow total=False defect. Deleted tautological test_database_provider_protocol.py. Suite: 2999 passed 0 failed. See checkpoint for details.

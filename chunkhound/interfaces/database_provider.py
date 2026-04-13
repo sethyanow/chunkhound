@@ -7,6 +7,16 @@ from chunkhound.core.models import Chunk, Embedding, File
 from chunkhound.core.models.symbol import EdgeRow, SymbolRow
 
 
+class ProviderError(Exception):
+    """Base class for database-provider errors that callers can catch without
+    coupling to a specific backend (DuckDB, LanceDB, etc.).
+
+    Provider-specific exception types (e.g. ``duckdb.ConstraintException``)
+    should subclass this so callers can catch ``ProviderError`` instead of
+    importing backend modules directly.
+    """
+
+
 class ScopeAggregationProvider(Protocol):
     """Optional scope aggregation helpers (used by code_mapper coverage)."""
 
@@ -96,6 +106,19 @@ class DatabaseProvider(Protocol):
 
     def delete_file_completely(self, file_path: str) -> bool:
         """Delete a file and all its chunks/embeddings completely."""
+        ...
+
+    def get_all_files(self) -> list[dict[str, Any]]:
+        """Return all indexed file records.
+
+        Each record includes at minimum `id` and `path` keys. Used by
+        batch-mode indexing and maintenance operations that need to iterate
+        every file in the database.
+        """
+        ...
+
+    async def get_all_files_async(self) -> list[dict[str, Any]]:
+        """Async variant of get_all_files."""
         ...
 
     async def delete_file_completely_async(self, file_path: str) -> bool:
@@ -480,6 +503,14 @@ class DatabaseProvider(Protocol):
 
     async def insert_edges_batch_async(self, edges: list[EdgeRow]) -> None:
         """Async variant of insert_edges_batch."""
+        ...
+
+    async def query_symbols_by_fqn_exists_async(self, fqn: str, file_path: str) -> bool:
+        """Async variant of query_symbols_by_fqn_exists."""
+        ...
+
+    async def query_symbols_by_range_async(self, file_path: str, line: int) -> dict[str, Any] | None:
+        """Async variant of query_symbols_by_range."""
         ...
 
     # Graph Query Operations

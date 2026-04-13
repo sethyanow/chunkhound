@@ -7,11 +7,12 @@ between callers and DatabaseProvider implementations.
 from typing import TypedDict
 
 
-class SymbolRow(TypedDict, total=False):
+class SymbolRow(TypedDict):
     """A symbol row for batch insertion into the symbols table.
 
-    Required fields match the symbols table schema. Optional fields
-    (id, type_signature, parent_fqn) may be absent for new inserts.
+    All fields are required. ``parent_fqn`` and ``type_signature`` may be
+    ``None`` (e.g. top-level symbols or symbols whose hover failed) but the
+    keys themselves must always be present so callers can rely on dict access.
     """
 
     fqn: str
@@ -28,10 +29,10 @@ class SymbolRow(TypedDict, total=False):
     type_signature: str | None
 
 
-class EdgeRow(TypedDict, total=False):
+class EdgeRow(TypedDict):
     """An edge row for batch insertion into the symbol_edges table.
 
-    Required fields match the symbol_edges table schema.
+    All fields are required.
     """
 
     from_symbol_id: int
