@@ -185,6 +185,16 @@ def _escape_like_pattern(value: str) -> str:
     return escape_like_pattern(value, escape_quotes=True, escape_char="\\")
 
 
+def _escape_lance_string(value: str) -> str:
+    """Escape single quotes for LanceDB/DataFusion SQL string literals.
+
+    For use in equality predicates: ``where(f"fqn = '{_escape_lance_string(fqn)}'")``.
+    Only escapes ``'`` → ``''`` (SQL standard). Do NOT use for LIKE patterns
+    (use ``_escape_like_pattern`` instead, which also escapes ``%``, ``_``, ``[``).
+    """
+    return value.replace("'", "''")
+
+
 def _iter_batches(values: list[int], batch_size: int) -> list[list[int]]:
     """Split a list into fixed-size batches."""
     return [values[idx : idx + batch_size] for idx in range(0, len(values), batch_size)]
@@ -2273,10 +2283,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_delete_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> None:
         sym_tbl, _ = self._ensure_symbol_tables(conn, state)
-        try:
-            sym_tbl.delete(f"file_id = {file_id}")
-        except Exception as e:
-            logger.error(f"Error deleting symbols for file {file_id}: {e}")
+        sym_tbl.delete(f"file_id = {file_id}")
 
     def delete_edges_by_file(self, file_id: int) -> None:
         """Delete all edges referencing symbols belonging to this file."""
@@ -2291,14 +2298,8 @@ class LanceDBProvider(SerialDatabaseProvider):
         sym_ids = {r["id"] for r in results}
         # Delete edges where from or to symbol is in this file
         for sid in sym_ids:
-            try:
-                edge_tbl.delete(f"from_symbol_id = {sid}")
-            except Exception:
-                pass
-            try:
-                edge_tbl.delete(f"to_symbol_id = {sid}")
-            except Exception:
-                pass
+            edge_tbl.delete(f"from_symbol_id = {sid}")
+            edge_tbl.delete(f"to_symbol_id = {sid}")
 
     def query_symbols_by_file(self, file_id: int) -> list[dict[str, Any]]:
         """Return all symbols for a given file_id."""
@@ -2306,12 +2307,8 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_query_symbols_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            results = sym_tbl.search().where(f"file_id = {file_id}").to_list()
-            return [dict(r) for r in results]
-        except Exception as e:
-            logger.error(f"Error querying symbols by file: {e}")
-            return []
+        results = sym_tbl.search().where(f"file_id = {file_id}").to_list()
+        return [dict(r) for r in results]
 
     def query_symbols_by_range(self, file_path: str, line: int) -> dict[str, Any] | None:
         """Return the innermost symbol containing the given line."""
@@ -2321,24 +2318,22 @@ class LanceDBProvider(SerialDatabaseProvider):
         self, conn: Any, state: dict[str, Any], file_path: str, line: int
     ) -> dict[str, Any] | None:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            results = (
-                sym_tbl.search()
-                .where(f"file_path = '{file_path}' AND range_start <= {line} AND range_end >= {line}")
-                .to_list()
-            )
-            if not results:
-                return None
-            # Sort by range span ascending (innermost = smallest span)
-            results.sort(key=lambda r: r["range_end"] - r["range_start"])
-            return dict(results[0])
-        except Exception as e:
-            logger.error(f"Error querying symbols by range: {e}")
+        results = (
+            sym_tbl.search()
+            .where(f"file_path = '{_escape_lance_string(file_path)}' AND range_start <= {line} AND range_end >= {line}")
+            .to_list()
+        )
+        if not results:
             return None
+        # Sort by range span ascending (innermost = smallest span)
+        results.sort(key=lambda r: r["range_end"] - r["range_start"])
+        return dict(results[0])
 
     def query_symbols_by_range_overlap(self, file_path: str, min_line: int, max_line: int) -> list[dict[str, Any]]:
         """Return all symbols whose range overlaps [min_line, max_line]."""
-        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_range_overlap, file_path, min_line, max_line)
+        return self._execute_in_db_thread_sync(
+            self._executor_query_symbols_by_range_overlap, file_path, min_line, max_line
+        )
 
     def _executor_query_symbols_by_range_overlap(
         self,
@@ -2349,16 +2344,12 @@ class LanceDBProvider(SerialDatabaseProvider):
         max_line: int,
     ) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            results = (
-                sym_tbl.search()
-                .where(f"file_path = '{file_path}' AND range_start <= {max_line} AND range_end >= {min_line}")
-                .to_list()
-            )
-            return [dict(r) for r in results]
-        except Exception as e:
-            logger.error(f"Error querying symbols by range overlap: {e}")
-            return []
+        results = (
+            sym_tbl.search()
+            .where(f"file_path = '{_escape_lance_string(file_path)}' AND range_start <= {max_line} AND range_end >= {min_line}")
+            .to_list()
+        )
+        return [dict(r) for r in results]
 
     def query_symbol_fqns_by_file(self, file_id: int) -> dict[str, int]:
         """Return {fqn: symbol_id} mapping for all symbols in a file."""
@@ -2366,12 +2357,8 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_query_symbol_fqns_by_file(self, conn: Any, state: dict[str, Any], file_id: int) -> dict[str, int]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            results = sym_tbl.search().where(f"file_id = {file_id}").select(["id", "fqn"]).to_list()
-            return {r["fqn"]: int(r["id"]) for r in results}
-        except Exception as e:
-            logger.error(f"Error querying symbol FQNs by file: {e}")
-            return {}
+        results = sym_tbl.search().where(f"file_id = {file_id}").select(["id", "fqn"]).to_list()
+        return {r["fqn"]: int(r["id"]) for r in results}
 
     def query_symbols_by_fqn_exists(self, fqn: str, file_path: str) -> bool:
         """Check whether a symbol with the given FQN and file_path exists."""
@@ -2379,14 +2366,10 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_query_symbols_by_fqn_exists(self, conn: Any, state: dict[str, Any], fqn: str, file_path: str) -> bool:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            results = (
-                sym_tbl.search().where(f"fqn = '{fqn}' AND file_path = '{file_path}'").select(["id"]).limit(1).to_list()
-            )
-            return len(results) > 0
-        except Exception as e:
-            logger.error(f"Error checking symbol existence: {e}")
-            return False
+        results = (
+            sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}' AND file_path = '{_escape_lance_string(file_path)}'").select(["id"]).limit(1).to_list()
+        )
+        return len(results) > 0
 
     def insert_edges_batch(self, edges: list[EdgeRow]) -> None:
         """Batch insert edge rows."""
@@ -2429,33 +2412,22 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_symbol_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, Any]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            sym_count = sym_tbl.count_rows()
-        except Exception:
-            sym_count = 0
-        try:
-            edge_count = edge_tbl.count_rows()
-        except Exception:
-            edge_count = 0
+        sym_count = sym_tbl.count_rows()
+        edge_count = edge_tbl.count_rows()
 
         languages: list[dict[str, Any]] = []
         if sym_count > 0:
-            try:
-                rows = sym_tbl.search().select(["language"]).limit(sym_count).to_list()
-                counts: dict[str, int] = {}
-                for row in rows:
-                    lang = row.get("language")
-                    if lang is None:
-                        continue
-                    counts[lang] = counts.get(lang, 0) + 1
-                languages = [
-                    {"language": lang, "count": count}
-                    for lang, count in sorted(
-                        counts.items(), key=lambda kv: (-kv[1], kv[0])
-                    )
-                ]
-            except Exception:
-                languages = []
+            rows = sym_tbl.search().select(["language"]).limit(sym_count).to_list()
+            counts: dict[str, int] = {}
+            for row in rows:
+                lang = row.get("language")
+                if lang is None:
+                    continue
+                counts[lang] = counts.get(lang, 0) + 1
+            languages = [
+                {"language": lang, "count": count}
+                for lang, count in sorted(counts.items(), key=lambda kv: (-kv[1], kv[0]))
+            ]
         return {
             "symbol_count": sym_count,
             "edge_count": edge_count,
@@ -2530,21 +2502,19 @@ class LanceDBProvider(SerialDatabaseProvider):
         # Fetch full node data for discovered FQNs
         nodes: list[dict[str, Any]] = []
         for fqn in all_node_fqns[:limit]:
-            try:
-                results = sym_tbl.search().where(f"fqn = '{fqn}'").limit(1).to_list()
-                if results:
-                    r = results[0]
-                    nodes.append(
-                        {
-                            "fqn": r["fqn"],
-                            "name": r["name"],
-                            "kind": r["kind"],
-                            "file_path": r["file_path"],
-                            "depth": fqn_depth[fqn],
-                        }
-                    )
-            except Exception:
-                pass
+            results = sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}'").limit(1).to_list()
+            if results:
+                r = results[0]
+                nodes.append(
+                    {
+                        "fqn": r["fqn"],
+                        "name": r["name"],
+                        "kind": r["kind"],
+                        "file_path": r["file_path"],
+                        "depth": fqn_depth[fqn],
+                    }
+                )
+
 
         if not nodes:
             return [], []
@@ -2552,46 +2522,40 @@ class LanceDBProvider(SerialDatabaseProvider):
         # Fetch edges between discovered nodes
         node_fqn_set = {n["fqn"] for n in nodes}
         edges: list[dict[str, Any]] = []
-        try:
-            all_edges = edge_tbl.search().to_list()
-            for e in all_edges:
-                if e["from_fqn"] in node_fqn_set and e["to_fqn"] in node_fqn_set:
-                    if edge_kind and e["edge_kind"] != edge_kind:
-                        continue
-                    edges.append(
-                        {
-                            "from_fqn": e["from_fqn"],
-                            "to_fqn": e["to_fqn"],
-                            "edge_kind": e["edge_kind"],
-                            "from_file": e.get("from_file", ""),
-                            "to_file": e.get("to_file", ""),
-                        }
-                    )
-        except Exception:
-            pass
+        all_edges = edge_tbl.search().to_list()
+        for e in all_edges:
+            if e["from_fqn"] in node_fqn_set and e["to_fqn"] in node_fqn_set:
+                if edge_kind and e["edge_kind"] != edge_kind:
+                    continue
+                edges.append(
+                    {
+                        "from_fqn": e["from_fqn"],
+                        "to_fqn": e["to_fqn"],
+                        "edge_kind": e["edge_kind"],
+                        "from_file": e.get("from_file", ""),
+                        "to_file": e.get("to_file", ""),
+                    }
+                )
 
         return nodes, edges
 
     def _bfs_get_neighbors(self, edge_tbl: Any, fqn: str, directed: bool, edge_kind: str | None) -> list[str]:
         """Get neighboring FQNs from edges (called within executor thread)."""
         neighbors: list[str] = []
-        try:
-            # Forward edges: from this FQN
-            fwd = edge_tbl.search().where(f"from_fqn = '{fqn}'").select(["to_fqn", "edge_kind"]).to_list()
-            for e in fwd:
+        # Forward edges: from this FQN
+        fwd = edge_tbl.search().where(f"from_fqn = '{_escape_lance_string(fqn)}'").select(["to_fqn", "edge_kind"]).to_list()
+        for e in fwd:
+            if edge_kind and e["edge_kind"] != edge_kind:
+                continue
+            neighbors.append(e["to_fqn"])
+
+        if not directed:
+            # Backward edges: to this FQN
+            bwd = edge_tbl.search().where(f"to_fqn = '{_escape_lance_string(fqn)}'").select(["from_fqn", "edge_kind"]).to_list()
+            for e in bwd:
                 if edge_kind and e["edge_kind"] != edge_kind:
                     continue
-                neighbors.append(e["to_fqn"])
-
-            if not directed:
-                # Backward edges: to this FQN
-                bwd = edge_tbl.search().where(f"to_fqn = '{fqn}'").select(["from_fqn", "edge_kind"]).to_list()
-                for e in bwd:
-                    if edge_kind and e["edge_kind"] != edge_kind:
-                        continue
-                    neighbors.append(e["from_fqn"])
-        except Exception:
-            pass
+                neighbors.append(e["from_fqn"])
         return neighbors
 
     def graph_reachability(self, scope: str) -> list[dict[str, Any]]:
@@ -2603,10 +2567,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
         # Get all symbols in scope
         escaped = _escape_like_pattern(scope)
-        try:
-            all_results = sym_tbl.search().where(f"file_path LIKE '{escaped}%'").to_list()
-        except Exception:
-            return []
+        all_results = sym_tbl.search().where(f"file_path LIKE '{escaped}%'").to_list()
 
         all_fqns = {r["fqn"] for r in all_results}
         if not all_fqns:
@@ -2615,14 +2576,11 @@ class LanceDBProvider(SerialDatabaseProvider):
         # Find entry points: scope symbols with no inbound edges from scope
         symbols_with_inbound: set[str] = set()
         for fqn in all_fqns:
-            try:
-                inbound = edge_tbl.search().where(f"to_fqn = '{fqn}'").select(["from_fqn"]).to_list()
-                for e in inbound:
-                    if e["from_fqn"] in all_fqns:
-                        symbols_with_inbound.add(fqn)
-                        break
-            except Exception:
-                pass
+            inbound = edge_tbl.search().where(f"to_fqn = '{_escape_lance_string(fqn)}'").select(["from_fqn"]).to_list()
+            for e in inbound:
+                if e["from_fqn"] in all_fqns:
+                    symbols_with_inbound.add(fqn)
+                    break
 
         entry_points = all_fqns - symbols_with_inbound
 
@@ -2636,13 +2594,10 @@ class LanceDBProvider(SerialDatabaseProvider):
                     continue
                 reachable.add(fqn)
                 # Follow forward edges
-                try:
-                    fwd = edge_tbl.search().where(f"from_fqn = '{fqn}'").select(["to_fqn"]).to_list()
-                    for e in fwd:
-                        if e["to_fqn"] in all_fqns and e["to_fqn"] not in reachable:
-                            new_frontier.add(e["to_fqn"])
-                except Exception:
-                    pass
+                fwd = edge_tbl.search().where(f"from_fqn = '{_escape_lance_string(fqn)}'").select(["to_fqn"]).to_list()
+                for e in fwd:
+                    if e["to_fqn"] in all_fqns and e["to_fqn"] not in reachable:
+                        new_frontier.add(e["to_fqn"])
             frontier = new_frontier
 
         # Return symbols not reachable
@@ -2668,10 +2623,7 @@ class LanceDBProvider(SerialDatabaseProvider):
     ) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
-        try:
-            all_edges = edge_tbl.search().to_list()
-        except Exception:
-            return []
+        all_edges = edge_tbl.search().to_list()
 
         # Collect crossing edges first; look up name/kind per FQN afterwards
         crossing: list[dict[str, Any]] = []
@@ -2689,10 +2641,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         # Batch-fetch symbol name/kind for all endpoints (single scan)
         name_kind: dict[str, tuple[str, str]] = {}
         if needed_fqns:
-            try:
-                sym_rows = sym_tbl.search().select(["fqn", "name", "kind"]).to_list()
-            except Exception:
-                sym_rows = []
+            sym_rows = sym_tbl.search().select(["fqn", "name", "kind"]).to_list()
             for row in sym_rows:
                 fqn = row.get("fqn")
                 if fqn in needed_fqns:
@@ -2729,10 +2678,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         # Count edges per symbol
-        try:
-            all_edges = edge_tbl.search().to_list()
-        except Exception:
-            return []
+        all_edges = edge_tbl.search().to_list()
 
         from collections import Counter
 
@@ -2746,34 +2692,27 @@ class LanceDBProvider(SerialDatabaseProvider):
         for fqn, count in edge_counts.most_common():
             if len(results) >= limit:
                 break
-            try:
-                sym_results = sym_tbl.search().where(f"fqn = '{fqn}'").limit(1).to_list()
-                if sym_results:
-                    s = sym_results[0]
-                    if scope and not s.get("file_path", "").startswith(scope):
-                        continue
-                    results.append(
-                        {
-                            "fqn": s["fqn"],
-                            "name": s["name"],
-                            "kind": s["kind"],
-                            "file_path": s["file_path"],
-                            "total_edges": count,
-                        }
-                    )
-            except Exception:
-                pass
+            sym_results = sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}'").limit(1).to_list()
+            if sym_results:
+                s = sym_results[0]
+                if scope and not s.get("file_path", "").startswith(scope):
+                    continue
+                results.append(
+                    {
+                        "fqn": s["fqn"],
+                        "name": s["name"],
+                        "kind": s["kind"],
+                        "file_path": s["file_path"],
+                        "total_edges": count,
+                    }
+                )
         return results
 
-    def graph_overview_breakdown(
-        self, fqns: list[str]
-    ) -> dict[str, dict[str, int]]:
+    def graph_overview_breakdown(self, fqns: list[str]) -> dict[str, dict[str, int]]:
         """Per-edge-kind counts for the given FQNs."""
         if not fqns:
             return {}
-        return self._execute_in_db_thread_sync(
-            self._executor_graph_overview_breakdown, fqns
-        )
+        return self._execute_in_db_thread_sync(self._executor_graph_overview_breakdown, fqns)
 
     def _executor_graph_overview_breakdown(
         self, conn: Any, state: dict[str, Any], fqns: list[str]
@@ -2784,10 +2723,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
         fqn_set = set(fqns)
         result: dict[str, dict[str, int]] = {}
-        try:
-            all_edges = edge_tbl.search().to_list()
-        except Exception:
-            return {}
+        all_edges = edge_tbl.search().to_list()
 
         for e in all_edges:
             edge_kind = e["edge_kind"]
@@ -2818,17 +2754,14 @@ class LanceDBProvider(SerialDatabaseProvider):
             fp = chunk["file_path"]
             start = chunk["start_line"]
             end = chunk["end_line"]
-            try:
-                results = (
-                    sym_tbl.search()
-                    .where(f"file_path = '{fp}' AND range_start <= {end} AND range_end >= {start}")
-                    .select(["fqn"])
-                    .to_list()
-                )
-                for r in results:
-                    fqns.add(r["fqn"])
-            except Exception:
-                pass
+            results = (
+                sym_tbl.search()
+                .where(f"file_path = '{_escape_lance_string(fp)}' AND range_start <= {end} AND range_end >= {start}")
+                .select(["fqn"])
+                .to_list()
+            )
+            for r in results:
+                fqns.add(r["fqn"])
         return list(fqns)
 
     def chunk_resolution(self, fqns: list[str]) -> list[dict[str, Any]]:
@@ -2846,42 +2779,39 @@ class LanceDBProvider(SerialDatabaseProvider):
         seen_chunk_ids: set[int] = set()
         for fqn in fqns:
             # Find the symbol
-            try:
-                sym_results = sym_tbl.search().where(f"fqn = '{fqn}'").limit(1).to_list()
-                if not sym_results:
-                    continue
-                sym = sym_results[0]
-                file_id = sym["file_id"]
-                range_start = sym["range_start"]
-                range_end = sym["range_end"]
+            sym_results = sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}'").limit(1).to_list()
+            if not sym_results:
+                continue
+            sym = sym_results[0]
+            file_id = sym["file_id"]
+            range_start = sym["range_start"]
+            range_end = sym["range_end"]
 
-                # Find file path from files table
-                file_results = self._files_table.search().where(f"id = {file_id}").limit(1).to_list()
-                if not file_results:
-                    continue
-                file_path = file_results[0]["path"]
+            # Find file path from files table
+            file_results = self._files_table.search().where(f"id = {file_id}").limit(1).to_list()
+            if not file_results:
+                continue
+            file_path = file_results[0]["path"]
 
-                # Find chunks that overlap this symbol's range
-                chunk_results = (
-                    self._chunks_table.search()
-                    .where(f"file_id = {file_id} AND start_line <= {range_end} AND end_line >= {range_start}")
-                    .to_list()
-                )
-                for c in chunk_results:
-                    cid = c["id"]
-                    if cid not in seen_chunk_ids:
-                        seen_chunk_ids.add(cid)
-                        results.append(
-                            {
-                                "chunk_id": cid,
-                                "file_path": file_path,
-                                "content": c.get("content", ""),
-                                "start_line": c["start_line"],
-                                "end_line": c["end_line"],
-                            }
-                        )
-            except Exception:
-                pass
+            # Find chunks that overlap this symbol's range
+            chunk_results = (
+                self._chunks_table.search()
+                .where(f"file_id = {file_id} AND start_line <= {range_end} AND end_line >= {range_start}")
+                .to_list()
+            )
+            for c in chunk_results:
+                cid = c["id"]
+                if cid not in seen_chunk_ids:
+                    seen_chunk_ids.add(cid)
+                    results.append(
+                        {
+                            "chunk_id": cid,
+                            "file_path": file_path,
+                            "content": c.get("content", ""),
+                            "start_line": c["start_line"],
+                            "end_line": c["end_line"],
+                        }
+                    )
         return results
 
     # ── Symbol Read Query Methods ────────────────────────────────
@@ -2893,11 +2823,8 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbols_by_scope(self, conn: Any, state: dict[str, Any], scope: str) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         escaped = _escape_like_pattern(scope)
-        try:
-            results = sym_tbl.search().where(f"file_path LIKE '{escaped}%'").to_list()
-            return [dict(r) for r in results]
-        except Exception:
-            return []
+        results = sym_tbl.search().where(f"file_path LIKE '{escaped}%'").to_list()
+        return [dict(r) for r in results]
 
     def query_test_symbols(self, scope: str | None) -> list[dict[str, Any]]:
         """Return test function symbols (kind='Function', name LIKE 'test_%')."""
@@ -2909,11 +2836,8 @@ class LanceDBProvider(SerialDatabaseProvider):
         if scope:
             escaped = _escape_like_pattern(scope)
             where += f" AND file_path LIKE '{escaped}%'"
-        try:
-            results = sym_tbl.search().where(where).to_list()
-            return [dict(r) for r in results]
-        except Exception:
-            return []
+        results = sym_tbl.search().where(where).to_list()
+        return [dict(r) for r in results]
 
     def query_symbol_type_signatures(self, fqns: list[str]) -> dict[str, str | None]:
         """Return FQN → type_signature mapping for a batch of FQNs."""
@@ -2929,13 +2853,10 @@ class LanceDBProvider(SerialDatabaseProvider):
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         result: dict[str, str | None] = {}
         for fqn in fqns:
-            try:
-                rows = sym_tbl.search().where(f"fqn = '{fqn}'").select(["fqn", "type_signature"]).limit(1).to_list()
-                if rows:
-                    ts = rows[0].get("type_signature", "")
-                    result[fqn] = ts if ts else None
-            except Exception:
-                pass
+            rows = sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}'").select(["fqn", "type_signature"]).limit(1).to_list()
+            if rows:
+                ts = rows[0].get("type_signature", "")
+                result[fqn] = ts if ts else None
         return result
 
     def query_distinct_fqns_by_file_path(self, file_path: str) -> list[str]:
@@ -2944,11 +2865,8 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_query_distinct_fqns_by_file_path(self, conn: Any, state: dict[str, Any], file_path: str) -> list[str]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
-        try:
-            results = sym_tbl.search().where(f"file_path = '{file_path}'").select(["fqn"]).to_list()
-            return list({r["fqn"] for r in results})
-        except Exception:
-            return []
+        results = sym_tbl.search().where(f"file_path = '{_escape_lance_string(file_path)}'").select(["fqn"]).to_list()
+        return list({r["fqn"] for r in results})
 
     def search_symbols(
         self,
@@ -2959,9 +2877,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         offset: int,
     ) -> tuple[list[dict[str, Any]], int]:
         """Substring search on symbol name/fqn with path and type filters."""
-        return self._execute_in_db_thread_sync(
-            self._executor_search_symbols, query, path, type_filter, limit, offset
-        )
+        return self._execute_in_db_thread_sync(self._executor_search_symbols, query, path, type_filter, limit, offset)
 
     def _executor_search_symbols(
         self,
@@ -2976,23 +2892,19 @@ class LanceDBProvider(SerialDatabaseProvider):
         sym_tbl, _edge_tbl = self._ensure_symbol_tables(conn, state)
         conditions: list[str] = []
         if query:
-            q = query.replace("'", "''")
+            q = _escape_lance_string(query)
             conditions.append(f"(name LIKE '%{q}%' OR fqn LIKE '%{q}%')")
         if path:
-            p = path.replace("'", "''")
+            p = _escape_lance_string(path)
             conditions.append(f"file_path LIKE '{p}%'")
         if type_filter:
-            t = type_filter.replace("'", "''")
+            t = _escape_lance_string(type_filter)
             conditions.append(f"type_signature LIKE '%{t}%'")
 
-        try:
-            builder = sym_tbl.search()
-            if conditions:
-                builder = builder.where(" AND ".join(conditions))
-            all_rows = builder.to_list()
-        except Exception as e:
-            logger.error(f"search_symbols error: {e}")
-            return [], 0
+        builder = sym_tbl.search()
+        if conditions:
+            builder = builder.where(" AND ".join(conditions))
+        all_rows = builder.to_list()
 
         all_rows.sort(key=lambda r: r.get("name", ""))
         total = len(all_rows)
@@ -3021,15 +2933,8 @@ class LanceDBProvider(SerialDatabaseProvider):
         if not chunks:
             return []
         sym_tbl, _edge_tbl = self._ensure_symbol_tables(conn, state)
-        t = type_filter.replace("'", "''")
-        try:
-            matching_symbols = (
-                sym_tbl.search()
-                .where(f"type_signature LIKE '%{t}%'")
-                .to_list()
-            )
-        except Exception:
-            return []
+        t = _escape_lance_string(type_filter)
+        matching_symbols = sym_tbl.search().where(f"type_signature LIKE '%{t}%'").to_list()
 
         # Index symbols by file_path for efficient overlap check
         by_file: dict[str, list[tuple[int, int]]] = {}
@@ -3037,9 +2942,7 @@ class LanceDBProvider(SerialDatabaseProvider):
             fp = s.get("file_path")
             if fp is None:
                 continue
-            by_file.setdefault(fp, []).append(
-                (int(s.get("range_start", 0)), int(s.get("range_end", 0)))
-            )
+            by_file.setdefault(fp, []).append((int(s.get("range_start", 0)), int(s.get("range_end", 0))))
 
         kept: list[dict[str, Any]] = []
         for chunk in chunks:
