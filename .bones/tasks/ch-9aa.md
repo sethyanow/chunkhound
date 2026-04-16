@@ -1,11 +1,12 @@
 ---
 id: ch-9aa
 title: Fix LanceDB silent error swallowing in graph protocol methods
-status: active
+status: closed
 type: bug
 priority: 1
 owner: Seth
 ---
+
 
 
 
@@ -105,7 +106,7 @@ Confirm that `_ensure_symbol_tables` (line 2221) handles the "table doesn't exis
 - [x] FQN escaping handles `'` in all `where()` f-string interpolations (regression test with apostrophe FQN)
 - [x] Bootstrap case (tables don't exist yet) handled exclusively in `_ensure_symbol_tables`, not re-caught per-query
 - [x] All existing integration tests pass on both backends after swallow removal
-- [ ] `_tmp_lance_repro_test.py` deleted, replaced by permanent `test_lancedb_error_contract.py`
+- [x] `_tmp_lance_repro_test.py` deleted, replaced by permanent `test_lancedb_error_contract.py`
 
 ## Anti-Patterns
 
