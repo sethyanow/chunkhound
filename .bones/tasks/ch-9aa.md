@@ -10,6 +10,7 @@ owner: Seth
 
 
 
+
 ## Context
 
 ch-nxu Steps 10/12 implemented the graph protocol methods on LanceDBProvider. The implementation copied the older LanceDB file/chunk pattern of catching `Exception` and returning empty or logging-and-continuing. For file/chunk CRUD this was defensible (missing table on first query is normal). For the graph layer it's a contract violation: callers trust that empty means "no data" and that deletes succeeded.
@@ -98,12 +99,12 @@ Confirm that `_ensure_symbol_tables` (line 2221) handles the "table doesn't exis
 
 ## Success Criteria
 
-- [ ] `delete_symbols_by_file` raises `ProviderError` when backend fails (regression test proves it)
-- [ ] `delete_edges_by_file` raises `ProviderError` when backend fails
-- [ ] Zero bare `except Exception: pass` or `except Exception: return []` in any `_executor_*` graph/symbol method on LanceDBProvider
-- [ ] FQN escaping handles `'` in all `where()` f-string interpolations (regression test with apostrophe FQN)
-- [ ] Bootstrap case (tables don't exist yet) handled exclusively in `_ensure_symbol_tables`, not re-caught per-query
-- [ ] All existing integration tests pass on both backends after swallow removal
+- [x] `delete_symbols_by_file` raises `ProviderError` when backend fails (regression test proves it)
+- [x] `delete_edges_by_file` raises `ProviderError` when backend fails
+- [x] Zero bare `except Exception: pass` or `except Exception: return []` in any `_executor_*` graph/symbol method on LanceDBProvider
+- [x] FQN escaping handles `'` in all `where()` f-string interpolations (regression test with apostrophe FQN)
+- [x] Bootstrap case (tables don't exist yet) handled exclusively in `_ensure_symbol_tables`, not re-caught per-query
+- [x] All existing integration tests pass on both backends after swallow removal
 - [ ] `_tmp_lance_repro_test.py` deleted, replaced by permanent `test_lancedb_error_contract.py`
 
 ## Anti-Patterns
@@ -152,3 +153,4 @@ Confirm that `_ensure_symbol_tables` (line 2221) handles the "table doesn't exis
 
 - [2026-04-16T06:53:58Z] [Seth] Filed from ch-nxu review. Diagnosis via LSP incomingCalls + code read + reproducer test. Reproducer at tests/integration/_tmp_lance_repro_test.py confirms silent delete → duplicate rows. Stale scratch file _lance_repro.py at repo root needs manual rm.
 - [2026-04-16T08:17:42Z] [Seth] SRE + adversarial complete. Added 9 missing read-path sites, 5 missing FQN interpolation sites. Verified LanceDB .delete() does NOT throw on empty/no-match (empirical probe). Partial delete in _executor_delete_edges_by_file accepted as tolerable — idempotent retries converge. _escape_lance_string only needs quote escaping (DataFusion uses SQL-standard ''). All callers prepared for ProviderError via MCP top-level handling.
+- [2026-04-16T08:32:21Z] [Seth] Implementation complete. 6/7 success criteria checked. Remaining: _tmp_lance_repro_test.py deletion blocked by security hook — user needs manual rm of tests/integration/_tmp_lance_repro_test.py and tests/integration/_tmp_lance_delete_edge_test.py (empty file from adversarial probe). Also _lance_repro.py at repo root from previous session.
