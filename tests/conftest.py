@@ -1,10 +1,45 @@
 import os
+import socket
 
 from loguru import logger
 
 logger.remove()
 
 import pytest
+
+_LOOPBACK_HOSTS: frozenset[str] = frozenset(
+    {"127.0.0.1", "::1", "localhost", "0.0.0.0", "::"}
+)
+
+
+@pytest.fixture(autouse=True)
+def _block_outbound_network_for_integration(request, monkeypatch):
+    """Enforce the tier rule: integration-marked tests may not reach the
+    public internet. Python-level `socket.socket.connect` is monkeypatched
+    to raise RuntimeError for any non-loopback destination.
+
+    Subprocess children (codex, curl, git, etc.) have their own socket
+    namespace and bypass this hook — they MUST be classified into the
+    correct tier manually. See AGENTS.md "Test Tiers".
+    """
+    if "integration" not in request.node.keywords:
+        return
+
+    real_connect = socket.socket.connect
+
+    def guarded_connect(self, address):
+        # AF_UNIX: address is a filesystem path → local IPC, always OK
+        if isinstance(address, (bytes, str)):
+            return real_connect(self, address)
+        host = address[0] if address else None
+        if host in _LOOPBACK_HOSTS:
+            return real_connect(self, address)
+        raise RuntimeError(
+            f"Integration tier forbids outbound network; "
+            f"test attempted connect to {host!r} via {type(self).__name__}"
+        )
+
+    monkeypatch.setattr(socket.socket, "connect", guarded_connect)
 
 
 def pytest_configure(config):
