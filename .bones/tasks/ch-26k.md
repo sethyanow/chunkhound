@@ -8,6 +8,7 @@ priority: 1
 
 
 
+
 ## Context
 
 `tests/integration/test_codex_exec_help.py` runs three tests that all spawn
@@ -134,6 +135,12 @@ R5. Document the tier rule in `AGENTS.md`. New "Test Tiers" section with:
       resolves the effective model via `_resolve_model_name` before passing
       through the `-c` override path, so the overlay omitting a default
       model doesn't break invocation
+- [ ] Unit test covers `CodexCLIProvider(model="codex")` → overlay omits
+      `model` key (the `"codex"` alias for "use default" path)
+- [ ] AGENTS.md "Test Tiers" section explicitly notes the conftest hook's
+      subprocess limitation: Python-level sockets only; subprocess
+      invocations (codex, curl, etc.) bypass the hook and MUST be
+      manually classified into the correct tier
 
 ## Anti-Patterns
 
@@ -259,6 +266,92 @@ R5. Document the tier rule in `AGENTS.md`. New "Test Tiers" section with:
   except `"default"`. `"fallback"` emits; user asked for something (even
   if invalid), we honor the closest approximation.
 
+### Failure Catalog (from adversarial planning)
+
+**Dev machine bleed-through: Unit tests for `_build_overlay_home()`**
+- Assumption: Unit test runs in a clean environment with no side effects.
+- Betrayal: `_build_overlay_home()` calls `_get_base_codex_home()` which
+  reads `$CODEX_HOME` or `~/.codex`, then `_copy_minimal_codex_state()`
+  copies subset files into the overlay. If the developer has a real
+  `~/.codex` with sessions/auth state, those get pulled into the overlay
+  even in unit tests — tests become non-hermetic.
+- Consequence: Test passes on one machine, fails on another; user auth
+  tokens or session files end up in pytest's tmp dirs; reviewers can't
+  reproduce failures.
+- Mitigation: Unit tests monkeypatch `CodexCLIProvider._get_base_codex_home`
+  to return `None`, so `_copy_minimal_codex_state` is never invoked.
+  Overlay is built from scratch with ONLY our config.toml. Structural
+  via fixture, not try/except.
+
+**Model alias resolution: `_build_overlay_home()` omission rule**
+- Assumption: The 5 R1 test variants cover all paths where `model` is
+  omitted from the TOML.
+- Betrayal: `describe_model_resolution("codex")` returns `(<default>,
+  "default")` — the string `"codex"` is a documented alias for "use our
+  default" (line 84 of codex_cli_provider.py). Source-aware emission
+  skips the key when source is `"default"`, so `model="codex"` SHOULD
+  also omit. Not currently covered as a distinct test case.
+- Consequence: An implementation that only checks source by name
+  (e.g., only treating `None`/`""` as default-sourced) would accidentally
+  emit `model = "<default>"` when `model="codex"` was passed. Subtle
+  regression that the 5 R1 variants miss.
+- Mitigation: Add explicit test `model="codex" → no model key in TOML`
+  to R1's coverage. Added as success criterion below.
+
+**Subprocess bypass: conftest network block**
+- Assumption: The socket monkeypatch prevents all integration-marked
+  tests from hitting live APIs.
+- Betrayal: `monkeypatch.setattr(socket.socket, "connect", ...)` only
+  patches Python-level `socket` in the test process. Subprocess children
+  spawned via `subprocess.run(["codex", "exec", ...])` or
+  `asyncio.create_subprocess_exec` have their own socket namespace —
+  completely outside our reach. A future integration test that spawns
+  codex/git/embedding CLIs hits the API and the block never fires.
+- Consequence: False sense of coverage. The rule "integration tier
+  forbids live APIs" appears enforced but actually only catches
+  in-process network. Someone adds a subprocess-based API test, it
+  slips through, burns tokens — same failure class as the original bug.
+- Mitigation: AGENTS.md explicitly documents the limitation:
+  "The conftest hook catches Python-level sockets only. Subprocess
+  invocations that spawn external CLIs (codex, curl, etc.) make
+  network calls outside the test process and MUST be manually
+  classified into the correct tier — the hook cannot enforce this."
+  Added as a criterion on R5.
+
+**Reference leaks: Subprocess test deletion**
+- Assumption: Deleting `test_codex_exec_simple_prompt` and
+  `test_codex_exec_status_reports_overlay_model` only affects the file.
+- Betrayal: CI configs, pytest.ini selectors, documentation, or other
+  tests could reference these by name. Post-delete, CI may fail on a
+  missing test selector OR docs may silently rot.
+- Consequence: Broken CI pipeline OR stale documentation references.
+- Mitigation: Implementation step 4 adds a grep check before deletion:
+  `rg "test_codex_exec_simple_prompt|test_codex_exec_status_reports"`.
+  If hits found outside the test file itself, update or remove them in
+  the same commit. Structural via pre-delete grep.
+
+**Fixture shadowing: Regression test for tier block**
+- Assumption: The conftest fixture in `tests/conftest.py` applies to
+  `tests/integration/test_tier_network_block.py`.
+- Betrayal: If a `tests/integration/conftest.py` exists with a
+  conflicting fixture name or scope, it shadows the root fixture. The
+  regression test would run without the block, the real connect would
+  either succeed (network available) or fail with OSError — either way,
+  not the expected `RuntimeError`.
+- Consequence: Test fails for the wrong reason, or passes when it
+  shouldn't (if real connect also happens to error).
+- Mitigation: Implementation step 5 checks `tests/integration/conftest.py`
+  exists and does NOT define a same-name fixture. Keep the hook in
+  `tests/conftest.py` ONLY. Structural via directory discipline.
+
+**Pre-existing hygiene gap: `_build_overlay_home()` TOML escaping**
+- Noted but OUT OF SCOPE for this task: line 232 writes
+  `f'model = "{model_name}"'` directly instead of using the
+  `_toml_string()` helper at line 142. If `model_name` contains `"` or
+  `\n`, the TOML becomes malformed. R2 should preserve this
+  existing-gap-not-our-problem by using `_toml_string()` when it emits
+  the keys. Do NOT expand scope to audit other TOML emissions.
+
 ## Related
 
 - ch-eun — Reclassify mismarked integration tests with fixture conversion
@@ -284,3 +377,4 @@ R5. Document the tier rule in `AGENTS.md`. New "Test Tiers" section with:
   from provider resolvers, (e) expand scope to include overlay code
   change, (f) symmetric treatment of model + reasoning effort.
 - [2026-04-18T06:58:07Z] [Seth] Redesigned via chat before SRE: decouple overlay builder (unit tests) from CLI contract (delete subprocess tests); remove hardcoded default model from overlay; conftest socket-block for tier boundary. Unit tests read defaults from provider resolvers. Symmetric model+effort treatment.
+- [2026-04-18T07:02:14Z] [Seth] Adversarial planning added failure catalog to Key Considerations: dev-machine bleed-through (monkeypatch _get_base_codex_home), model=codex alias case (new criterion), subprocess bypass of socket block (document limitation in R5), reference leaks on delete (grep check), fixture shadowing (tests/conftest.py only), TOML escaping hygiene (use _toml_string helper in R2). Two new success criteria added.
