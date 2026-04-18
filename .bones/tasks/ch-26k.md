@@ -1,10 +1,14 @@
 ---
 id: ch-26k
 title: Stop codex overlay tests from burning live API tokens + remove hardcoded default model
-status: open
+status: closed
 type: bug
 priority: 1
+owner: Seth
 ---
+
+
+
 
 
 
@@ -113,34 +117,30 @@ R5. Document the tier rule in `AGENTS.md`. New "Test Tiers" section with:
 
 ## Success Criteria
 
-- [ ] `uv run pytest tests/unit/test_codex_overlay_config.py -v` passes with
-      5 tests covering the variants in R1
-- [ ] `_build_overlay_home()` omits `model` and `model_reasoning_effort`
-      keys when resolution source is `"default"` (verified by reading the
-      emitted TOML under default construction)
-- [ ] `test_codex_exec_simple_prompt` and
-      `test_codex_exec_status_reports_overlay_model` are removed from the
-      codebase (grep returns no matches)
-- [ ] `uv run pytest -m integration tests/integration/test_codex_exec_help.py`
-      passes with only `test_codex_exec_help_available` running
-- [ ] `tests/integration/test_tier_network_block.py` has a test that opens
-      a TCP connection to a non-loopback address and asserts it raises; the
-      test passes
-- [ ] `uv run pytest -m "unit or integration"` passes in an environment with
-      `OPENAI_API_KEY`, `VOYAGE_API_KEY`, and `CODEX_HOME` all unset
-- [ ] `AGENTS.md` has a "Test Tiers" section with the four-tier description
-      from R5
-- [ ] Existing callers of `_build_overlay_home()` still work — the only
-      in-repo caller is `_run_exec` at `codex_cli_provider.py:270+`, which
-      resolves the effective model via `_resolve_model_name` before passing
-      through the `-c` override path, so the overlay omitting a default
-      model doesn't break invocation
-- [ ] Unit test covers `CodexCLIProvider(model="codex")` → overlay omits
-      `model` key (the `"codex"` alias for "use default" path)
-- [ ] AGENTS.md "Test Tiers" section explicitly notes the conftest hook's
-      subprocess limitation: Python-level sockets only; subprocess
-      invocations (codex, curl, etc.) bypass the hook and MUST be
-      manually classified into the correct tier
+- [x] `uv run pytest tests/unit/test_codex_overlay_config.py -v` passes
+      with 15 tests (9 R1 variants + 6 adversarial); commit a2217766
+- [x] `_build_overlay_home()` omits `model` and `model_reasoning_effort`
+      keys when resolution source is `"default"`; commit a2217766
+- [x] `test_codex_exec_simple_prompt` and
+      `test_codex_exec_status_reports_overlay_model` removed; commit
+      03ae4489. Only remaining matches are in historical `_*.out` logs.
+- [x] `uv run pytest -m integration tests/integration/test_codex_exec_help.py`
+      passes with only `test_codex_exec_help_available` (verified)
+- [x] `tests/integration/test_tier_network_block.py` has 4 tests
+      (IPv4/IPv6 × outbound-blocked/loopback-allowed), all passing;
+      commits 283875d3 + 039e5368
+- [x] `uv run pytest -m "unit or integration"` passes with no credentials:
+      2939 passed, 0 failed (env -u OPENAI_API_KEY -u VOYAGE_API_KEY
+      -u CODEX_HOME -u ANTHROPIC_API_KEY)
+- [x] `AGENTS.md` has TEST_TIERS section with the four-tier description;
+      commit ca7f9a38
+- [x] Existing callers of `_build_overlay_home()` still work —
+      test_codex_overlay_modes.py (2 asyncio tests through `_run_exec`)
+      passes with assertion updated to the new spec
+- [x] Unit test covers `CodexCLIProvider(model="codex")` → overlay omits
+      `model` key (`test_codex_alias_omits_model_key`)
+- [x] AGENTS.md TEST_TIERS explicitly documents the subprocess bypass
+      limitation (commit ca7f9a38)
 
 ## Anti-Patterns
 
@@ -378,3 +378,4 @@ R5. Document the tier rule in `AGENTS.md`. New "Test Tiers" section with:
   change, (f) symmetric treatment of model + reasoning effort.
 - [2026-04-18T06:58:07Z] [Seth] Redesigned via chat before SRE: decouple overlay builder (unit tests) from CLI contract (delete subprocess tests); remove hardcoded default model from overlay; conftest socket-block for tier boundary. Unit tests read defaults from provider resolvers. Symmetric model+effort treatment.
 - [2026-04-18T07:02:14Z] [Seth] Adversarial planning added failure catalog to Key Considerations: dev-machine bleed-through (monkeypatch _get_base_codex_home), model=codex alias case (new criterion), subprocess bypass of socket block (document limitation in R5), reference leaks on delete (grep check), fixture shadowing (tests/conftest.py only), TOML escaping hygiene (use _toml_string helper in R2). Two new success criteria added.
+- [2026-04-18T07:26:39Z] [Seth] Adversarial stress test: 5 new _build_overlay_home tests (case/whitespace alias, unicode, quote, backslash, isolation) + 2 IPv6 conftest tests. One RED→GREEN cycle: _toml_string only escaped quotes, not backslashes — pre-existing bug exposed by my overlay change, fixed in scope. Affects 3 callsites total (lines 246, 249, 346, 352). Out-of-scope findings: (a) overlay temp-dir cleanup is caller responsibility with no leak-detection — minor future risk, (b) uppercase/whitespace alias works only because all in-class callers use the resolver — if someone compared self._model directly they'd miss the normalization. All 15 overlay unit tests + 4 tier-block tests green.
