@@ -84,6 +84,16 @@ uv publish
 - Project-local `.chunkhound.json` with relative `"path": ".chunkhound"` resolves to CWD, not the project dir — use `--db` with absolute paths when indexing remote projects
 - `--config` does NOT override a project-local `.chunkhound.json` for DB path — always use explicit `--db` when the target project has its own config
 
+## TEST_TIERS
+Tests are classified by marker. The classification is a contract, not a suggestion — the default `-m "unit or integration"` gate runs on every commit, and live-API calls at those tiers burn user credentials and break CI reproducibility.
+
+- **`unit`** — No subprocess. No I/O beyond `tmp_path`. No network. Runs in milliseconds. This is the default tier selector.
+- **`integration`** — Local subprocess and loopback network OK. NO outbound network. Autouse fixture `_block_outbound_network_for_integration` in `tests/conftest.py` monkeypatches `socket.socket.connect` to raise for non-loopback destinations; regression covered by `tests/integration/test_tier_network_block.py`.
+- **`acceptance`** — VCR-cassette-backed. Cassettes recorded once against real APIs; replay in CI uses placeholder credentials. Configure via `vcr_config` fixture at `tests/conftest.py`.
+- **`e2e`** — Live APIs, opt-in only. Not run by the default `-m "unit or integration"` gate or CI. Authors must verify their credentials before invoking.
+
+**Subprocess limitation of the `integration` network block**: the autouse fixture catches Python-level `socket.socket.connect` only. Child processes spawned via `subprocess.run`, `asyncio.create_subprocess_exec`, etc. have their own socket namespace and are NOT blocked. Any integration test that shells out to an external CLI (`codex`, `curl`, `git`, embedding providers) that itself may hit the network MUST be manually reclassified into `acceptance` (cassette) or `e2e` (opt-in). The conftest hook is defense-in-depth for pure-Python callers, not a substitute for thinking about what your subprocess does.
+
 ## PROJECT_MAINTENANCE
 - Full test suite is the mandatory pre-commit guardrail
 - Run `uv run mypy chunkhound` during reviews to catch Optional/type boundary issues
