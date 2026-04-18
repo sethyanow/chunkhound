@@ -112,9 +112,7 @@ def _map_lines_to_symbols(
         line_set = set(lines)
 
         # Broad query: symbols whose range overlaps [min_line, max_line]
-        rows = services.provider.query_symbols_by_range_overlap(
-            file_path, min_line, max_line
-        )
+        rows = services.provider.query_symbols_by_range_overlap(file_path, min_line, max_line)
 
         for row in rows:
             # Narrow: intersect symbol range with actual changed lines

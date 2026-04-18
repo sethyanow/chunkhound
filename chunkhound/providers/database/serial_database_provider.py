@@ -1,8 +1,8 @@
 """Base class for database providers requiring single-threaded execution."""
 
 from abc import ABC, abstractmethod
-from pathlib import Path
 from collections.abc import Callable
+from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
 _T = TypeVar("_T")
@@ -158,9 +158,7 @@ class SerialDatabaseProvider(ABC):
     async def _execute_in_db_thread(self, operation: Callable[..., _T], *args: Any, **kwargs: Any) -> _T: ...
     @overload
     async def _execute_in_db_thread(self, operation: str, *args: Any, **kwargs: Any) -> Any: ...
-    async def _execute_in_db_thread(
-        self, operation: str | Callable[..., _T], *args: Any, **kwargs: Any
-    ) -> _T | Any:
+    async def _execute_in_db_thread(self, operation: str | Callable[..., _T], *args: Any, **kwargs: Any) -> _T | Any:
         """Execute operation asynchronously in DB thread."""
         return await self._executor.execute_async(self, operation, *args, **kwargs)
 
@@ -267,7 +265,9 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
-        return self._execute_in_db_thread_sync(self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path)
+        return self._execute_in_db_thread_sync(
+            self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path
+        )
 
     async def search_regex_async(
         self,
@@ -281,7 +281,9 @@ class SerialDatabaseProvider(ABC):
         if not hasattr(self, "_executor_search_regex"):
             return [], {"error": "Regex search not supported by this provider"}
 
-        return await self._execute_in_db_thread(self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path)
+        return await self._execute_in_db_thread(
+            self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path
+        )
 
     async def execute_query_async(self, query: str, params: list[Any] | None = None) -> list[dict[str, Any]]:
         """Async variant of execute_query."""

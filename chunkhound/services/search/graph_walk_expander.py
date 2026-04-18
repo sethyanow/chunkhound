@@ -68,11 +68,5 @@ class GraphWalkExpander:
         discovered_chunks = self._db.chunk_resolution(walked_fqns)
 
         # Stage 4: Deduplicate against seed set.
-        seed_keys = {
-            (c["file_path"], c["start_line"], c["end_line"]) for c in seed_chunks
-        }
-        return [
-            c
-            for c in discovered_chunks
-            if (c["file_path"], c["start_line"], c["end_line"]) not in seed_keys
-        ]
+        seed_keys = {(c["file_path"], c["start_line"], c["end_line"]) for c in seed_chunks}
+        return [c for c in discovered_chunks if (c["file_path"], c["start_line"], c["end_line"]) not in seed_keys]

@@ -551,9 +551,7 @@ class DatabaseProvider(Protocol):
         """
         ...
 
-    def graph_overview_breakdown(
-        self, fqns: list[str]
-    ) -> dict[str, dict[str, int]]:
+    def graph_overview_breakdown(self, fqns: list[str]) -> dict[str, dict[str, int]]:
         """Per-edge-kind counts for the given FQNs.
 
         Returns a mapping ``{fqn: {edge_kind: count}}``. FQNs with no edges are

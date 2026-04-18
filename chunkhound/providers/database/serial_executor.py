@@ -6,8 +6,8 @@ import contextvars
 import os
 import threading
 import time
-from concurrent.futures import ThreadPoolExecutor
 from collections.abc import Callable
+from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar, overload
 
 _T = TypeVar("_T")

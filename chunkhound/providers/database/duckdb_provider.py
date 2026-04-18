@@ -2062,7 +2062,9 @@ class DuckDBProvider(SerialDatabaseProvider):
         fuzzy_path: bool = False,
     ) -> tuple[list[dict[str, Any]], dict[str, Any]]:
         """Perform regex search on code content."""
-        return self._execute_in_db_thread_sync(self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path)
+        return self._execute_in_db_thread_sync(
+            self._executor_search_regex, pattern, page_size, offset, path_filter, fuzzy_path
+        )
 
     def search_chunks_regex(self, pattern: str, file_path: str | None = None) -> list[dict[str, Any]]:
         """Backward compatibility wrapper for legacy search_chunks_regex calls."""
@@ -2825,7 +2827,9 @@ class DuckDBProvider(SerialDatabaseProvider):
 
     def query_symbols_by_range_overlap(self, file_path: str, min_line: int, max_line: int) -> list[dict[str, Any]]:
         """Return all symbols whose range overlaps [min_line, max_line]."""
-        return self._execute_in_db_thread_sync(self._executor_query_symbols_by_range_overlap, file_path, min_line, max_line)
+        return self._execute_in_db_thread_sync(
+            self._executor_query_symbols_by_range_overlap, file_path, min_line, max_line
+        )
 
     def _executor_query_symbols_by_range_overlap(
         self,
@@ -2896,9 +2900,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Return all symbols whose file_path begins with the given scope prefix."""
         return self._execute_in_db_thread_sync(self._executor_query_symbols_by_scope, scope)
 
-    def _executor_query_symbols_by_scope(
-        self, conn: Any, state: dict[str, Any], scope: str
-    ) -> list[dict[str, Any]]:
+    def _executor_query_symbols_by_scope(self, conn: Any, state: dict[str, Any], scope: str) -> list[dict[str, Any]]:
         escaped = escape_like_pattern(scope)
         rows = conn.execute(
             "SELECT * FROM symbols WHERE file_path LIKE ? ESCAPE '!'",
@@ -2913,15 +2915,11 @@ class DuckDBProvider(SerialDatabaseProvider):
         """
         return self._execute_in_db_thread_sync(self._executor_query_test_symbols, scope)
 
-    def _executor_query_test_symbols(
-        self, conn: Any, state: dict[str, Any], scope: str | None
-    ) -> list[dict[str, Any]]:
+    def _executor_query_test_symbols(self, conn: Any, state: dict[str, Any], scope: str | None) -> list[dict[str, Any]]:
         if scope:
             escaped = escape_like_pattern(scope)
             rows = conn.execute(
-                "SELECT * FROM symbols "
-                "WHERE kind = 'Function' AND name LIKE 'test_%' "
-                "AND file_path LIKE ? ESCAPE '!'",
+                "SELECT * FROM symbols WHERE kind = 'Function' AND name LIKE 'test_%' AND file_path LIKE ? ESCAPE '!'",
                 [f"{escaped}%"],
             ).fetchall()
         else:
@@ -2960,9 +2958,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         """Return distinct FQNs for all symbols in a file."""
         return self._execute_in_db_thread_sync(self._executor_query_distinct_fqns_by_file_path, file_path)
 
-    def _executor_query_distinct_fqns_by_file_path(
-        self, conn: Any, state: dict[str, Any], file_path: str
-    ) -> list[str]:
+    def _executor_query_distinct_fqns_by_file_path(self, conn: Any, state: dict[str, Any], file_path: str) -> list[str]:
         rows = conn.execute(
             "SELECT DISTINCT fqn FROM symbols WHERE file_path = ?",
             [file_path],
@@ -2978,9 +2974,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         offset: int,
     ) -> tuple[list[dict[str, Any]], int]:
         """Substring search on symbol name/fqn with path and type filters."""
-        return self._execute_in_db_thread_sync(
-            self._executor_search_symbols, query, path, type_filter, limit, offset
-        )
+        return self._execute_in_db_thread_sync(self._executor_search_symbols, query, path, type_filter, limit, offset)
 
     def _executor_search_symbols(
         self,
@@ -3057,9 +3051,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         conditions: list[str] = []
         params: list[Any] = []
         for r in chunks:
-            conditions.append(
-                "(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)"
-            )
+            conditions.append("(s.file_path = ? AND s.range_start <= ? AND s.range_end >= ?)")
             params.extend([r["file_path"], r["end_line"], r["start_line"]])
         params.append(f"%{escaped}%")
 
@@ -3075,10 +3067,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         return [
             r
             for r in chunks
-            if any(
-                fp == r["file_path"] and rs <= r["end_line"] and re >= r["start_line"]
-                for fp, rs, re in match_set
-            )
+            if any(fp == r["file_path"] and rs <= r["end_line"] and re >= r["start_line"] for fp, rs, re in match_set)
         ]
 
     # ── Graph Query Protocol Methods ──────────────────────────────
@@ -3286,15 +3275,11 @@ class DuckDBProvider(SerialDatabaseProvider):
         rows = conn.execute(sql, params).fetchall()
         return self._rows_to_dicts(conn, rows)
 
-    def graph_overview_breakdown(
-        self, fqns: list[str]
-    ) -> dict[str, dict[str, int]]:
+    def graph_overview_breakdown(self, fqns: list[str]) -> dict[str, dict[str, int]]:
         """Per-edge-kind counts for the given FQNs."""
         if not fqns:
             return {}
-        return self._execute_in_db_thread_sync(
-            self._executor_graph_overview_breakdown, fqns
-        )
+        return self._execute_in_db_thread_sync(self._executor_graph_overview_breakdown, fqns)
 
     def _executor_graph_overview_breakdown(
         self, conn: Any, state: dict[str, Any], fqns: list[str]
@@ -3367,8 +3352,7 @@ class DuckDBProvider(SerialDatabaseProvider):
         sym_count = conn.execute("SELECT COUNT(*) FROM symbols").fetchone()[0]
         edge_count = conn.execute("SELECT COUNT(*) FROM symbol_edges").fetchone()[0]
         lang_rows = conn.execute(
-            "SELECT language, COUNT(*) AS count FROM symbols "
-            "GROUP BY language ORDER BY count DESC, language ASC"
+            "SELECT language, COUNT(*) AS count FROM symbols GROUP BY language ORDER BY count DESC, language ASC"
         ).fetchall()
         languages = [{"language": row[0], "count": row[1]} for row in lang_rows]
         return {

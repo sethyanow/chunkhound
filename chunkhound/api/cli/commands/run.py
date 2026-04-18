@@ -455,9 +455,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
         import time as _t
 
         _t0 = _t.perf_counter()
-        files = await indexing_coordinator._discover_files(
-            base_dir, processed_patterns, exclude_patterns
-        )
+        files = await indexing_coordinator._discover_files(base_dir, processed_patterns, exclude_patterns)
         _t1 = _t.perf_counter()
         try:
             import json as _json
@@ -498,9 +496,7 @@ async def _simulate_index(args: argparse.Namespace, config: Config) -> None:
         except Exception:
             pass
     else:
-        files = await indexing_coordinator._discover_files(
-            base_dir, processed_patterns, exclude_patterns
-        )
+        files = await indexing_coordinator._discover_files(base_dir, processed_patterns, exclude_patterns)
 
     # Defensive: ensure simulate exactly mirrors real-flow ignore decisions.
     # If no git repos are present and gitignore source is active, build a
