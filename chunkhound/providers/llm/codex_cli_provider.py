@@ -146,8 +146,17 @@ class CodexCLIProvider(BaseCLIProvider):
     @staticmethod
     def _toml_string(value: str) -> str:
         # Codex parses `-c key=value` with TOML semantics. Use explicit strings to
-        # avoid ambiguity across CLI versions.
-        return '"' + value.replace('"', '\\"') + '"'
+        # avoid ambiguity across CLI versions. Escape `\` before `"` so the `\`
+        # we insert while escaping `"` isn't itself doubled. Control chars
+        # (TAB, LF, CR) are also TOML-escape-significant in basic strings.
+        escaped = (
+            value.replace("\\", "\\\\")
+            .replace('"', '\\"')
+            .replace("\t", "\\t")
+            .replace("\n", "\\n")
+            .replace("\r", "\\r")
+        )
+        return '"' + escaped + '"'
 
     def _extract_agent_message_from_jsonl(self, stdout_text: str) -> tuple[str | None, dict[str, Any] | None]:
         """Extract final agent message text and usage from `codex exec --json` output."""

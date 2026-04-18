@@ -41,3 +41,37 @@ def test_loopback_tcp_connect_reaches_real_stack():
         )
     finally:
         s.close()
+
+
+@pytest.mark.integration
+def test_ipv6_outbound_connect_is_blocked():
+    """IPv6 tuples are 4-element: (host, port, flow, scope). Fixture
+    extracts `address[0]` and must block a non-loopback IPv6 host."""
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError:
+        pytest.skip("IPv6 not available on this host")
+    try:
+        with pytest.raises(RuntimeError, match="Integration tier forbids"):
+            # Cloudflare DNS over IPv6 — real, routable, non-loopback
+            s.connect(("2606:4700:4700::1111", 53, 0, 0))
+    finally:
+        s.close()
+
+
+@pytest.mark.integration
+def test_ipv6_loopback_passes_through():
+    """`::1` is allowlisted; connect should fail normally, not with RuntimeError."""
+    try:
+        s = socket.socket(socket.AF_INET6, socket.SOCK_STREAM)
+    except OSError:
+        pytest.skip("IPv6 not available on this host")
+    s.settimeout(0.5)
+    try:
+        with pytest.raises(OSError) as exc_info:
+            s.connect(("::1", 59322, 0, 0))
+        assert "Integration tier forbids" not in str(exc_info.value), (
+            "IPv6 loopback connect was incorrectly blocked by the tier fixture."
+        )
+    finally:
+        s.close()
