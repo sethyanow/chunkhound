@@ -43,6 +43,10 @@ class CodexCLIProvider(BaseCLIProvider):
         reasoning_effort: str | None = None,
     ) -> None:
         super().__init__(api_key, model, base_url, timeout, max_retries)
+        # Preserve the raw request so _build_overlay_home can check the
+        # resolution source without re-running the resolver on an already-
+        # resolved value (which would always report source="explicit").
+        self._reasoning_effort_requested = reasoning_effort
         self._reasoning_effort = self._resolve_reasoning_effort(reasoning_effort)
 
         if not self._codex_available():
@@ -221,20 +225,32 @@ class CodexCLIProvider(BaseCLIProvider):
         """
         overlay = Path(tempfile.mkdtemp(prefix="chunkhound-codex-overlay-"))
         base = self._get_base_codex_home()
-        model_name = self._resolve_model_name(model_override or self._model)
+        model_name, model_source = type(self).describe_model_resolution(
+            model_override or self._model
+        )
+        effort_value, effort_source = type(self).describe_reasoning_effort_resolution(
+            self._reasoning_effort_requested
+        )
         try:
             if base and base.exists():
                 self._copy_minimal_codex_state(base, overlay)
 
             config_path = overlay / "config.toml"
             # Many Codex builds expect top-level `model` keys (not a [model] table).
-            cfg_lines = [
-                f'model = "{model_name}"',
-                f'model_reasoning_effort = "{self._reasoning_effort}"',
-                "",
-                "[history]",
-                'persistence = "none"',
-            ]
+            # Omit `model` and `model_reasoning_effort` when their resolution
+            # source is "default" so codex uses its own current defaults —
+            # avoids pinning overlays to a stale value when ours drifts behind
+            # the upstream catalog.
+            cfg_lines: list[str] = []
+            if model_source != "default":
+                cfg_lines.append(f"model = {self._toml_string(model_name)}")
+            if effort_source != "default":
+                cfg_lines.append(
+                    f"model_reasoning_effort = {self._toml_string(effort_value)}"
+                )
+            if cfg_lines:
+                cfg_lines.append("")
+            cfg_lines.extend(["[history]", 'persistence = "none"'])
             config_path.write_text("\n".join(cfg_lines) + "\n", encoding="utf-8")
         except Exception as e:
             logger.warning(f"Failed to build Codex overlay home: {e}")

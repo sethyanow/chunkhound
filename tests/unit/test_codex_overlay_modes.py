@@ -89,14 +89,19 @@ async def test_codex_config_only_mode_uses_config_env_and_no_codex_home(monkeypa
     assert child_env.get("OPENAI_API_KEY") == "sk-test-openai"
     assert child_env.get("CODEX_API_KEY") == "sk-test-codex"
     assert child_env.get("EXTRA_VAR") == "123"
-    # Config toml should contain resolved model and reasoning effort default
+    # Config toml contains the explicitly-requested model. Reasoning effort
+    # is omitted because the constructor didn't request one — source-aware
+    # emission (ch-26k R2) drops default-sourced keys so codex picks its own
+    # current defaults.
     assert captured["config_text"] is not None
     assert 'model = "gpt-5.1-codex-mini"' in captured["config_text"]
-    assert 'model_reasoning_effort = "low"' in captured["config_text"]
     # And model configuration should live at the TOML root, not under [history]
     cfg = tomllib.loads(captured["config_text"])
     assert cfg.get("model") == "gpt-5.1-codex-mini"
-    assert cfg.get("model_reasoning_effort") == "low"
+    assert "model_reasoning_effort" not in cfg, (
+        "Default-sourced reasoning effort must be omitted from overlay; "
+        f"got {cfg!r}"
+    )
     history = cfg.get("history") or {}
     assert history.get("persistence") == "none"
     # Guard against accidental placement of model keys inside [history]
