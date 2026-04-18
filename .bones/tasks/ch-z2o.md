@@ -41,7 +41,7 @@ Scoped to parent epic R7, R8:
 - [x] code_research BFS uses templates when encountering structural sub-questions (type chain tracing, call graph scope, test coverage mapping, etc.)
 - [ ] Measurable: code_research on a structural topic returns chunks that semantic-only search misses
 - [x] `uv run pytest tests/test_graph_expander.py -v` → all pass (15 tests)
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [ ] `uv run pytest -m "unit or integration"` → all pass (marker-based per AGENTS.md)
 
 ## Anti-Patterns
 Inherited from parent epic, plus:

@@ -1,16 +1,11 @@
 import os
 import shutil
 import subprocess
-import tempfile
 from pathlib import Path
 
 import pytest
 
 from chunkhound.providers.llm.codex_cli_provider import CodexCLIProvider
-
-pytestmark = pytest.mark.integration
-
-
 
 @pytest.mark.integration
 def test_codex_exec_help_available():
@@ -51,10 +46,12 @@ def test_codex_exec_help_available():
     )
 
 
-@pytest.mark.integration
+@pytest.mark.e2e
 def test_codex_exec_simple_prompt():
     """Run a tiny non-interactive prompt through `codex exec`.
 
+    Hits the live OpenAI/Codex API — consumes subscription tokens.
+    Marked e2e so it is not part of the default integration gate.
     Attempts to select the fast model via `--model gpt-5.1-codex` when supported,
     otherwise falls back to default model. Skips if Codex is unavailable and
     xfails if the CLI is not authenticated.
