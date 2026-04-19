@@ -13,16 +13,20 @@ Catch critical failures BEFORE they reach users. These tests run in ~10 seconds 
 - AUTOMATED: Should run in CI on every push
 
 ## HOW_TO_RUN
+Smoke tests are marked `e2e`, which the default `addopts = ["-m", "unit"]` deselects silently. You must pass `-m e2e` explicitly:
+
 ```bash
 # Quick smoke test (10 seconds)
-uv run pytest tests/test_smoke.py -v -n auto
+uv run pytest -m e2e tests/test_smoke.py -v -n auto
 
 # Just import tests (2 seconds)
-uv run pytest tests/test_smoke.py::TestModuleImports -v
+uv run pytest -m e2e tests/test_smoke.py::TestModuleImports -v
 
 # Just CLI tests (3 seconds)
-uv run pytest tests/test_smoke.py::TestCLICommands -v
+uv run pytest -m e2e tests/test_smoke.py::TestCLICommands -v
 ```
+
+Running without `-m e2e` looks like a pass (`collected N / N deselected / 0 selected`) but actually ran nothing.
 
 ## WHAT_THEY_TEST
 

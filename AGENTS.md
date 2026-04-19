@@ -5,6 +5,8 @@ ChunkHound: Semantic and regex search tool for codebases with MCP integration
 Built: 100% by AI agents - NO human-written code
 Purpose: Transform codebases into searchable knowledge bases for AI assistants
 
+**Note:** `CLAUDE.md` is a symlink to this file. "Update CLAUDE.md" and "update AGENTS.md" mean the same edit. Do not treat them as separate deliverables.
+
 ## MODIFICATION_RULES
 **NEVER:**
 - NEVER Use print() in MCP server (stdio.py, http_server.py, tools.py)
@@ -34,6 +36,17 @@ index:     uv run chunkhound index [directory]
 mcp_stdio: uv run chunkhound mcp
 mcp_http:  uv run chunkhound mcp http --port 5173
 ```
+
+## LSP_TOOLS
+Four LSP surfaces are installed. Route by language:
+
+- **Python** — `mcp__plugin_pyright-mcp_pyright__lsp` (warm Pyright, fastest on this repo)
+- **Multi-language canonical verbs** — `mcp__plugin_lsp-mcp_lsp__{defs,refs,hover,impls,outline,incoming_calls,outgoing_calls,symbol_search,diagnostics}`
+- **Fallback** — native `LSP` tool and Serena MCP
+
+LSP locates code. `Read` with `offset`+`limit` views it. Do not use LSP output as a substitute for reading source.
+
+`findReferences` for counting usages; `incomingCalls` for planning refactors (returns calling functions, not lines). See global CLAUDE.md for detailed LSP patterns.
 
 ## VERSION_MANAGEMENT
 Dynamic versioning via hatch-vcs - version derived from git tags.

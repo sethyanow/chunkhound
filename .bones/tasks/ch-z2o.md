@@ -58,8 +58,7 @@ Inherited from parent epic, plus:
 
 ## Acceptance Requirements
 **Agent Documentation:**
-- [ ] CLAUDE.md updated: graph expander configuration, prompt template directory
-- [ ] AGENTS.md updated: how graph expansion affects search results
+- [ ] AGENTS.md (= CLAUDE.md, symlinked) updated: graph expander configuration, prompt template directory, how graph expansion affects search results
 
 **User Walkthrough Must Cover:**
 - Run code_research on a structural question → verify graph-expanded chunks appear in results

@@ -32,7 +32,7 @@ Scoped to parent epic R9:
 - [ ] Script internals never need to enter agent context — progressive disclosure: discover → read SKILL.md → execute with CLI args → get output
 - [ ] All scripts handle ChunkHound server unavailable gracefully (clear error, not traceback)
 - [ ] `uv run pytest tests/test_skill_scripts.py -v` → all pass
-- [ ] `uv run pytest tests/test_smoke.py -v -n auto` → all pass
+- [ ] `uv run pytest -m e2e tests/test_smoke.py -v -n auto` → all pass (smoke is e2e-marked; default addopts silently deselects without `-m e2e`)
 
 ## Anti-Patterns
 Inherited from parent epic, plus:
@@ -49,8 +49,7 @@ Inherited from parent epic, plus:
 
 ## Acceptance Requirements
 **Agent Documentation:**
-- [ ] CLAUDE.md updated: skill library location, how to add new skills
-- [ ] AGENTS.md updated: skill descriptions and trigger phrases
+- [ ] AGENTS.md (= CLAUDE.md, symlinked) updated: skill library location, how to add new skills, skill descriptions and trigger phrases
 - [ ] README or dedicated doc on writing custom skills
 
 **User Walkthrough Must Cover:**

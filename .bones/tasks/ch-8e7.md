@@ -79,11 +79,16 @@ ChunkHound MCP is running and indexed on this repo. Use it:
 - `search_semantic` — conceptual queries LSP can't answer ("error propagation patterns", "retry logic").
 
 **Skills to invoke when relevant:**
-- `async-python-patterns` — Phase 1-2 (thread/async boundaries, LSP client, background population)
-- `python-error-handling` — Phase 1 (pygit2 fallback chains)
-- `python-design-patterns` — Phase 3-4 (tool composition)
-- `python-performance-optimization` — Phase 2, 5 (bulk insertion, graph walk profiling)
-- `python-project-structure` — Phase 6 (script library layout)
+- `python-development:async-python-patterns` — Phase 1-2 (thread/async boundaries, LSP client, background population), Phase 5 (UnifiedSearch async paths)
+- `python-development:python-error-handling` — Phase 1 (pygit2 fallback chains), Phase 6 (ChunkHound server unavailable handling)
+- `python-development:python-design-patterns` — Phase 3-4 (tool composition)
+- `python-development:python-performance-optimization` — Phase 2, 5 (bulk insertion, graph walk profiling)
+- `python-development:python-project-structure` — Phase 6 (script library layout)
+- `python-development:python-type-safety` — Phase 5-6 (new code; avoid adding to the open mypy backlog in ch-6ea)
+- `python-development:python-anti-patterns` — Phase 6 review checklist (hardcoded URLs, LLM-in-scripts, bare except, missing validation)
+- `python-development:python-background-jobs` — Phase 6 (`workflow.py` runners calling MCP over HTTP)
+- `python-development:python-testing-patterns` or `parseltongue:python-testing` — every phase (pytest gates)
+- `pyright-mcp:pyright` — Python symbol/type navigation (warm Pyright, faster than generic LSP for this repo)
 
 ## Approach
 
@@ -285,7 +290,7 @@ Each phase ends with an interactive acceptance session — a product demo. The a
 Agents bounce between LSP (structural: types, call chains, references) and semantic search (conceptual: patterns by meaning), manually cross-referencing results. Neither alone answers the cross-cutting questions agents actually ask during autonomous coding.
 
 ### Research Findings
-**Codebase:** Tree-sitter deeply embedded across TreeSitterEngine, ConceptExtractor, UniversalParser (3+ layers). MCP tools registered via @register_tool decorator in tools.py. DuckDB schema: files, chunks, embeddings_<N>. Indexing pipeline: file watcher → process_file → tree-sitter parsing (CPU-parallel) → DuckDB write → embedding generation. Research service: multi-hop vector expansion + BFS exploration + gap detection with reranker requirement.
+**Codebase:** Tree-sitter deeply embedded across TreeSitterEngine, ConceptExtractor, UniversalParser (3+ layers). MCP tools registered via @register_tool decorator in tools.py. DuckDB schema: files, chunks, `embeddings_<N>`. Indexing pipeline: file watcher → process_file → tree-sitter parsing (CPU-parallel) → DuckDB write → embedding generation. Research service: multi-hop vector expansion + BFS exploration + gap detection with reranker requirement.
 
 **External:** Muvon/octocode builds GraphRAG with rule-based import parsing + optional LLM at index time, LSP at query time only. We use LSP at both index and query time — faster and more accurate than LLM for relationship discovery.
 
