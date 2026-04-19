@@ -13,6 +13,7 @@ owner: Seth
 
 
 
+
 ## Context
 
 `tests/integration/test_codex_exec_help.py` runs three tests that all spawn
@@ -379,3 +380,4 @@ R5. Document the tier rule in `AGENTS.md`. New "Test Tiers" section with:
 - [2026-04-18T06:58:07Z] [Seth] Redesigned via chat before SRE: decouple overlay builder (unit tests) from CLI contract (delete subprocess tests); remove hardcoded default model from overlay; conftest socket-block for tier boundary. Unit tests read defaults from provider resolvers. Symmetric model+effort treatment.
 - [2026-04-18T07:02:14Z] [Seth] Adversarial planning added failure catalog to Key Considerations: dev-machine bleed-through (monkeypatch _get_base_codex_home), model=codex alias case (new criterion), subprocess bypass of socket block (document limitation in R5), reference leaks on delete (grep check), fixture shadowing (tests/conftest.py only), TOML escaping hygiene (use _toml_string helper in R2). Two new success criteria added.
 - [2026-04-18T07:26:39Z] [Seth] Adversarial stress test: 5 new _build_overlay_home tests (case/whitespace alias, unicode, quote, backslash, isolation) + 2 IPv6 conftest tests. One RED→GREEN cycle: _toml_string only escaped quotes, not backslashes — pre-existing bug exposed by my overlay change, fixed in scope. Affects 3 callsites total (lines 246, 249, 346, 352). Out-of-scope findings: (a) overlay temp-dir cleanup is caller responsibility with no leak-detection — minor future risk, (b) uppercase/whitespace alias works only because all in-class callers use the resolver — if someone compared self._model directly they'd miss the normalization. All 15 overlay unit tests + 4 tier-block tests green.
+- [2026-04-18T07:34:36Z] [Seth] Closure: all 10 criteria checked. Delivered R1-R5 in 4 logical commits (a2217766, 03ae4489, 283875d3, ca7f9a38) + adversarial _toml_string fix (039e5368). 2939 tests pass with no credentials. Saved reference memory for pytest default marker silent-deselect gotcha discovered during Step 1.
