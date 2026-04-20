@@ -8,6 +8,7 @@ depends_on: [ch-3zc, ch-wma, ch-yss, ch-qxc, ch-7s3, ch-nr0]
 ---
 
 
+
 ## Context
 Discovered during ch-9xh (Phase 5 acceptance) Demo 1. Attempting to demo `search(type=semantic)` vs `search(type=structural)` on a freshly reindexed LanceDB surfaced multiple issues. ch-9xh cannot close until these are resolved or triaged.
 
@@ -47,3 +48,4 @@ All six bugs trace back to the LanceDBProvider / indexer surface area. None are 
 ## Log
 
 - [2026-04-20T18:40:11Z] [Seth] Parent epic for 6 bugs found during ch-9xh Phase 5 acceptance Demo 1. Blocks ch-9xh closure. Suggested order in skeleton.
+- [2026-04-20T21:27:48Z] [Seth] Adversarial finding (ch-3zc scope): _executor_symbol_stats at lancedb_provider.py:2413-2416 has no per-table try/except around count_rows(). Inconsistent with improved _executor_get_stats pattern. Fragment read errors propagate instead of degrading gracefully with logger.warning. Non-blocking for Phase 5 demo; consider aligning when ch-yss work lands for symmetric provider-side robustness.

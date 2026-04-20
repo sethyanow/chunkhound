@@ -1951,37 +1951,37 @@ class LanceDBProvider(SerialDatabaseProvider):
         return self._execute_in_db_thread_sync(self._executor_get_stats)
 
     def _executor_get_stats(self, conn: Any, state: dict[str, Any]) -> dict[str, int]:
-        """Executor method for get_stats - runs in DB thread."""
-        stats = {"files": 0, "chunks": 0, "embeddings": 0, "size_mb": 0}
+        """Executor method for get_stats - runs in DB thread.
+
+        ch-3zc: previously materialized tables via ``.to_pandas()`` just to
+        call ``len(...)``. On ~80K chunks × 1024-dim embeddings that exceeded
+        the 30s ``CHUNKHOUND_DB_EXECUTE_TIMEOUT``, so users saw zero counts.
+        Now uses ``count_rows()`` — a metadata lookup — which scales with
+        fragment count, not row content. The ``embeddings`` key is dropped
+        (was "chunks with valid embedding", a semantic metric we can't get
+        cheaply); callers default to 0 via ``.get("embeddings", 0)``.
+        """
+        stats: dict[str, int] = {"files": 0, "chunks": 0, "size_mb": 0}
 
         try:
-            if self._files_table:
+            if self._files_table is not None:
                 try:
-                    stats["files"] = len(self._files_table.to_pandas())
+                    stats["files"] = int(self._files_table.count_rows())
                 except Exception as data_error:
-                    logger.warning(f"Failed to get files stats due to data corruption: {data_error}")
+                    logger.warning(f"Failed to count files: {data_error}")
                     stats["files"] = 0
 
-            if self._chunks_table:
+            if self._chunks_table is not None:
                 try:
-                    chunks_df = self._chunks_table.to_pandas()
-                    stats["chunks"] = len(chunks_df)
-                    # Handle embeddings that are lists - also exclude zero vectors
-                    embeddings_mask = chunks_df["embedding"].apply(_has_valid_embedding)
-                    stats["embeddings"] = len(chunks_df[embeddings_mask])
+                    stats["chunks"] = int(self._chunks_table.count_rows())
                 except Exception as data_error:
-                    logger.warning(f"Failed to get chunks stats due to data corruption: {data_error}")
-                    # Try to get count using count_rows() which is more robust
-                    try:
-                        stats["chunks"] = self._chunks_table.count_rows()
-                    except Exception:
-                        stats["chunks"] = 0
-                    stats["embeddings"] = 0
+                    logger.warning(f"Failed to count chunks: {data_error}")
+                    stats["chunks"] = 0
 
             # Calculate size (approximate)
             if self._db_path.exists():
                 total_size = sum(f.stat().st_size for f in self._db_path.rglob("*") if f.is_file())
-                stats["size_mb"] = total_size / (1024 * 1024)
+                stats["size_mb"] = int(total_size // (1024 * 1024))
 
         except Exception as e:
             logger.error(f"Error getting stats: {e}")
