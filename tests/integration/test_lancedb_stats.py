@@ -20,12 +20,16 @@ Tests:
 
 from __future__ import annotations
 
+from typing import Any
+
 import pytest
+
+from chunkhound.providers.database.lancedb_provider import LanceDBProvider
 
 pytestmark = pytest.mark.integration
 
 
-def test_get_stats_counts_without_pandas_materialization(lancedb_provider):
+def test_get_stats_counts_without_pandas_materialization(lancedb_provider: LanceDBProvider) -> None:
     """``get_stats`` must not materialize tables via ``.to_pandas()`` (ch-3zc).
 
     Populates a minimal fixture (1 file, 1 chunk), then replaces
@@ -43,6 +47,7 @@ def test_get_stats_counts_without_pandas_materialization(lancedb_provider):
     from chunkhound.core.models import Chunk, File
     from chunkhound.core.types.common import (
         ChunkType,
+        FileId,
         FilePath,
         Language,
         LineNumber,
@@ -58,7 +63,7 @@ def test_get_stats_counts_without_pandas_materialization(lancedb_provider):
     file_id = lancedb_provider.insert_file(file_record)
 
     chunk = Chunk(
-        file_id=file_id,
+        file_id=FileId(file_id),
         code="def f(): pass",
         start_line=LineNumber(1),
         end_line=LineNumber(1),
@@ -68,29 +73,26 @@ def test_get_stats_counts_without_pandas_materialization(lancedb_provider):
     )
     lancedb_provider.insert_chunks_batch([chunk])
 
-    def forbidden_to_pandas(*_args, **_kwargs):
-        raise RuntimeError(
-            "_executor_get_stats must not call .to_pandas() — see ch-3zc"
-        )
+    def forbidden_to_pandas(*_args: Any, **_kwargs: Any) -> Any:
+        raise RuntimeError("_executor_get_stats must not call .to_pandas() — see ch-3zc")
 
     # Shadow the bound ``to_pandas`` on each table object. The instances
     # are live tables returned from the LanceDB connection — assigning an
     # attribute on the Python wrapper intercepts the call.
+    assert lancedb_provider._files_table is not None
+    assert lancedb_provider._chunks_table is not None
     lancedb_provider._files_table.to_pandas = forbidden_to_pandas
     lancedb_provider._chunks_table.to_pandas = forbidden_to_pandas
 
     stats = lancedb_provider.get_stats()
 
     assert stats["files"] >= 1, (
-        f"expected files >= 1, got {stats['files']} — current code likely "
-        f"called .to_pandas() and fell through to 0"
+        f"expected files >= 1, got {stats['files']} — current code likely called .to_pandas() and fell through to 0"
     )
-    assert stats["chunks"] >= 1, (
-        f"expected chunks >= 1, got {stats['chunks']}"
-    )
+    assert stats["chunks"] >= 1, f"expected chunks >= 1, got {stats['chunks']}"
 
 
-def test_get_stats_empty_db_returns_zeros(lancedb_provider):
+def test_get_stats_empty_db_returns_zeros(lancedb_provider: LanceDBProvider) -> None:
     """Empty DB returns ``{files: 0, chunks: 0}`` without raising.
 
     Guards against a refactor that assumes tables are populated. The fix
@@ -100,9 +102,7 @@ def test_get_stats_empty_db_returns_zeros(lancedb_provider):
     """
     stats = lancedb_provider.get_stats()
     assert stats["files"] == 0, f"empty DB: expected files=0, got {stats['files']}"
-    assert stats["chunks"] == 0, (
-        f"empty DB: expected chunks=0, got {stats['chunks']}"
-    )
+    assert stats["chunks"] == 0, f"empty DB: expected chunks=0, got {stats['chunks']}"
 
 
 # --- Adversarial stress tests (ch-3zc) -------------------------------------
@@ -118,7 +118,7 @@ def test_get_stats_empty_db_returns_zeros(lancedb_provider):
 # - Redundant: counts are counts regardless of duplication.
 
 
-def test_get_stats_partial_disconnect_files_table_none(lancedb_provider):
+def test_get_stats_partial_disconnect_files_table_none(lancedb_provider: LanceDBProvider) -> None:
     """One table is None, the other is live — adversarial: per-table independence.
 
     The ``is not None`` checks (ch-3zc) should handle each table independently.
@@ -128,6 +128,7 @@ def test_get_stats_partial_disconnect_files_table_none(lancedb_provider):
     from chunkhound.core.models import Chunk, File
     from chunkhound.core.types.common import (
         ChunkType,
+        FileId,
         FilePath,
         Language,
         LineNumber,
@@ -144,7 +145,7 @@ def test_get_stats_partial_disconnect_files_table_none(lancedb_provider):
     lancedb_provider.insert_chunks_batch(
         [
             Chunk(
-                file_id=file_id,
+                file_id=FileId(file_id),
                 code="def f(): pass",
                 start_line=LineNumber(1),
                 end_line=LineNumber(1),
@@ -160,15 +161,11 @@ def test_get_stats_partial_disconnect_files_table_none(lancedb_provider):
 
     stats = lancedb_provider.get_stats()
 
-    assert stats["files"] == 0, (
-        f"files_table=None should yield files=0, got {stats['files']}"
-    )
-    assert stats["chunks"] >= 1, (
-        f"chunks_table should still count independently, got {stats['chunks']}"
-    )
+    assert stats["files"] == 0, f"files_table=None should yield files=0, got {stats['files']}"
+    assert stats["chunks"] >= 1, f"chunks_table should still count independently, got {stats['chunks']}"
 
 
-def test_get_stats_is_idempotent(lancedb_provider):
+def test_get_stats_is_idempotent(lancedb_provider: LanceDBProvider) -> None:
     """Second run yields the same result. get_stats must not mutate state.
 
     A pure read should be trivially idempotent, but a careless refactor
@@ -177,6 +174,7 @@ def test_get_stats_is_idempotent(lancedb_provider):
     from chunkhound.core.models import Chunk, File
     from chunkhound.core.types.common import (
         ChunkType,
+        FileId,
         FilePath,
         Language,
         LineNumber,
@@ -193,7 +191,7 @@ def test_get_stats_is_idempotent(lancedb_provider):
     lancedb_provider.insert_chunks_batch(
         [
             Chunk(
-                file_id=file_id,
+                file_id=FileId(file_id),
                 code="def f(): pass",
                 start_line=LineNumber(1),
                 end_line=LineNumber(1),
@@ -208,12 +206,12 @@ def test_get_stats_is_idempotent(lancedb_provider):
     second = lancedb_provider.get_stats()
     third = lancedb_provider.get_stats()
 
-    assert first == second == third, (
-        f"get_stats not idempotent: {first} vs {second} vs {third}"
-    )
+    assert first == second == third, f"get_stats not idempotent: {first} vs {second} vs {third}"
 
 
-def test_get_stats_degrades_gracefully_when_count_rows_raises(lancedb_provider):
+def test_get_stats_degrades_gracefully_when_count_rows_raises(
+    lancedb_provider: LanceDBProvider,
+) -> None:
     """One table's count_rows raises — other still counts. ch-3zc per-table try/except.
 
     The failure catalog (Input Hostility entry in the skeleton) notes that
@@ -224,6 +222,7 @@ def test_get_stats_degrades_gracefully_when_count_rows_raises(lancedb_provider):
     from chunkhound.core.models import Chunk, File
     from chunkhound.core.types.common import (
         ChunkType,
+        FileId,
         FilePath,
         Language,
         LineNumber,
@@ -240,7 +239,7 @@ def test_get_stats_degrades_gracefully_when_count_rows_raises(lancedb_provider):
     lancedb_provider.insert_chunks_batch(
         [
             Chunk(
-                file_id=file_id,
+                file_id=FileId(file_id),
                 code="def f(): pass",
                 start_line=LineNumber(1),
                 end_line=LineNumber(1),
@@ -251,16 +250,13 @@ def test_get_stats_degrades_gracefully_when_count_rows_raises(lancedb_provider):
         ]
     )
 
-    def broken_count(*_args, **_kwargs):
+    def broken_count(*_args: Any, **_kwargs: Any) -> Any:
         raise RuntimeError("simulated fragment read error")
 
+    assert lancedb_provider._chunks_table is not None
     lancedb_provider._chunks_table.count_rows = broken_count
 
     stats = lancedb_provider.get_stats()
 
-    assert stats["files"] >= 1, (
-        f"files_table should count independently, got {stats['files']}"
-    )
-    assert stats["chunks"] == 0, (
-        f"chunks count failure should yield 0 (graceful), got {stats['chunks']}"
-    )
+    assert stats["files"] >= 1, f"files_table should count independently, got {stats['files']}"
+    assert stats["chunks"] == 0, f"chunks count failure should yield 0 (graceful), got {stats['chunks']}"

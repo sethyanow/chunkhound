@@ -234,12 +234,8 @@ class CodexCLIProvider(BaseCLIProvider):
         """
         overlay = Path(tempfile.mkdtemp(prefix="chunkhound-codex-overlay-"))
         base = self._get_base_codex_home()
-        model_name, model_source = type(self).describe_model_resolution(
-            model_override or self._model
-        )
-        effort_value, effort_source = type(self).describe_reasoning_effort_resolution(
-            self._reasoning_effort_requested
-        )
+        model_name, model_source = type(self).describe_model_resolution(model_override or self._model)
+        effort_value, effort_source = type(self).describe_reasoning_effort_resolution(self._reasoning_effort_requested)
         try:
             if base and base.exists():
                 self._copy_minimal_codex_state(base, overlay)
@@ -254,9 +250,7 @@ class CodexCLIProvider(BaseCLIProvider):
             if model_source != "default":
                 cfg_lines.append(f"model = {self._toml_string(model_name)}")
             if effort_source != "default":
-                cfg_lines.append(
-                    f"model_reasoning_effort = {self._toml_string(effort_value)}"
-                )
+                cfg_lines.append(f"model_reasoning_effort = {self._toml_string(effort_value)}")
             if cfg_lines:
                 cfg_lines.append("")
             cfg_lines.extend(["[history]", 'persistence = "none"'])

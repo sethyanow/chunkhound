@@ -10,11 +10,11 @@ from collections.abc import Callable
 from concurrent.futures import ThreadPoolExecutor
 from typing import Any, TypeVar, overload
 
-_T = TypeVar("_T")
-
 from loguru import logger
 
 from chunkhound.utils.windows_constants import IS_WINDOWS, WINDOWS_FILE_HANDLE_DELAY
+
+_T = TypeVar("_T")
 
 # Thread-local storage for executor thread state
 _executor_local = threading.local()

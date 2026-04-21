@@ -5,7 +5,7 @@ import os
 import time
 from datetime import datetime
 from pathlib import Path
-from typing import TYPE_CHECKING, Any
+from typing import TYPE_CHECKING, Any, Literal, overload
 
 import numpy as np
 import pandas as pd
@@ -14,7 +14,14 @@ from loguru import logger
 
 from chunkhound.core.models import Chunk, Embedding, File
 from chunkhound.core.models.symbol import EdgeRow, SymbolRow
-from chunkhound.core.types.common import ChunkType, Language
+from chunkhound.core.types.common import (
+    ChunkId,
+    ChunkType,
+    Dimensions,
+    Language,
+    ModelName,
+    ProviderName,
+)
 
 # Import existing components that will be used by the provider
 from chunkhound.embeddings import EmbeddingManager
@@ -135,7 +142,7 @@ def _has_valid_embedding(x: Any) -> bool:
         return False
     # Check not all zeros (legacy placeholder detection)
     if isinstance(x, np.ndarray):
-        return np.any(x != 0)
+        return bool(np.any(x != 0))
     return any(v != 0 for v in x)
 
 
@@ -202,6 +209,11 @@ def _iter_batches(values: list[int], batch_size: int) -> list[list[int]]:
 
 class LanceDBProvider(SerialDatabaseProvider):
     """LanceDB implementation using serial executor pattern."""
+
+    # LanceDBProvider always coerces db_path to Path in __init__ (line below);
+    # narrow the inherited ``Path | str`` declaration so Path-only methods
+    # like .exists(), .rglob(), .parent, .name are type-safe.
+    _db_path: Path
 
     def __init__(
         self,
@@ -558,8 +570,9 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_insert_file(self, conn: Any, state: dict[str, Any], file: File) -> int:
         """Executor method for insert_file - runs in DB thread."""
-        if not self._files_table:
+        if self._files_table is None:
             self._executor_create_schema(conn, state)
+        assert self._files_table is not None, "create_schema must populate _files_table"
 
         # Store path as-is (now relative with forward slashes from IndexingCoordinator)
         normalized_path = file.path
@@ -588,16 +601,24 @@ class LanceDBProvider(SerialDatabaseProvider):
         # We need to query back because merge_insert doesn't return the ID
         result = self._files_table.search().where(f"path = '{normalized_path}'").to_list()
         if result:
-            return result[0]["id"]  # type: ignore[no-any-return]  # lancedb to_list() -> List[dict]
+            return int(result[0]["id"])
         else:
             # This should not happen, but handle gracefully
             logger.error(f"Failed to retrieve file ID after merge_insert for path: {normalized_path}")
-            return file_data["id"]
+            return int(file_data["id"])
 
     def get_file_by_path(self, path: str, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by path."""
         return self._execute_in_db_thread_sync(self._executor_get_file_by_path, path, as_model)
 
+    @overload
+    def _executor_get_file_by_path(
+        self, conn: Any, state: dict[str, Any], path: str, as_model: Literal[True]
+    ) -> File | None: ...
+    @overload
+    def _executor_get_file_by_path(
+        self, conn: Any, state: dict[str, Any], path: str, as_model: Literal[False] = False
+    ) -> dict[str, Any] | None: ...
     def _executor_get_file_by_path(
         self, conn: Any, state: dict[str, Any], path: str, as_model: bool = False
     ) -> dict[str, Any] | File | None:
@@ -629,10 +650,22 @@ class LanceDBProvider(SerialDatabaseProvider):
             logger.error(f"Error getting file by path: {e}")
             return None
 
+    @overload
+    def get_file_by_id(self, file_id: int, as_model: Literal[True]) -> File | None: ...
+    @overload
+    def get_file_by_id(self, file_id: int, as_model: Literal[False] = False) -> dict[str, Any] | None: ...
     def get_file_by_id(self, file_id: int, as_model: bool = False) -> dict[str, Any] | File | None:
         """Get file record by ID."""
         return self._execute_in_db_thread_sync(self._executor_get_file_by_id, file_id, as_model)
 
+    @overload
+    def _executor_get_file_by_id(
+        self, conn: Any, state: dict[str, Any], file_id: int, as_model: Literal[True]
+    ) -> File | None: ...
+    @overload
+    def _executor_get_file_by_id(
+        self, conn: Any, state: dict[str, Any], file_id: int, as_model: Literal[False] = False
+    ) -> dict[str, Any] | None: ...
     def _executor_get_file_by_id(
         self, conn: Any, state: dict[str, Any], file_id: int, as_model: bool = False
     ) -> dict[str, Any] | File | None:
@@ -665,7 +698,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         size_bytes: int | None = None,
         mtime: float | None = None,
         content_hash: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Update file record with new values."""
         return self._execute_in_db_thread_sync(self._executor_update_file, file_id, size_bytes, mtime, content_hash)
@@ -678,7 +711,7 @@ class LanceDBProvider(SerialDatabaseProvider):
         size_bytes: int | None = None,
         mtime: float | None = None,
         content_hash: str | None = None,
-        **kwargs,
+        **kwargs: Any,
     ) -> None:
         """Executor method for update_file - runs in DB thread."""
         if not self._files_table:
@@ -741,8 +774,9 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_insert_chunk(self, conn: Any, state: dict[str, Any], chunk: Chunk) -> int:
         """Executor method for insert_chunk - runs in DB thread."""
-        if not self._chunks_table:
+        if self._chunks_table is None:
             self._executor_create_schema(conn, state)
+        assert self._chunks_table is not None, "create_schema must populate _chunks_table"
 
         chunk_data = {
             "id": self._generate_chunk_id_safe(chunk),
@@ -786,8 +820,9 @@ class LanceDBProvider(SerialDatabaseProvider):
         if not chunks:
             return []
 
-        if not self._chunks_table:
+        if self._chunks_table is None:
             self._executor_create_schema(conn, state)
+        assert self._chunks_table is not None, "create_schema must populate _chunks_table"
 
         # Process in optimal batch sizes (LanceDB best practice: 1000+ items)
         batch_size = 1000
@@ -841,10 +876,22 @@ class LanceDBProvider(SerialDatabaseProvider):
         logger.debug(f"Completed bulk insert of {len(chunks)} chunks in batches")
         return all_chunk_ids
 
+    @overload
+    def get_chunk_by_id(self, chunk_id: int, as_model: Literal[True]) -> Chunk | None: ...
+    @overload
+    def get_chunk_by_id(self, chunk_id: int, as_model: Literal[False] = False) -> dict[str, Any] | None: ...
     def get_chunk_by_id(self, chunk_id: int, as_model: bool = False) -> dict[str, Any] | Chunk | None:
         """Get chunk record by ID."""
         return self._execute_in_db_thread_sync(self._executor_get_chunk_by_id, chunk_id, as_model)
 
+    @overload
+    def _executor_get_chunk_by_id(
+        self, conn: Any, state: dict[str, Any], chunk_id: int, as_model: Literal[True]
+    ) -> Chunk | None: ...
+    @overload
+    def _executor_get_chunk_by_id(
+        self, conn: Any, state: dict[str, Any], chunk_id: int, as_model: Literal[False] = False
+    ) -> dict[str, Any] | None: ...
     def _executor_get_chunk_by_id(
         self, conn: Any, state: dict[str, Any], chunk_id: int, as_model: bool = False
     ) -> dict[str, Any] | Chunk | None:
@@ -875,13 +922,25 @@ class LanceDBProvider(SerialDatabaseProvider):
             logger.error(f"Error getting chunk by ID: {e}")
             return None
 
-    def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any] | Chunk]:
+    @overload
+    def get_chunks_by_file_id(self, file_id: int, as_model: Literal[True]) -> list[Chunk]: ...
+    @overload
+    def get_chunks_by_file_id(self, file_id: int, as_model: Literal[False] = False) -> list[dict[str, Any]]: ...
+    def get_chunks_by_file_id(self, file_id: int, as_model: bool = False) -> list[dict[str, Any]] | list[Chunk]:
         """Get all chunks for a specific file."""
         return self._execute_in_db_thread_sync(self._executor_get_chunks_by_file_id, file_id, as_model)
 
+    @overload
+    def _executor_get_chunks_by_file_id(
+        self, conn: Any, state: dict[str, Any], file_id: int, as_model: Literal[True]
+    ) -> list[Chunk]: ...
+    @overload
+    def _executor_get_chunks_by_file_id(
+        self, conn: Any, state: dict[str, Any], file_id: int, as_model: Literal[False] = False
+    ) -> list[dict[str, Any]]: ...
     def _executor_get_chunks_by_file_id(
         self, conn: Any, state: dict[str, Any], file_id: int, as_model: bool = False
-    ) -> list[dict[str, Any] | Chunk]:
+    ) -> list[dict[str, Any]] | list[Chunk]:
         """Executor method for get_chunks_by_file_id - runs in DB thread."""
         if not self._chunks_table:
             return []
@@ -1008,23 +1067,26 @@ class LanceDBProvider(SerialDatabaseProvider):
             except Exception as e:
                 logger.error(f"Error deleting chunk {chunk_id}: {e}")
 
-    def update_chunk(self, chunk_id: int, **kwargs) -> None:
+    def update_chunk(self, chunk_id: int, **kwargs: Any) -> None:
         """Update chunk record with new values."""
         # LanceDB doesn't support in-place updates, need to implement via delete/insert
         pass
 
     # Embedding Operations
     def insert_embedding(self, embedding: Embedding) -> int:
-        """Insert embedding record and return embedding ID."""
-        # In LanceDB, embeddings are stored directly in the chunks table
-        # This is a no-op since we use insert_embeddings_batch for efficiency
-        return embedding.id or 0
+        """Insert embedding record and return embedding ID.
+
+        No-op in LanceDB: embeddings are stored in the chunks table via
+        ``insert_embeddings_batch``. Returns 0 since there is no separate
+        embedding row to address.
+        """
+        return 0
 
     def insert_embeddings_batch(
         self,
         embeddings_data: list[dict],
         batch_size: int | None = None,
-        connection=None,
+        connection: Any = None,
     ) -> int:
         """Insert multiple embedding vectors efficiently using merge_insert."""
         return self._execute_in_db_thread_sync(self._executor_insert_embeddings_batch, embeddings_data, batch_size)
@@ -1155,9 +1217,12 @@ class LanceDBProvider(SerialDatabaseProvider):
                 batch = embeddings_data[i : i + batch_size]
 
                 # Build lookup of chunk_id -> embedding data
-                embedding_lookup = {}
+                embedding_lookup: dict[Any, dict[str, Any]] = {}
                 for e in batch:
                     embedding = e.get("embedding", e.get("vector"))
+                    if embedding is None:
+                        logger.warning(f"Skipping embedding record with no vector: chunk_id={e.get('chunk_id')}")
+                        continue
                     # Ensure embedding is a list
                     if hasattr(embedding, "tolist"):
                         embedding = embedding.tolist()
@@ -1294,10 +1359,10 @@ class LanceDBProvider(SerialDatabaseProvider):
         created_at = datetime.fromtimestamp(created_time) if created_time else None
 
         return Embedding(
-            chunk_id=chunk_id,
-            provider=chunk.get("provider", provider),
-            model=chunk.get("model", model),
-            dims=len(chunk["embedding"]),
+            chunk_id=ChunkId(chunk_id),
+            provider=ProviderName(chunk.get("provider", provider)),
+            model=ModelName(chunk.get("model", model)),
+            dims=Dimensions(len(chunk["embedding"])),
             vector=chunk["embedding"],
             created_at=created_at,
         )
@@ -1648,11 +1713,14 @@ class LanceDBProvider(SerialDatabaseProvider):
             paginated_results = results[offset : offset + page_size]
 
             # Format results to match DuckDB output and exclude raw embeddings
-            file_map = self._fetch_file_paths_by_ids([r.get("file_id") for r in paginated_results if "file_id" in r])
+            file_map = self._fetch_file_paths_by_ids(
+                [fid for r in paginated_results if (fid := r.get("file_id")) is not None]
+            )
             formatted_results = []
             for result in paginated_results:
                 # Get file path from cached batch lookup
-                file_path = file_map.get(result.get("file_id"), "")
+                fid = result.get("file_id")
+                file_path = file_map.get(fid, "") if fid is not None else ""
 
                 # Convert _distance to similarity (1 - distance for cosine)
                 similarity = 1.0 - result.get("_distance", 0.0) if "_distance" in result else 1.0
@@ -1794,11 +1862,14 @@ class LanceDBProvider(SerialDatabaseProvider):
                 if len(filtered_results) >= limit:
                     break
 
-            file_map = self._fetch_file_paths_by_ids([r.get("file_id") for r, _ in filtered_results if "file_id" in r])
+            file_map = self._fetch_file_paths_by_ids(
+                [fid for r, _ in filtered_results if (fid := r.get("file_id")) is not None]
+            )
 
             formatted_results = []
             for result, similarity in filtered_results:
-                file_path = file_map.get(result.get("file_id"), "")
+                fid = result.get("file_id")
+                file_path = file_map.get(fid, "") if fid is not None else ""
                 formatted_results.append(
                     {
                         "chunk_id": result["id"],
@@ -1862,10 +1933,11 @@ class LanceDBProvider(SerialDatabaseProvider):
             paginated = results[offset : offset + page_size]
 
             # Format results with file paths
-            file_map = self._fetch_file_paths_by_ids([r.get("file_id") for r in paginated if "file_id" in r])
+            file_map = self._fetch_file_paths_by_ids([fid for r in paginated if (fid := r.get("file_id")) is not None])
             formatted = []
             for result in paginated:
-                file_path = file_map.get(result.get("file_id"), "")
+                fid = result.get("file_id")
+                file_path = file_map.get(fid, "") if fid is not None else ""
 
                 formatted.append(
                     {
@@ -2100,6 +2172,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
         # Call process_file with embeddings enabled for real-time indexing
         # This ensures embeddings are generated immediately for modified files
+        assert self._indexing_coordinator is not None, "_initialize_shared_instances must set _indexing_coordinator"
         return await self._indexing_coordinator.process_file(file_path, skip_embeddings=False)
 
     # Health and Diagnostics
@@ -2113,7 +2186,7 @@ class LanceDBProvider(SerialDatabaseProvider):
 
     def _executor_get_fragment_count(self, conn: Any, state: dict[str, Any]) -> dict[str, int]:
         """Executor method for get_fragment_count - runs in DB thread."""
-        result = {}
+        result: dict[str, int] = {}
 
         if self._chunks_table:
             try:
@@ -2344,9 +2417,10 @@ class LanceDBProvider(SerialDatabaseProvider):
         max_line: int,
     ) -> list[dict[str, Any]]:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
+        escaped_path = _escape_lance_string(file_path)
         results = (
             sym_tbl.search()
-            .where(f"file_path = '{_escape_lance_string(file_path)}' AND range_start <= {max_line} AND range_end >= {min_line}")
+            .where(f"file_path = '{escaped_path}' AND range_start <= {max_line} AND range_end >= {min_line}")
             .to_list()
         )
         return [dict(r) for r in results]
@@ -2367,7 +2441,11 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_query_symbols_by_fqn_exists(self, conn: Any, state: dict[str, Any], fqn: str, file_path: str) -> bool:
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         results = (
-            sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}' AND file_path = '{_escape_lance_string(file_path)}'").select(["id"]).limit(1).to_list()
+            sym_tbl.search()
+            .where(f"fqn = '{_escape_lance_string(fqn)}' AND file_path = '{_escape_lance_string(file_path)}'")
+            .select(["id"])
+            .limit(1)
+            .to_list()
         )
         return len(results) > 0
 
@@ -2515,7 +2593,6 @@ class LanceDBProvider(SerialDatabaseProvider):
                     }
                 )
 
-
         if not nodes:
             return [], []
 
@@ -2543,7 +2620,12 @@ class LanceDBProvider(SerialDatabaseProvider):
         """Get neighboring FQNs from edges (called within executor thread)."""
         neighbors: list[str] = []
         # Forward edges: from this FQN
-        fwd = edge_tbl.search().where(f"from_fqn = '{_escape_lance_string(fqn)}'").select(["to_fqn", "edge_kind"]).to_list()
+        fwd = (
+            edge_tbl.search()
+            .where(f"from_fqn = '{_escape_lance_string(fqn)}'")
+            .select(["to_fqn", "edge_kind"])
+            .to_list()
+        )
         for e in fwd:
             if edge_kind and e["edge_kind"] != edge_kind:
                 continue
@@ -2551,7 +2633,12 @@ class LanceDBProvider(SerialDatabaseProvider):
 
         if not directed:
             # Backward edges: to this FQN
-            bwd = edge_tbl.search().where(f"to_fqn = '{_escape_lance_string(fqn)}'").select(["from_fqn", "edge_kind"]).to_list()
+            bwd = (
+                edge_tbl.search()
+                .where(f"to_fqn = '{_escape_lance_string(fqn)}'")
+                .select(["from_fqn", "edge_kind"])
+                .to_list()
+            )
             for e in bwd:
                 if edge_kind and e["edge_kind"] != edge_kind:
                     continue
@@ -2773,6 +2860,8 @@ class LanceDBProvider(SerialDatabaseProvider):
     def _executor_chunk_resolution(self, conn: Any, state: dict[str, Any], fqns: list[str]) -> list[dict[str, Any]]:
         if not fqns:
             return []
+        if self._files_table is None or self._chunks_table is None:
+            return []
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
 
         results: list[dict[str, Any]] = []
@@ -2853,7 +2942,13 @@ class LanceDBProvider(SerialDatabaseProvider):
         sym_tbl, edge_tbl = self._ensure_symbol_tables(conn, state)
         result: dict[str, str | None] = {}
         for fqn in fqns:
-            rows = sym_tbl.search().where(f"fqn = '{_escape_lance_string(fqn)}'").select(["fqn", "type_signature"]).limit(1).to_list()
+            rows = (
+                sym_tbl.search()
+                .where(f"fqn = '{_escape_lance_string(fqn)}'")
+                .select(["fqn", "type_signature"])
+                .limit(1)
+                .to_list()
+            )
             if rows:
                 ts = rows[0].get("type_signature", "")
                 result[fqn] = ts if ts else None

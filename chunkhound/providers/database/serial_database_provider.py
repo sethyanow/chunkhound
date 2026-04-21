@@ -5,8 +5,6 @@ from collections.abc import Callable
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, TypeVar, overload
 
-_T = TypeVar("_T")
-
 from loguru import logger
 
 from chunkhound.core.models import Chunk, File
@@ -14,6 +12,8 @@ from chunkhound.core.models.symbol import EdgeRow, SymbolRow
 from chunkhound.embeddings import EmbeddingManager
 from chunkhound.file_discovery_cache import FileDiscoveryCache
 from chunkhound.providers.database.serial_executor import SerialDatabaseExecutor
+
+_T = TypeVar("_T")
 
 # Type hinting only
 if TYPE_CHECKING:

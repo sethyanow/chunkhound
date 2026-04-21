@@ -98,10 +98,12 @@ git add -u && git commit -m "fix(lancedb): use count_rows() in get_stats to avoi
 - [x] Spot-check confirms no caller of `get_stats()` regresses on embeddings removal (verified at serial_database_provider.py:541 and rich_output.py:613 — both use `.get(..., 0)`; no direct `stats["embeddings"]` indexing anywhere)
 - [x] Both regression tests in `tests/integration/test_lancedb_stats.py` pass
 - [x] Existing LanceDB provider tests still pass (95 passed)
-- [ ] Live verification: after fix, MCP `get_stats` on this repo returns real counts (not 0) — deferred to ch-9xh Phase 5 acceptance demo
+- [ ] Live verification: after fix, MCP `get_stats` on this repo returns real counts (not 0)
 - [x] Both counts assigned via `int(table.count_rows())` to normalize return type
 - [x] Per-table try/except preserved with `logger.warning(...)` on failure (graceful degradation, not silent swallow)
 - [x] Adversarial battery added: partial disconnect, idempotence, graceful degradation — all pass
+- [ ] Fixture uses batched inserts (≤5K chunks per batch), not bulk-in-memory — verify peak memory stays bounded (SUPERSEDED: test strategy pivoted from 50K-chunk fixture to 1-chunk + shadow-to-forbid `.to_pandas()`. Batched-insert criterion no longer applies to this test. If you want the 50K-chunk behavior test as a separate, additive verification, file a follow-up.)
+- [ ] `size_mb` semantic change noted (side effect of type cleanup): previously float (e.g., 0.7 for sub-MB DBs), now truncated int (0). Changed to honor the declared `dict[str, int]` contract. User-visible in `rich_output.py:613` which reads this field. Acceptable or revert?
 
 ## Anti-Patterns
 - NO `.to_pandas()` to count rows — O(table size) materialization
