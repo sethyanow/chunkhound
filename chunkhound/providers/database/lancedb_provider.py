@@ -2032,10 +2032,18 @@ class LanceDBProvider(SerialDatabaseProvider):
         fragment count, not row content. The ``embeddings`` key is dropped
         (was "chunks with valid embedding", a semantic metric we can't get
         cheaply); callers default to 0 via ``.get("embeddings", 0)``.
+
+        Tables are lazy-attached if None (mirrors ``_ensure_symbol_tables``) so
+        ``get_stats`` works even when called before any write operation has
+        triggered schema creation — e.g., after an MCP daemon restart on an
+        existing DB.
         """
         stats: dict[str, int] = {"files": 0, "chunks": 0, "size_mb": 0}
 
         try:
+            if self._files_table is None or self._chunks_table is None:
+                self._executor_create_schema(conn, state)
+
             if self._files_table is not None:
                 try:
                     stats["files"] = int(self._files_table.count_rows())

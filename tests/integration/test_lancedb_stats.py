@@ -118,12 +118,17 @@ def test_get_stats_empty_db_returns_zeros(lancedb_provider: LanceDBProvider) -> 
 # - Redundant: counts are counts regardless of duplication.
 
 
-def test_get_stats_partial_disconnect_files_table_none(lancedb_provider: LanceDBProvider) -> None:
-    """One table is None, the other is live — adversarial: per-table independence.
+def test_get_stats_lazy_attaches_tables_when_none(lancedb_provider: LanceDBProvider) -> None:
+    """Tables=None triggers lazy-attach, not zero-return.
 
-    The ``is not None`` checks (ch-3zc) should handle each table independently.
-    If the guards were ever collapsed into a single check or shared state, a
-    partially-disconnected provider would silently return wrong counts.
+    Regression for the live-DB scenario (ch-3zc discovered during acceptance):
+    after an MCP daemon restart, ``_files_table`` / ``_chunks_table`` are None
+    until some operation triggers ``_executor_create_schema``. ``_ensure_symbol_tables``
+    already does this lazily — which is why ``symbol_stats`` worked on the live
+    DB while ``get_stats`` returned 0.
+
+    ``get_stats`` must mirror that pattern: when either table is None, call
+    ``_executor_create_schema`` to attach it, then count.
     """
     from chunkhound.core.models import Chunk, File
     from chunkhound.core.types.common import (
@@ -156,13 +161,19 @@ def test_get_stats_partial_disconnect_files_table_none(lancedb_provider: LanceDB
         ]
     )
 
-    # Simulate a partial-disconnect: files_table reference dropped, chunks intact.
+    # Simulate post-restart state where table references are dropped but the
+    # underlying DB is persistent.
     lancedb_provider._files_table = None
+    lancedb_provider._chunks_table = None
 
     stats = lancedb_provider.get_stats()
 
-    assert stats["files"] == 0, f"files_table=None should yield files=0, got {stats['files']}"
-    assert stats["chunks"] >= 1, f"chunks_table should still count independently, got {stats['chunks']}"
+    assert stats["files"] >= 1, (
+        f"files_table=None should trigger lazy-attach and yield real count, got {stats['files']}"
+    )
+    assert stats["chunks"] >= 1, (
+        f"chunks_table=None should trigger lazy-attach and yield real count, got {stats['chunks']}"
+    )
 
 
 def test_get_stats_is_idempotent(lancedb_provider: LanceDBProvider) -> None:
