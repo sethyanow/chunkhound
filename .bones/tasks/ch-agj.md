@@ -7,6 +7,7 @@ priority: 1
 ---
 
 
+
 ## Goal
 
 Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding interface so:
@@ -37,7 +38,17 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 - Only support `passage` + `query` task values now. `separation`/`classification`/`text-matching` are jina extras not currently used by ChunkHound's retrieval pipeline (KISS)
 - Python target: `pyproject.toml` declares `>=3.10,<3.14`. Plain `EmbeddingTask = Literal["passage", "query"] | None` works on 3.10 AND 3.13 — no PEP 695 `type` statement needed
 - Tests live flat in `tests/unit/` (no subdirs) — matches existing convention (`tests/unit/test_voyageai_provider.py` exists)
+- pytest-asyncio mode is `"auto"` (`pyproject.toml:203`) — async tests do NOT need `@pytest.mark.asyncio` decorator
 - Shared validator placed in `chunkhound/interfaces/embedding_provider.py` (not deferred per Rule of Three) — explicit user direction
+
+**Schema/registry plumbing (additional to provider class work):**
+- `EmbeddingConfig.provider` at `embedding_config.py:97` is `Literal["openai", "voyageai"]` — Pydantic will REJECT `"tei"` until literal is widened. Multiple if/elif chains reference provider name (lines 206, 307, 319, 344, 367, 456) and need audit.
+- Factory at `embedding_factory.py:34` uses explicit if/elif dispatch with `_create_openai_provider` and `_create_voyageai_provider` static helpers — TEI needs a parallel `_create_tei_provider` helper, not just a case branch
+- `chunkhound/embeddings.py:177` defines `create_openai_provider(...)` factory function — TEI needs a parallel `create_tei_provider(...)` factory function exported from the same module
+- `OpenAIEmbeddingProvider.name` is `@property` at `openai_provider.py:431-437` (returns `"azure_openai"` or `"openai"`) — TEI subclass can override with `@property` returning `"tei"` cleanly
+
+**Cross-cut behavior (positive confirmation):**
+- DB tables are keyed by `(provider, model, dims)`. Switching provider config from `voyageai` to `tei` writes new embeddings to a separate table; existing voyage embeddings in this repo stay intact and become "dormant" (not deleted, not regenerated). This satisfies "don't disturb" automatically — no code change needed for it.
 
 ## Implementation Steps
 
@@ -129,9 +140,11 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
   - The existing `_embed_batch_internal` calls `_embed_batch_with_extras(texts, extra_body=None)` (preserves OpenAI behavior)
 - File: `chunkhound/providers/embeddings/tei_provider.py` (new)
 - Class `TEIEmbeddingProvider(OpenAIEmbeddingProvider)`:
-  - `name` property returns `"tei"`
-  - No method overrides yet — shell only
+  - Override `@property name` to return `"tei"` (parent's `name` at `openai_provider.py:431-437` is a `@property`, so `@property` override in subclass takes effect cleanly)
+  - No other method overrides yet — shell only
+- Add unit test asserting `TEIEmbeddingProvider(...).name == "tei"` and `supports_reranking() is False` when constructed with embedding-only config (no `rerank_format` set) — confirms inherited rerank methods stay dormant
 - Run step 11 tests; expected pass
+- Commit: `refactor(openai): extract _embed_batch_with_extras for shared batch logic (ch-agj)`
 
 **Step 13: Failing tests for TEI task→extra_body mapping**
 - File: `tests/unit/test_tei_provider.py` (extend)
@@ -141,30 +154,46 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
   - `test_embed_raises_value_error_on_unknown_task` — parametrize over invalid values via shared validator
 - Run: expected fail
 
-**Step 14: Implement TEI `_embed_batch_internal` override**
+**Step 14: Implement TEI `_embed_batch_internal` override + commit**
 - File: `chunkhound/providers/embeddings/tei_provider.py`
 - Override `async def _embed_batch_internal(self, texts, task=None)`:
   - Call `validate_task(task)` first
   - Build `extra_body`: if task is None, `extra_body=None`; if `"passage"`, `{"task": "retrieval.passage"}`; if `"query"`, `{"task": "retrieval.query"}`
   - Delegate to inherited `self._embed_batch_with_extras(texts, extra_body=extra_body)`
 - Run tests; expected pass
+- Commit: `feat(tei): add TEIEmbeddingProvider with task→extra_body mapping (ch-agj)`
 
-**Step 15: Failing test for factory recognizes provider="tei"**
-- File: `tests/unit/test_embedding_factory.py` (new — verify with `ls tests/unit/`; if existing factory test file present, extend it)
-- Test: `test_factory_creates_tei_provider` — call `EmbeddingProviderFactory.create_provider(EmbeddingConfig(provider="tei", model="jinaai/jina-embeddings-v3", base_url="http://localhost:8080/v1", dims=1024))`; assert returned instance is `TEIEmbeddingProvider`
-- Run: expected fail
+**Step 15: Update `EmbeddingConfig` schema to accept `provider="tei"`**
+- File: `chunkhound/core/config/embedding_config.py`
+- Update `provider` field at line 97 from `Literal["openai", "voyageai"]` to `Literal["openai", "voyageai", "tei"]` and update the description at line 98 to list `tei`
+- Audit and update all if/elif chains that hardcode the existing two providers — at lines 206, 307, 319, 344, 367, 456 — read each first, decide whether `"tei"` needs a branch or shares OpenAI's path
+- Update `is_provider_configured`, `get_missing_config`, `get_provider_config` methods so `"tei"` is recognized: TEI requires `model`, `base_url`, and `dims` (no `api_key` requirement — TEI server may or may not require auth)
+- Add a model-validator branch: when `provider == "tei"`, `base_url` MUST be set (raise ValueError otherwise — TEI server URL is non-optional)
+- Update `choices=["openai", "voyageai"]` reference at line 367 to include `"tei"`
 
-**Step 16: Add `tei` factory case + commit**
+**Step 16: Failing tests for factory + registry creating TEIEmbeddingProvider**
+- File: `tests/unit/test_embedding_factory.py` (verify exists with `ls tests/unit/`; if absent, create new; if existing, extend)
+- Tests:
+  - `test_embedding_config_accepts_tei_provider` — construct `EmbeddingConfig(provider="tei", model="jinaai/jina-embeddings-v3", base_url="http://localhost:8080/v1", dims=1024)`; no Pydantic ValidationError raised
+  - `test_embedding_config_rejects_tei_without_base_url` — same construction without `base_url`; assert ValidationError raised mentioning base_url
+  - `test_factory_creates_tei_provider` — call `EmbeddingProviderFactory.create_provider(<the valid config>)`; assert returned instance is `TEIEmbeddingProvider`
+  - `test_create_tei_provider_factory_function_returns_tei_provider` — test the standalone `create_tei_provider` factory function exported from `chunkhound.embeddings`
+- Run: expected fail (schema not yet widened, no factory case, no registry function)
+
+**Step 17: Add `_create_tei_provider` factory helper + `create_tei_provider` registry function + factory dispatch case**
 - File: `chunkhound/core/config/embedding_factory.py`
-- Read the file first to match existing dispatch pattern (likely `if/elif` or `match/case` on `config.provider`)
-- Add case: `provider == "tei"` → `return TEIEmbeddingProvider(config)`
-- Add import for `TEIEmbeddingProvider` from `chunkhound.providers.embeddings.tei_provider`
+  - Add static method `_create_tei_provider(provider_config: dict[str, Any]) -> TEIEmbeddingProvider` mirroring the structure of `_create_openai_provider` at line 67+ (extract api_key/base_url/model/rerank_*/azure_* from provider_config; instantiate via the registry function)
+  - Import `from chunkhound.embeddings import create_tei_provider`
+  - Add dispatch case: `elif config.provider == "tei": return EmbeddingProviderFactory._create_tei_provider(provider_config)`
+- File: `chunkhound/embeddings.py`
+  - Add `create_tei_provider(api_key=..., base_url, model, dims, ...) -> TEIEmbeddingProvider` factory function mirroring `create_openai_provider` at line 177 (signature parallels OpenAI's; extra: `dims` is required for TEI since no model registry can auto-discover it)
+  - Re-export `TEIEmbeddingProvider` from this module
 - Run tests; expected pass
-- Single commit covering steps 11-16: `feat(tei): add TEIEmbeddingProvider for jina-v3/v5 task hint via extra_body (ch-agj)`
+- Commit: `feat(tei): wire TEIEmbeddingProvider into config schema, factory, and registry (ch-agj)`
 
 ### Group E — Call sites
 
-**Step 17: Failing tests for passage call sites**
+**Step 18: Failing tests for passage call sites**
 - File: `tests/unit/test_embedding_call_sites_passage.py` (new)
 - Module-level `pytest.fixture` for a mocked embedding provider with `AsyncMock`-backed `embed`/`embed_batch`
 - Tests (AAA structure):
@@ -174,7 +203,7 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
   - `test_clustering_service_passes_task_passage` — parametrize over the 3 entry methods that hit `clustering_service.py:97/199/396`
 - Run: expected fail
 
-**Step 18: Update passage call sites + commit**
+**Step 19: Update passage call sites + commit**
 - Edits (add `task="passage"` kwarg):
   - `chunkhound/services/embedding_service.py:487`
   - `chunkhound/services/indexing_coordinator.py:1596`
@@ -183,7 +212,7 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 - Run tests; expected pass
 - Commit: `feat(embed): pass task='passage' from indexing and clustering paths (ch-agj)`
 
-**Step 19: Failing tests + implementation + commit for query call sites**
+**Step 20: Failing tests + implementation + commit for query call sites**
 - File: `tests/unit/test_embedding_call_sites_query.py` (new)
 - Tests:
   - `test_single_hop_strategy_passes_task_query` — drive `single_hop_strategy.py:66` path
@@ -197,7 +226,7 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 
 ### Group F — Cache regression + verification
 
-**Step 20: Cache identity regression test**
+**Step 21: Cache identity regression test**
 - File: `tests/unit/test_embedding_cache_identity.py` (new)
 - Tests:
   - `test_get_existing_embeddings_call_signature_excludes_task` — mock `db.get_existing_embeddings`; run `_filter_existing_embeddings`; assert mock called with kwargs `{chunk_ids, provider, model}` only — no `task`, no `content_hash`
@@ -205,14 +234,14 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 - Run: expected pass (verifies current behavior preserved)
 - Commit: `test(embed): regression test confirms task hint excluded from cache identity (ch-agj)`
 
-**Step 21: Full unit + integration suite + targeted mypy**
+**Step 22: Full unit + integration suite + targeted mypy**
 - Run: `uv run pytest -m "unit or integration" tests/ -v`
 - Expected: green
 - Triage: if any preexisting test breaks because it constructs a mock provider with the old signature, update the mock to accept `task=None`. Note in commit message which test files were touched purely for shape compatibility
 - Run: `uv run mypy chunkhound/interfaces/embedding_provider.py chunkhound/providers/embeddings/ chunkhound/core/config/embedding_factory.py chunkhound/services/embedding_service.py chunkhound/services/indexing_coordinator.py chunkhound/services/search/single_hop_strategy.py chunkhound/services/research/shared/gap_detection.py chunkhound/services/clustering_service.py`
 - Expected: clean for touched files (rest of codebase has known errors per ch-6ea — don't fix here)
 
-**Step 22: Bones log + final commit (if needed)**
+**Step 23: Bones log + final commit (if needed)**
 - `bn log ch-agj "Plumbing complete: protocol + 3 providers (Voyage, OpenAI, TEI) + factory + 8 call sites. Cache identity unchanged. TEI provider ready for jina-v5 testing. Voyage rerank untouched. <commit list>"`
 - Final commit only if anything outstanding from step 21 triage
 
@@ -222,12 +251,14 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 - [ ] All 4 protocol methods accept optional `task=None`
 - [ ] Voyage maps task → input_type with explicit `ValueError` on unknown values
 - [ ] OpenAI silently accepts task; recursive fallback threads it through closure
-- [ ] `TEIEmbeddingProvider` class exists, registered in factory, sends `extra_body={"task": "retrieval.{passage,query}"}` for jina models
+- [ ] `EmbeddingConfig.provider` Literal widened to include `"tei"`; provider-specific config branches updated; model-validator enforces `base_url` required when `provider="tei"`
+- [ ] `TEIEmbeddingProvider` class exists, registered in factory via `_create_tei_provider`, exported from `chunkhound/embeddings.py` via `create_tei_provider`, sends `extra_body={"task": "retrieval.{passage,query}"}` for jina models
+- [ ] `TEIEmbeddingProvider.name` returns `"tei"`; `supports_reranking()` returns `False` when constructed with embedding-only config (no `rerank_format`)
 - [ ] All 6 passage sites pass `task="passage"`; both query sites pass `task="query"`
-- [ ] Cache regression test green — existing Voyage embeddings on this repo NOT regenerated when reindexed
+- [ ] Cache regression test green — existing Voyage embeddings on this repo NOT regenerated when reindexed (DB tables keyed by `(provider, model, dims)` — voyage embeddings go dormant when switching to TEI, not deleted, not regenerated)
 - [ ] Voyage `rerank` method unchanged
 - [ ] `uv run pytest -m "unit or integration"` green
-- [ ] Mypy clean on all touched files
+- [ ] Mypy clean on touched-file deltas (preexisting errors stay for ch-6ea — see Anti-Patterns)
 - [ ] User can `cp .chunkhound.json` with `provider: "tei"` and a TEI deployment URL to test jina-v5 on a private repo
 
 ## Out of Scope (explicit non-goals)
@@ -245,8 +276,14 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 - DO NOT add live API tests — all tests use mocks
 - DO NOT silently fallback to a default when an unknown task value is passed — fail loudly with `ValueError` from `validate_task`
 - DO NOT pre-empt jina-v5-nano/small testing — that's a separate task gated on this one closing
-- DO NOT swallow stderr or hide preexisting test failures during step 21; document them and proceed only if unrelated
+- DO NOT swallow stderr or hide preexisting test failures during step 22; document them and proceed only if unrelated
+- DO NOT fix preexisting mypy errors on `voyageai_provider.py` / `openai_provider.py` / other touched files unless they were INTRODUCED by this change. Last session (ch-3zc) ballooned from "fix get_stats" to "fix 37 mypy errors" via CLAUDE.md's resolve-on-sight rule. For ch-agj, scope discipline: note preexisting errors in commit body, leave them for ch-6ea. If you find yourself fixing more than ~3 unrelated mypy errors, STOP and ask
+- DO NOT lump Group D into one giant commit — split into three per the steps: (a) `refactor(openai): extract _embed_batch_with_extras` (step 12), (b) `feat(tei): add TEIEmbeddingProvider with task→extra_body` (step 14), (c) `feat(tei): wire TEIEmbeddingProvider into config schema, factory, and registry` (step 17). Three commits, NOT one
+- DO NOT add `@pytest.mark.asyncio` decorator to async tests — pytest-asyncio mode is `"auto"` repo-wide (`pyproject.toml:203`). Just write `async def test_...`
+- DO NOT skip the rerank-default test in step 12 — TEIEmbeddingProvider inherits OpenAI's rerank methods; the assertion that `supports_reranking() is False` for embedding-only TEI config is a regression guard against future surprises
+- DO NOT assume `name` override "just works" without verifying mechanism. Confirmed in step 12 prep: parent's `name` at `openai_provider.py:431-437` is a `@property`, so `@property` override in subclass is the correct pattern. If you find an `__init__`-set attribute instead, route around it
 
 ## Log
 
 - [2026-04-24T23:05:40Z] [Seth Yanow] Plan written. 22 steps across 6 groups: type infra+validator, Voyage, OpenAI, TEI/jina provider (subclasses OpenAI, sends extra_body), passage call sites, query call sites, cache regression. Subclassing extracts shared _embed_batch_with_extras to avoid retry-loop duplication. Validated against design-patterns/error-handling/code-style/anti-patterns/type-safety/testing-patterns skills. Cache identity stays (chunk_id, provider, model) — existing Voyage embeddings on this repo will NOT be regenerated. Awaiting user execution; user gated on live runs.
+- [2026-04-24T23:24:18Z] [Seth Yanow] Plan v3 amended: added Step 15 (EmbeddingConfig schema widening for tei), Step 16 (factory + registry tests), Step 17 (factory _create_tei_provider helper + chunkhound/embeddings.py registry function + commit). Renumbered subsequent steps. Anti-patterns expanded with mypy scope discipline, commit splitting (3 commits in Group D), pytest-asyncio mode notice, rerank-default test, name @property verification. Success criteria expanded for schema/registry/name/rerank checks. dims-keyed DB table behavior documented as positive confirmation.
