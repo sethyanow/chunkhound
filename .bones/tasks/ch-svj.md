@@ -6,6 +6,7 @@ type: task
 priority: 2
 ---
 
+
 ## Requirements
 
 Add `task: str | None = None` parameter to the embedding provider interface and thread it to all call sites so that:
@@ -76,18 +77,27 @@ Mock `AsyncOpenAI` client. Assertions:
 
 Run: `uv run pytest tests/providers/test_openai_embedding_task.py -v` → expect failure.
 
-### Step 3: Make Step 2 pass — OpenAI provider plumbing
+### Step 3: OpenAI provider — add task to public method signatures
 
 **File:** `chunkhound/providers/embeddings/openai_provider.py`
 
-- Add `task: str | None = None` to public methods at lines 586 (`embed`), 639 (`embed_single`), 644 (`embed_batch`), 691 (`embed_streaming`). Thread through to `_embed_batch_internal(texts, task=None)`.
-- In `_embed_batch_internal` (line 697), build kwargs conditionally:
-  ```
-  create_kwargs = {"model": ..., "input": texts, "timeout": ...}
-  if task is not None:
-      create_kwargs["extra_body"] = {"task": task}
-  response = await self._client.embeddings.create(**create_kwargs)
-  ```
+Add `task: str | None = None` kwarg to four public methods:
+- `embed` (line 586)
+- `embed_single` (line 639)
+- `embed_batch` (line 644)
+- `embed_streaming` (line 691)
+
+Each method forwards `task` to `_embed_batch_internal` (new signature `_embed_batch_internal(texts, task=None)`).
+
+No request-shape changes in this step — just the type plumbing. Step 2 test still fails.
+
+### Step 3b: OpenAI provider — forward task to the SDK
+
+**File:** same
+
+In `_embed_batch_internal` (line 697), when `task is not None`, include it in the `embeddings.create(...)` call via the SDK's `extra_body` kwarg. When `task is None`, do **not** pass `extra_body` — default behavior unchanged.
+
+Decision: use `extra_body` (not a positional arg) because the openai SDK's `embeddings.create()` signature doesn't accept arbitrary kwargs, but `extra_body` is the documented escape hatch for non-standard fields.
 
 Run Step 2 test → expect pass.
 
@@ -97,18 +107,15 @@ Run Step 2 test → expect pass.
 
 Mock a sequence: first call raises `openai.BadRequestError("maximum context length exceeded")`, recursive call with smaller batch succeeds. Assert **both** calls carry the same `extra_body={"task": "retrieval.passage"}`.
 
-### Step 5: Make Step 4 pass — fix recursion
+### Step 5: Make Step 4 pass — preserve task across the token-limit retry
 
 **File:** `chunkhound/providers/embeddings/openai_provider.py` lines 742-758
 
-Replace bare `self._embed_batch_internal` passed to `handle_token_limit_error(embed_function=...)` with a partial that binds task:
-```
-from functools import partial
-embed_fn = partial(self._embed_batch_internal, task=task)
-return await handle_token_limit_error(embed_function=embed_fn, ...)
-```
+The existing code passes `self._embed_batch_internal` as a bare callable to `handle_token_limit_error(embed_function=...)`. Recursive calls from the smaller-batch retry will lose any `task` argument.
 
-(If `partial` doesn't compose with instance methods cleanly, use a local async wrapper closure instead.)
+Fix: bind `task` to the callable before passing it to the handler, so recursive invocations preserve it. Use `functools.partial` or a local async wrapper — whichever composes cleanly with the existing signature. The handler itself does not need to change (it treats `embed_function` as opaque).
+
+Run Step 4 test → expect pass.
 
 ### Step 6: Failing test — Voyage maps task to input_type
 
