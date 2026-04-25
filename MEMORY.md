@@ -30,6 +30,13 @@ Things here should still be useful six months from now.
 - `_ensure_client()` creates `AsyncOpenAI` / `AsyncAzureOpenAI` in async context.
 - Creating in `__init__` caused TaskGroup errors on Ubuntu when no event loop is running — leave this alone unless you reproduce the bug.
 
+### `chunkhound.embeddings` re-exports use PEP 562 `__getattr__` to dodge a cycle
+- Eager `from chunkhound.providers.embeddings.X_provider import XProvider` at module level in `chunkhound/embeddings.py` creates a circular import:
+  `chunkhound.embeddings → providers.embeddings.X_provider → chunkhound.providers.__init__ → DuckDBProvider → chunkhound.embeddings (mid-load, EmbeddingManager not yet defined)`
+- Fixed for `TEIEmbeddingProvider` via PEP 562 module-level `__getattr__` that lazy-imports on first access. Same pattern works for any future re-export.
+- **Unit-tier smoke tests don't catch this** — by the time pytest runs unit tests, sibling modules are already loaded (warm). The cycle only triggers from a fresh process. Integration tests that spawn `chunkhound index` via subprocess hit the cold path and surface the bug.
+- Lesson: any test for a circular-import fix must run under `subprocess` (integration tier) to exercise the cold-import case.
+
 ---
 
 ## Conventions

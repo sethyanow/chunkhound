@@ -14,6 +14,28 @@ from chunkhound.interfaces.embedding_provider import (
 
 if TYPE_CHECKING:
     from chunkhound.providers.embeddings.openai_provider import OpenAIEmbeddingProvider
+    from chunkhound.providers.embeddings.tei_provider import TEIEmbeddingProvider
+
+
+def __getattr__(name: str):
+    """PEP 562 lazy attribute resolution for TEIEmbeddingProvider re-export.
+
+    Importing TEIEmbeddingProvider eagerly at module load triggers a
+    circular import: chunkhound.embeddings → tei_provider →
+    chunkhound.providers.__init__ → duckdb_provider → chunkhound.embeddings
+    (mid-load, EmbeddingManager not yet defined).
+
+    Resolving on first access defers the TEI module load until after
+    chunkhound.embeddings has finished initializing, breaking the cycle.
+    Both ``chunkhound.embeddings.TEIEmbeddingProvider`` and
+    ``from chunkhound.embeddings import TEIEmbeddingProvider`` work.
+    """
+    if name == "TEIEmbeddingProvider":
+        from chunkhound.providers.embeddings.tei_provider import (
+            TEIEmbeddingProvider as _TEIEmbeddingProvider,
+        )
+        return _TEIEmbeddingProvider
+    raise AttributeError(f"module 'chunkhound.embeddings' has no attribute {name!r}")
 
 # Core domain models
 
@@ -222,4 +244,79 @@ def create_openai_provider(
         api_version=api_version,
         azure_endpoint=azure_endpoint,
         azure_deployment=azure_deployment,
+    )
+
+
+def create_tei_provider(
+    base_url: str,
+    model: str,
+    dims: int,
+    api_key: str | None = None,
+    rerank_model: str | None = None,
+    rerank_url: str | None = None,
+    rerank_format: str = "auto",
+    rerank_batch_size: int | None = None,
+) -> "TEIEmbeddingProvider":
+    """Create a TEI embedding provider with fail-fast validation.
+
+    Validates ``base_url`` scheme and ``dims`` positivity at the registry
+    layer so legacy callers (those bypassing Pydantic ``EmbeddingConfig``)
+    get the same error UX as Pydantic-validated callers.
+
+    Args:
+        base_url: TEI server base URL. Must start with ``http://`` or
+            ``https://``.
+        model: Model name as TEI knows it (e.g.
+            ``jinaai/jina-embeddings-v3``).
+        dims: Embedding dimensions of the deployed model. Must be a positive
+            int (jina-v3=1024, jina-v5-text-nano=256, jina-v5-text-small=512).
+        api_key: Optional bearer token. TEI deployments may or may not
+            require auth.
+        rerank_model: Reranker model name (enables reranking when set).
+        rerank_url: Reranker endpoint URL. Defaults to ``None`` so
+            ``supports_reranking()`` returns False unless explicitly enabled.
+        rerank_format: Reranking API format. Defaults to ``"auto"``.
+        rerank_batch_size: Max documents per rerank batch.
+
+    Returns:
+        Configured TEI embedding provider.
+
+    Raises:
+        ValueError: If ``base_url`` is missing/has wrong scheme, or if
+            ``dims`` is not a positive int.
+    """
+    # Fail-fast validation BEFORE constructing the provider, so legacy
+    # callers (skipping Pydantic) get the same UX as validated callers.
+    if not base_url:
+        raise ValueError(
+            "create_tei_provider: base_url is required (TEI has no canonical default)"
+        )
+    if not isinstance(base_url, str) or not (
+        base_url.startswith("http://") or base_url.startswith("https://")
+    ):
+        raise ValueError(
+            f"create_tei_provider: base_url must start with http:// or https://, "
+            f"got {base_url!r}"
+        )
+    # dims is also re-validated inside TEIEmbeddingProvider.__init__, but
+    # validating here gives a consistent error path for all entry points.
+    if isinstance(dims, bool) or not isinstance(dims, int) or dims <= 0:
+        raise ValueError(
+            f"create_tei_provider: dims must be a positive int, got {dims!r}"
+        )
+
+    # Deferred import — see module-level __getattr__ for cycle rationale.
+    from chunkhound.providers.embeddings.tei_provider import (
+        TEIEmbeddingProvider as _TEIEmbeddingProvider,
+    )
+
+    return _TEIEmbeddingProvider(
+        base_url=base_url,
+        model=model,
+        dims=dims,
+        api_key=api_key,
+        rerank_model=rerank_model,
+        rerank_url=rerank_url,
+        rerank_format=rerank_format,
+        rerank_batch_size=rerank_batch_size,
     )

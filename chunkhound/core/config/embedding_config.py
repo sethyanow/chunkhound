@@ -94,19 +94,32 @@ class EmbeddingConfig(BaseSettings):
     )
 
     # Provider Selection
-    provider: Literal["openai", "voyageai"] = Field(
-        default="openai", description="Embedding provider (openai, voyageai)"
+    provider: Literal["openai", "voyageai", "tei"] = Field(
+        default="openai",
+        description="Embedding provider (openai, voyageai, tei)",
     )
 
     # Common Configuration
     model: str | None = Field(
         default=None,
-        description="Embedding model name (uses provider default if not specified)",
+        description="Embedding model name (uses provider default if not specified; required for tei)",
     )
 
     api_key: SecretStr | None = Field(default=None, description="API key for authentication (provider-specific)")
 
     base_url: str | None = Field(default=None, description="Base URL for the embedding API")
+
+    # Embedding dimensions — required for TEI (custom-deployed models whose
+    # dims cannot be inferred from the model name). Optional/auto-detected
+    # for openai and voyageai.
+    dims: int | None = Field(
+        default=None,
+        description=(
+            "Embedding dimensions. REQUIRED for provider='tei' "
+            "(jina-v3=1024, jina-v5-text-nano=256, jina-v5-text-small=512). "
+            "Auto-detected for openai and voyageai."
+        ),
+    )
 
     # Azure OpenAI Configuration
     api_version: str | None = Field(default=None, description="Azure OpenAI API version (e.g., '2024-02-01')")
@@ -216,6 +229,35 @@ class EmbeddingConfig(BaseSettings):
         return self
 
     @model_validator(mode="after")
+    def validate_tei_required_fields(self) -> Self:
+        """Enforce that provider='tei' supplies both base_url and dims.
+
+        Both are required for TEI because:
+          - base_url: TEI has no canonical default endpoint (user-deployed)
+          - dims: TEI hosts custom models whose embedding dimensions cannot
+            be inferred from the model name; the provider class would
+            otherwise fall back to OpenAI's hardcoded 1536.
+
+        When BOTH are missing, both names appear in the single
+        ValidationError so a debugging agent doesn't have to round-trip
+        twice. List-of-errors pattern.
+        """
+        if self.provider != "tei":
+            return self
+
+        missing: list[str] = []
+        if not self.base_url:
+            missing.append("base_url")
+        if self.dims is None:
+            missing.append("dims")
+        if missing:
+            raise ValueError(
+                f"provider='tei' requires {', '.join(missing)}; "
+                f"set every missing field before constructing the config"
+            )
+        return self
+
+    @model_validator(mode="after")
     def validate_azure_config(self) -> Self:
         """Validate Azure OpenAI configuration."""
         # If azure_endpoint is set, validate Azure-specific requirements
@@ -273,6 +315,12 @@ class EmbeddingConfig(BaseSettings):
         if self.base_url:
             base_config["base_url"] = self.base_url
 
+        # Embedding dimensions — included whenever set (required for tei,
+        # optional for openai/voyageai). Factory reads this when creating
+        # the provider instance.
+        if self.dims is not None:
+            base_config["dims"] = self.dims
+
         # Add Azure OpenAI configuration if available
         if self.api_version:
             base_config["api_version"] = self.api_version
@@ -299,6 +347,10 @@ class EmbeddingConfig(BaseSettings):
 
         Returns:
             Model name or provider default
+
+        Raises:
+            ValueError: When provider='tei' and self.model is None — TEI
+                hosts user-deployed models, so there is no sensible default.
         """
         if self.model:
             return self.model
@@ -306,8 +358,16 @@ class EmbeddingConfig(BaseSettings):
         # Provider defaults
         if self.provider == "voyageai":
             return VOYAGE_DEFAULT_MODEL
-        else:  # openai
+        if self.provider == "openai":
             return "text-embedding-3-small"
+        if self.provider == "tei":
+            raise ValueError(
+                "provider='tei' has no default model; set "
+                "EmbeddingConfig.model explicitly (e.g. "
+                "'jinaai/jina-embeddings-v3')"
+            )
+        # Defensive — Pydantic Literal makes this unreachable.
+        raise ValueError(f"Unsupported provider: {self.provider!r}")
 
     def is_provider_configured(self) -> bool:
         """
@@ -326,11 +386,15 @@ class EmbeddingConfig(BaseSettings):
             else:
                 # Custom endpoints don't require API key
                 return True
-        else:
-            # VoyageAI: only the official endpoint requires an API key
-            if is_official_voyageai_endpoint(self.base_url):
-                return self.api_key is not None
-            return True
+        if self.provider == "tei":
+            # TEI requires base_url and dims (validated at config-construction
+            # time by validate_tei_required_fields). API key is optional —
+            # TEI deployments may or may not require auth.
+            return bool(self.base_url) and self.dims is not None
+        # VoyageAI: only the official endpoint requires an API key
+        if is_official_voyageai_endpoint(self.base_url):
+            return self.api_key is not None
+        return True
 
     def get_missing_config(self) -> list[str]:
         """
@@ -351,6 +415,12 @@ class EmbeddingConfig(BaseSettings):
             # For OpenAI provider, only require API key for official endpoints
             elif is_official_openai_endpoint(self.base_url) and not self.api_key:
                 missing.append("api_key (set CHUNKHOUND_EMBEDDING__API_KEY)")
+        elif self.provider == "tei":
+            # TEI requires base_url and dims; api_key is optional.
+            if not self.base_url:
+                missing.append("base_url (set CHUNKHOUND_EMBEDDING__BASE_URL)")
+            if self.dims is None:
+                missing.append("dims (set CHUNKHOUND_EMBEDDING__DIMS or --dims)")
         else:
             # For voyageai with a custom endpoint, API key is optional
             if not self.api_key and not self.base_url:
@@ -364,8 +434,8 @@ class EmbeddingConfig(BaseSettings):
         parser.add_argument(
             "--provider",
             "--embedding-provider",
-            choices=["openai", "voyageai"],
-            help="Embedding provider (openai or voyageai)",
+            choices=["openai", "voyageai", "tei"],
+            help="Embedding provider (openai, voyageai, or tei)",
         )
 
         parser.add_argument(
@@ -384,6 +454,16 @@ class EmbeddingConfig(BaseSettings):
             "--base-url",
             "--embedding-base-url",
             help="Base URL for embedding API (uses env var if not specified)",
+        )
+
+        parser.add_argument(
+            "--dims",
+            "--embedding-dims",
+            type=int,
+            help=(
+                "Embedding dimensions (REQUIRED for provider=tei; "
+                "auto-detected for openai/voyageai)"
+            ),
         )
 
         parser.add_argument(
@@ -498,6 +578,13 @@ class EmbeddingConfig(BaseSettings):
             overrides["base_url"] = args.base_url
         if hasattr(args, "embedding_base_url") and args.embedding_base_url:
             overrides["base_url"] = args.embedding_base_url
+
+        # Handle embedding dimensions (TEI requires this; openai/voyageai
+        # auto-detect from model name)
+        if hasattr(args, "dims") and args.dims is not None:
+            overrides["dims"] = args.dims
+        if hasattr(args, "embedding_dims") and args.embedding_dims is not None:
+            overrides["dims"] = args.embedding_dims
 
         # Handle Azure OpenAI arguments
         if hasattr(args, "azure_endpoint") and args.azure_endpoint:

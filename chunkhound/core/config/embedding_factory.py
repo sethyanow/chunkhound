@@ -19,6 +19,7 @@ if TYPE_CHECKING:
         EmbeddingProvider,
         OpenAIEmbeddingProvider,
     )
+    from chunkhound.providers.embeddings.tei_provider import TEIEmbeddingProvider
 
 
 class EmbeddingProviderFactory:
@@ -58,6 +59,8 @@ class EmbeddingProviderFactory:
             return EmbeddingProviderFactory._create_openai_provider(provider_config)
         elif config.provider == "voyageai":
             return EmbeddingProviderFactory._create_voyageai_provider(provider_config)
+        elif config.provider == "tei":
+            return EmbeddingProviderFactory._create_tei_provider(provider_config)
         else:
             raise ValueError(f"Unsupported provider: {config.provider}")
 
@@ -188,14 +191,77 @@ class EmbeddingProviderFactory:
             raise ValueError(f"Failed to create VoyageAI provider: {e}") from e
 
     @staticmethod
+    def _create_tei_provider(config: dict[str, Any]) -> "TEIEmbeddingProvider":
+        """Create a TEI embedding provider from a provider-config dict.
+
+        Mirrors _create_openai_provider's structure but routes through the
+        chunkhound.embeddings.create_tei_provider registry function so
+        validation logic stays in one place.
+        """
+        try:
+            from chunkhound.embeddings import create_tei_provider
+        except ImportError as e:
+            raise ImportError(
+                "Failed to import TEI provider. Ensure chunkhound.embeddings "
+                "module is available."
+            ) from e
+
+        # Extract TEI-specific parameters (fields populated by
+        # EmbeddingConfig.get_provider_config when provider='tei')
+        base_url = config.get("base_url")
+        model = config.get("model")
+        dims = config.get("dims")
+        api_key = config.get("api_key")
+        rerank_model = config.get("rerank_model")
+        rerank_url = config.get("rerank_url")
+        rerank_format = config.get("rerank_format", "auto")
+        rerank_batch_size = config.get("rerank_batch_size")
+
+        # base_url, model, and dims are validated upstream by
+        # EmbeddingConfig.validate_tei_required_fields and again by
+        # create_tei_provider — the assertions below are belt-and-suspenders
+        # for the legacy/direct path.
+        if not model:
+            raise ValueError("Model not specified in provider configuration")
+        if base_url is None:
+            raise ValueError("base_url not specified in provider configuration")
+        if dims is None:
+            raise ValueError("dims not specified in provider configuration")
+
+        logger.debug(
+            f"Creating TEI provider: model={model}, base_url={base_url}, "
+            f"dims={dims}, api_key={'***' if api_key else None}, "
+            f"rerank_model={rerank_model}, rerank_url={rerank_url}"
+        )
+
+        try:
+            return create_tei_provider(
+                base_url=base_url,
+                model=model,
+                dims=dims,
+                api_key=api_key,
+                rerank_model=rerank_model,
+                rerank_url=rerank_url,
+                rerank_format=rerank_format,
+                rerank_batch_size=rerank_batch_size,
+            )
+        except Exception as e:
+            raise ValueError(f"Failed to create TEI provider: {e}") from e
+
+    @staticmethod
     def get_supported_providers() -> list[str]:
         """
         Get list of supported embedding providers.
 
         Returns:
             List of supported provider names
+
+        Note:
+            ``"openai_compatible"`` is a pre-existing entry (no dispatch
+            case in ``create_provider``); kept for backward compatibility
+            and tracked for cleanup as a separate task.
         """
-        return ["openai", "voyageai", "openai_compatible"]
+        return ["openai", "voyageai", "tei", "openai_compatible"]
 
     @staticmethod
     def validate_provider_dependencies(provider: str) -> tuple[bool, str | None]:
@@ -218,6 +284,15 @@ class EmbeddingProviderFactory:
             elif provider == "voyageai":
                 from chunkhound.providers.embeddings.voyageai_provider import (  # noqa: F401
                     VoyageAIEmbeddingProvider,
+                )
+            elif provider == "tei":
+                # TEI subclasses OpenAIEmbeddingProvider, so it transitively
+                # requires the openai package. Probe both so the dep-check
+                # fails loudly if openai is missing — otherwise we'd report
+                # tei as available and crash later at instantiation.
+                import openai  # noqa: F401
+                from chunkhound.providers.embeddings.tei_provider import (  # noqa: F401
+                    TEIEmbeddingProvider,
                 )
 
             return True, None
