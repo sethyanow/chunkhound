@@ -94,7 +94,7 @@ class ClusteringService:
         file_contents = [files[fp] for fp in file_paths]
 
         logger.debug(f"Generating embeddings for {len(file_contents)} files")
-        embeddings = await self._embedding_provider.embed_batch(file_contents)
+        embeddings = await self._embedding_provider.embed_batch(file_contents, task="passage")
         embeddings_array = np.array(embeddings)
 
         # K-means clustering
@@ -196,7 +196,7 @@ class ClusteringService:
         file_contents = [files[fp] for fp in file_paths]
 
         logger.debug(f"Generating embeddings for {len(file_contents)} files")
-        embeddings = await self._embedding_provider.embed_batch(file_contents)
+        embeddings = await self._embedding_provider.embed_batch(file_contents, task="passage")
         embeddings_array = np.array(embeddings)
 
         # HDBSCAN clustering
@@ -393,7 +393,7 @@ class ClusteringService:
         file_contents = [files[fp] for fp in file_paths]
 
         logger.debug(f"Generating embeddings for {len(file_contents)} files")
-        embeddings = await self._embedding_provider.embed_batch(file_contents)
+        embeddings = await self._embedding_provider.embed_batch(file_contents, task="passage")
         embeddings_array = np.array(embeddings)
 
         # Build file_path -> embedding mapping for later operations

@@ -484,7 +484,7 @@ class EmbeddingService(BaseService):
                         return 0
                     if timing:
                         timing.mark_embed_api_start()
-                    embedding_results = await self._embedding_provider.embed(texts)
+                    embedding_results = await self._embedding_provider.embed(texts, task="passage")
                     if timing:
                         timing.mark_embed_api_end()
 

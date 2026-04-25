@@ -1593,7 +1593,7 @@ class IndexingCoordinator(BaseService):
             texts = [text for _, _, text in valid_chunk_data]
 
             # Generate embeddings (progress tracking handled by missing embeddings phase)
-            embedding_results = await self._embedding_provider.embed_batch(texts)
+            embedding_results = await self._embedding_provider.embed_batch(texts, task="passage")
 
             # Store embeddings in database
             embeddings_data = []

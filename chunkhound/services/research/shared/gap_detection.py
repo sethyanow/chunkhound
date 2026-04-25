@@ -250,7 +250,7 @@ class GapDetectionService:
         try:
             embedding_provider = self._embedding_manager.get_provider()
             chunk_contents = [get_chunk_text(chunk) for chunk in chunks]
-            embeddings_list = await embedding_provider.embed_batch(chunk_contents)
+            embeddings_list = await embedding_provider.embed_batch(chunk_contents, task="passage")
             embeddings_array = np.array(embeddings_list)
         except Exception as e:
             logger.warning(f"Failed to generate embeddings for clustering: {e}")
