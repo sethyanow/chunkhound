@@ -63,7 +63,7 @@ class SingleHopStrategy:
             Tuple of (results, pagination_metadata)
         """
         # Generate query embedding
-        query_results = await self._embedding_provider.embed([query])
+        query_results = await self._embedding_provider.embed([query], task="query")
         if not query_results:
             return [], {}
 

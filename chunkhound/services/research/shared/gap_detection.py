@@ -458,7 +458,7 @@ Output JSON with gaps array."""
         embedding_provider = self._embedding_manager.get_provider()
         queries = [gap.query for gap in gaps]
 
-        embeddings = await embedding_provider.embed(queries)
+        embeddings = await embedding_provider.embed(queries, task="query")
         return np.array(embeddings)
 
     def _cluster_gap_queries(self, embeddings: np.ndarray) -> np.ndarray:
