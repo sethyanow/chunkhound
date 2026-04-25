@@ -19,6 +19,17 @@ Purpose: Transform codebases into searchable knowledge bases for AI assistants
 - ALWAYS Use uv for all Python operations
 - ALWAYS Update version via: `uv run scripts/update_version.py`
 
+## REQUIRED_SKILLS
+
+Invoke these as validation lenses before drafting plans or writing Python code. Parallel calls OK — load all relevant ones up front, not piecemeal.
+
+- `/python-development:python-design-patterns` — KISS, SRP, composition over inheritance
+- `/python-development:python-error-handling` — fail-fast validation, exception chaining, no silent fallbacks
+- `/python-development:python-code-style` — ruff/mypy config, naming, docstrings, imports
+- `/python-development:python-anti-patterns` — checklist before finalizing
+- `/python-development:python-type-safety` — Literal, Protocol, annotations, narrowing
+- `/python-development:python-testing-patterns` — pytest, fixtures, parametrize, AAA, mocking
+
 ## KEY_COMMANDS
 ```bash
 # Development
