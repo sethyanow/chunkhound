@@ -11,7 +11,12 @@ from loguru import logger
 from chunkhound.core.config.voyageai_utils import is_official_voyageai_endpoint
 from chunkhound.core.constants import VOYAGE_DEFAULT_MODEL, VOYAGE_DEFAULT_RERANK_MODEL
 from chunkhound.core.utils import EMBEDDING_CHARS_PER_TOKEN
-from chunkhound.interfaces.embedding_provider import EmbeddingConfig, RerankResult
+from chunkhound.interfaces.embedding_provider import (
+    EmbeddingConfig,
+    EmbeddingTask,
+    RerankResult,
+    validate_task,
+)
 
 from .shared_utils import (
     chunk_text_by_words,
@@ -266,11 +271,20 @@ class VoyageAIEmbeddingProvider:
             retry_delay=self._retry_delay,
         )
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
         """Generate embeddings for a list of texts with automatic retry on network errors.
 
         Internally sub-batches to self._batch_size so that custom endpoints
         (e.g. Azure ML) are never overwhelmed by a single oversized request.
+
+        Args:
+            texts: Text strings to embed.
+            task: Asymmetric-retrieval hint. None/"passage" → Voyage
+                input_type="document" (preserves pre-task behavior and cache
+                identity), "query" → input_type="query". Validated at
+                _embed_single_batch_locked entry.
         """
         if not texts:
             return []
@@ -284,18 +298,41 @@ class VoyageAIEmbeddingProvider:
             all_embeddings: list[list[float]] = []
             for i in range(0, len(validated_texts), self._batch_size):
                 sub_batch = validated_texts[i : i + self._batch_size]
-                all_embeddings.extend(await self._embed_single_batch(sub_batch))
+                all_embeddings.extend(
+                    await self._embed_single_batch(sub_batch, task=task)
+                )
             return all_embeddings
 
-        return await self._embed_single_batch(validated_texts)
+        return await self._embed_single_batch(validated_texts, task=task)
 
-    async def _embed_single_batch(self, texts: list[str]) -> list[list[float]]:
+    async def _embed_single_batch(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
         """Send one batch to the API with retry logic."""
         async with self._embed_semaphore:
-            return await self._embed_single_batch_locked(texts)
+            return await self._embed_single_batch_locked(texts, task=task)
 
-    async def _embed_single_batch_locked(self, texts: list[str]) -> list[list[float]]:
+    async def _embed_single_batch_locked(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
         """Inner embed implementation, called while holding the semaphore."""
+        # Single validation point for Voyage. Fail-fast on typos before any
+        # retry/network I/O. See ch-agj Key Considerations.
+        validate_task(task)
+
+        # Map task → Voyage input_type. None and "passage" both map to
+        # "document" to preserve the pre-task default: existing embeddings
+        # in the DB were indexed with input_type="document", and the cache
+        # identity (chunk_id, provider, model) does NOT include task — so
+        # keeping this mapping stable means existing embeddings don't get
+        # regenerated. See ch-agj Step 21 regression test.
+        if task is None or task == "passage":
+            input_type = "document"
+        elif task == "query":
+            input_type = "query"
+        else:  # Unreachable — validate_task already rejected other values
+            raise AssertionError(f"validate_task let through unexpected {task!r}")
+
         # Retry loop for transient network errors
         for attempt in range(self._retry_attempts):
             try:
@@ -303,7 +340,7 @@ class VoyageAIEmbeddingProvider:
                     self._client.embed,
                     texts=texts,
                     model=self._model,
-                    input_type="document",
+                    input_type=input_type,
                     truncation=True,
                 )
 
@@ -356,12 +393,19 @@ class VoyageAIEmbeddingProvider:
         # Should never reach here, but provide clear error if we do
         raise RuntimeError(f"Embedding generation failed after {self._retry_attempts} attempts")
 
-    async def embed_single(self, text: str) -> list[float]:
+    async def embed_single(
+        self, text: str, task: EmbeddingTask = None
+    ) -> list[float]:
         """Generate embedding for a single text."""
-        embeddings = await self.embed([text])
+        embeddings = await self.embed([text], task=task)
         return embeddings[0]
 
-    async def embed_batch(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
+    async def embed_batch(
+        self,
+        texts: list[str],
+        batch_size: int | None = None,
+        task: EmbeddingTask = None,
+    ) -> list[list[float]]:
         """Generate embeddings in batches respecting both count and token limits."""
         if not texts:
             return []
@@ -379,7 +423,7 @@ class VoyageAIEmbeddingProvider:
             if current_batch and (
                 len(current_batch) >= effective_batch_size or current_tokens + text_tokens > max_tokens_per_batch
             ):
-                all_embeddings.extend(await self.embed(current_batch))
+                all_embeddings.extend(await self.embed(current_batch, task=task))
                 current_batch = []
                 current_tokens = 0
 
@@ -387,14 +431,16 @@ class VoyageAIEmbeddingProvider:
             current_tokens += text_tokens
 
         if current_batch:
-            all_embeddings.extend(await self.embed(current_batch))
+            all_embeddings.extend(await self.embed(current_batch, task=task))
 
         return all_embeddings
 
-    async def embed_streaming(self, texts: list[str]) -> AsyncIterator[list[float]]:
+    async def embed_streaming(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> AsyncIterator[list[float]]:
         """Generate embeddings with streaming results."""
         for text in texts:
-            embedding = await self.embed_single(text)
+            embedding = await self.embed_single(text, task=task)
             yield embedding
 
     async def initialize(self) -> None:

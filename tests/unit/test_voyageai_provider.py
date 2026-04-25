@@ -543,7 +543,7 @@ class TestEmbedSubBatching:
         p = _make_provider(api_key="test-key", batch_size=2)
         call_sizes: list[int] = []
 
-        async def fake_single_batch(texts):
+        async def fake_single_batch(texts, task=None):
             call_sizes.append(len(texts))
             return [[float(i)] for i in range(len(texts))]
 
@@ -558,7 +558,7 @@ class TestEmbedSubBatching:
     async def test_sub_batching_preserves_order(self):
         p = _make_provider(api_key="test-key", batch_size=2)
 
-        async def fake_single_batch(texts):
+        async def fake_single_batch(texts, task=None):
             return [[float(ord(t[0]))] for t in texts]
 
         p._embed_single_batch = fake_single_batch
@@ -585,7 +585,7 @@ class TestEmbedBatchTokenBudget:
         p = _make_provider(api_key="test-key", batch_size=2)
         batches_sent: list[list[str]] = []
 
-        async def fake_embed(texts):
+        async def fake_embed(texts, task=None):
             batches_sent.append(list(texts))
             return [[0.1] for _ in texts]
 
@@ -603,7 +603,7 @@ class TestEmbedBatchTokenBudget:
 
         batches_sent: list[list[str]] = []
 
-        async def fake_embed(texts):
+        async def fake_embed(texts, task=None):
             batches_sent.append(list(texts))
             return [[0.1] for _ in texts]
 
@@ -761,3 +761,72 @@ class TestGetModelInfo:
     def test_custom_endpoint_with_rerank_url_is_true(self, provider_with_rerank_url):
         info = provider_with_rerank_url.get_model_info()
         assert info["supports_reranking"] is True
+
+
+# ===========================================================================
+# 12. task → input_type mapping (ch-agj Group B)
+# ===========================================================================
+
+
+def _stub_voyage_embed_result(total_tokens: int = 5, dims: int = 2) -> MagicMock:
+    """Build a stand-in for voyageai.Client.embed(...) return value."""
+    result = MagicMock()
+    result.total_tokens = total_tokens
+    result.embeddings = [[0.1] * dims]
+    return result
+
+
+class TestTaskToInputTypeMapping:
+    @pytest.mark.parametrize(
+        "task,expected_input_type",
+        [
+            pytest.param(None, "document", id="none-maps-to-document"),
+            pytest.param("passage", "document", id="passage-maps-to-document"),
+            pytest.param("query", "query", id="query-maps-to-query"),
+        ],
+    )
+    async def test_embed_passes_input_type_based_on_task(
+        self, task, expected_input_type
+    ) -> None:
+        # Arrange
+        provider = _make_provider(api_key="test-key")
+        provider._client.embed = MagicMock(return_value=_stub_voyage_embed_result())
+
+        # Act
+        await provider.embed(["hello"], task=task)
+
+        # Assert — Voyage SDK gets the mapped input_type. None and "passage"
+        # both map to "document" to preserve the pre-task behavior (cache
+        # identity stays intact for existing embeddings).
+        provider._client.embed.assert_called_once()
+        assert (
+            provider._client.embed.call_args.kwargs["input_type"]
+            == expected_input_type
+        )
+
+
+class TestTaskValidation:
+    @pytest.mark.parametrize(
+        "bad_task",
+        [
+            pytest.param("document", id="voyage-legacy-literal"),
+            pytest.param("retrieval.passage", id="jina-internal-format"),
+            pytest.param("", id="empty-string"),
+            pytest.param("Q", id="short-stub"),
+            pytest.param(True, id="bool-true"),
+            pytest.param(["passage"], id="list-wrap"),
+        ],
+    )
+    async def test_embed_raises_value_error_on_unknown_task(self, bad_task) -> None:
+        # Arrange
+        provider = _make_provider(api_key="test-key")
+        # Mock not strictly needed (validator raises before client call), but
+        # keeps the test robust if the order changes.
+        provider._client.embed = MagicMock(return_value=_stub_voyage_embed_result())
+
+        # Act / Assert
+        with pytest.raises(ValueError, match="Unknown embedding task"):
+            await provider.embed(["hello"], task=bad_task)
+
+        # Client must not be called once validation fails
+        provider._client.embed.assert_not_called()
