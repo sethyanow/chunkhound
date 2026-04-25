@@ -14,6 +14,7 @@ owner: Seth Yanow
 
 
 
+
 ## Goal
 
 Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding interface so:
@@ -332,10 +333,10 @@ Failures grouped by component. Mitigations are structural — design prevents th
 
 ## Success Criteria
 
-- [ ] `EmbeddingTask` alias + shared `validate_task` in interface module
-- [ ] All 4 protocol methods accept optional `task=None`
-- [ ] Voyage maps task → input_type with explicit `ValueError` on unknown values
-- [ ] OpenAI silently accepts task; recursive fallback threads it through closure
+- [x] `EmbeddingTask` alias + shared `validate_task` in interface module (commit 8edc107)
+- [x] All 4 protocol methods accept optional `task=None` (commit 8edc107)
+- [x] Voyage maps task → input_type with explicit `ValueError` on unknown values (commit 705a9a8)
+- [x] OpenAI validates task at `_embed_batch_internal` entry (symmetric fail-fast with Voyage per adversarial-planning decision 2026-04-25); recursive token-limit fallback threads task through lambda closure (commit 49b631b)
 - [ ] `EmbeddingConfig.provider` Literal widened to include `"tei"`; provider-specific config branches updated; model-validator enforces `base_url` required when `provider="tei"`
 - [ ] `TEIEmbeddingProvider` class exists, registered in factory via `_create_tei_provider`, exported from `chunkhound/embeddings.py` via `create_tei_provider`, sends `extra_body={"task": "retrieval.{passage,query}"}` for jina models
 - [ ] `TEIEmbeddingProvider.name` returns `"tei"`; `supports_reranking()` returns `False` when constructed with embedding-only config (no `rerank_format`)
@@ -374,3 +375,4 @@ Failures grouped by component. Mitigations are structural — design prevents th
 - [2026-04-24T23:24:18Z] [Seth Yanow] Plan v3 amended: added Step 15 (EmbeddingConfig schema widening for tei), Step 16 (factory + registry tests), Step 17 (factory _create_tei_provider helper + chunkhound/embeddings.py registry function + commit). Renumbered subsequent steps. Anti-patterns expanded with mypy scope discipline, commit splitting (3 commits in Group D), pytest-asyncio mode notice, rerank-default test, name @property verification. Success criteria expanded for schema/registry/name/rerank checks. dims-keyed DB table behavior documented as positive confirmation.
 - [2026-04-25T02:19:42Z] [Seth Yanow] SRE fresh-eyes review (2026-04-25). Skeleton claims all verified against codebase. Filled 5 critical gaps in place: (1) Step 6 Voyage threading explicit at lines 287/290/295/361; (2) Step 9 OpenAI threading explicit at lines 595/641/661/669/676/686/694 — the 4 calls inside embed_batch were missing; (3) Step 12 TEIEmbeddingProvider MUST override __init__ to accept dims (required kwarg) AND override @property dims — parent hardcodes 1536 for non-OpenAI models, wrong for jina-v3=1024/jina-v5-nano=256/jina-v5-small=512; (4) Step 15 add 'dims' field to Pydantic EmbeddingConfig + CLI '--dims' arg + model-validator enforces both base_url AND dims for tei; (5) Step 17 factory also updates get_supported_providers() and validate_provider_dependencies(); get_provider_info wizard metadata explicitly OUT OF SCOPE. Informational: EmbeddingConfig name collision (dataclass vs Pydantic), openai_provider.py 1450 lines / voyageai 725 lines already exceed CLAUDE.md 500-line threshold — follow-up refactor ticket warranted. Granularity concern (22 steps, one task) flagged for user decision.
 - [2026-04-25T02:50:07Z] [Seth Yanow] Adversarial planning (Checkpoint 1: A+B+C). Failure catalog added to Key Considerations. Design decision: validate_task called at the DEEPEST internal method of every provider (Voyage _embed_single_batch_locked, OpenAI _embed_batch_internal, TEI _embed_batch_internal override). Drops the Voyage-validates/OpenAI-silently-accepts asymmetry. One helper, one invocation per provider class, symmetric fail-fast. User framing: AI agents write code here — consistency over cleverness. Three C's lens: Clarity (same pattern everywhere), Cohesion (validator owns contract), Coupling (providers depend on validator only, not each other). Step 8 test plan extended with test_embed_raises_value_error_on_unknown_task (parametrized over bool/int/list/whitespace edge cases); Step 5 Voyage test extended with same set. Step 9 adds validate_task(task) at _embed_batch_internal top + lambda-coupling comment.
+- [2026-04-25T03:11:43Z] [Seth Yanow] Checkpoint 1 complete (Groups A+B+C). 3 commits: 8edc107 (protocol surface + validator + 21 tests), 705a9a8 (Voyage task→input_type mapping + threading + validation + 9 tests, 4 pre-existing fake signatures updated mechanically), 49b631b (OpenAI accept+validate+recursion lambda + 13 tests including 2 closure-introspection regression guards). Total: 43 new unit tests green. Full unit suite: 2057 pass (22 more than baseline). Validate-everywhere design shipped symmetrically — Voyage at _embed_single_batch_locked entry, OpenAI at _embed_batch_internal entry. Mypy: no errors introduced (pre-existing errors tracked in ch-6ea). Side note: fixed a local-only pre-commit hook syntax bug (.git/hooks/trauma-guard-precommit.py used Rust-style \u{1f525} which is invalid Python; replaced with \U0001F525). Deferred adversarial stress test to end of Checkpoint 3 per user's checkpoint-cadence framing.
