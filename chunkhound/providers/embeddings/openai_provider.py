@@ -17,7 +17,12 @@ from chunkhound.core.config.embedding_config import (
 from chunkhound.core.config.openai_utils import is_azure_openai_endpoint
 from chunkhound.core.exceptions.core import ValidationError
 from chunkhound.core.utils import EMBEDDING_CHARS_PER_TOKEN
-from chunkhound.interfaces.embedding_provider import EmbeddingConfig, RerankResult
+from chunkhound.interfaces.embedding_provider import (
+    EmbeddingConfig,
+    EmbeddingTask,
+    RerankResult,
+    validate_task,
+)
 
 from .batch_utils import handle_token_limit_error
 
@@ -583,8 +588,17 @@ class OpenAIEmbeddingProvider:
 
         return status
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a list of texts."""
+    async def embed(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
+        """Generate embeddings for a list of texts.
+
+        OpenAI embeddings are symmetric — the API doesn't expose input_type
+        or equivalent, so task is accepted for interface symmetry but not
+        forwarded to the API. Validation still fires (at
+        _embed_batch_internal entry) so typos fail-fast consistently with
+        Voyage/TEI providers.
+        """
         if not texts:
             return []
 
@@ -592,7 +606,7 @@ class OpenAIEmbeddingProvider:
 
         try:
             # Always use token-aware batching
-            return await self.embed_batch(validated_texts)
+            return await self.embed_batch(validated_texts, task=task)
 
         except Exception as e:
             # CRITICAL: Log EVERY exception that passes through here to trace execution path
@@ -636,12 +650,19 @@ class OpenAIEmbeddingProvider:
 
             raise
 
-    async def embed_single(self, text: str) -> list[float]:
+    async def embed_single(
+        self, text: str, task: EmbeddingTask = None
+    ) -> list[float]:
         """Generate embedding for a single text."""
-        embeddings = await self.embed([text])
+        embeddings = await self.embed([text], task=task)
         return embeddings[0] if embeddings else []
 
-    async def embed_batch(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
+    async def embed_batch(
+        self,
+        texts: list[str],
+        batch_size: int | None = None,
+        task: EmbeddingTask = None,
+    ) -> list[list[float]]:
         """Generate embeddings in batches with token-aware sizing."""
         if not texts:
             return []
@@ -658,7 +679,9 @@ class OpenAIEmbeddingProvider:
             if text_tokens > token_limit:
                 # Process current batch if not empty
                 if current_batch:
-                    batch_embeddings = await self._embed_batch_internal(current_batch)
+                    batch_embeddings = await self._embed_batch_internal(
+                        current_batch, task=task
+                    )
                     all_embeddings.extend(batch_embeddings)
                     current_batch = []
                     current_tokens = 0
@@ -666,14 +689,18 @@ class OpenAIEmbeddingProvider:
                 # Split oversized text and process chunks
                 chunks = self.chunk_text_by_tokens(text, token_limit)
                 for chunk in chunks:
-                    chunk_embedding = await self._embed_batch_internal([chunk])
+                    chunk_embedding = await self._embed_batch_internal(
+                        [chunk], task=task
+                    )
                     all_embeddings.extend(chunk_embedding)
                 continue
 
             # Check if adding this text would exceed token limit
             if current_tokens + text_tokens > token_limit and current_batch:
                 # Process current batch
-                batch_embeddings = await self._embed_batch_internal(current_batch)
+                batch_embeddings = await self._embed_batch_internal(
+                    current_batch, task=task
+                )
                 all_embeddings.extend(batch_embeddings)
                 current_batch = []
                 current_tokens = 0
@@ -683,19 +710,33 @@ class OpenAIEmbeddingProvider:
 
         # Process remaining batch
         if current_batch:
-            batch_embeddings = await self._embed_batch_internal(current_batch)
+            batch_embeddings = await self._embed_batch_internal(
+                current_batch, task=task
+            )
             all_embeddings.extend(batch_embeddings)
 
         return all_embeddings
 
-    async def embed_streaming(self, texts: list[str]) -> AsyncIterator[list[float]]:
+    async def embed_streaming(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> AsyncIterator[list[float]]:
         """Generate embeddings with streaming results."""
         for text in texts:
-            embedding = await self.embed_single(text)
+            embedding = await self.embed_single(text, task=task)
             yield embedding
 
-    async def _embed_batch_internal(self, texts: list[str]) -> list[list[float]]:
-        """Internal method to embed a batch of texts."""
+    async def _embed_batch_internal(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
+        """Internal method to embed a batch of texts.
+
+        Single validation point for OpenAI provider — fail-fast on typos
+        before any network I/O. Symmetric with Voyage's
+        _embed_single_batch_locked. See ch-agj Key Considerations.
+        """
+        # Validate at deepest entry. OpenAI doesn't USE task (no input_type
+        # semantics), but validates for symmetric error UX across providers.
+        validate_task(task)
         await self._ensure_client()
         if not self._client:
             raise RuntimeError("OpenAI client not initialized")
@@ -748,11 +789,19 @@ class OpenAIEmbeddingProvider:
                         total_tokens = self.estimate_batch_tokens(texts)
                         token_limit = self.get_model_token_limit() - 100  # Safety margin
 
+                        # Lambda closure captures task across token-limit
+                        # recursion. handle_token_limit_error's signature
+                        # (batch_utils.py:13) is
+                        # Callable[[list[str]], Awaitable[...]] — single
+                        # positional arg. If that ever changes, this lambda
+                        # must change too.
                         return await handle_token_limit_error(
                             texts=texts,
                             total_tokens=total_tokens,
                             token_limit=token_limit,
-                            embed_function=self._embed_batch_internal,
+                            embed_function=lambda batch: self._embed_batch_internal(
+                                batch, task=task
+                            ),
                             chunk_text_function=self.chunk_text_by_tokens,
                             single_text_fallback=True,
                         )
