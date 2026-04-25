@@ -8,6 +8,7 @@ priority: 1
 
 
 
+
 ## Goal
 
 Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding interface so:
