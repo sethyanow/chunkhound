@@ -2,7 +2,36 @@
 
 from collections.abc import AsyncIterator
 from dataclasses import dataclass
-from typing import Any, Protocol
+from typing import Any, Literal, Protocol, cast
+
+EmbeddingTask = Literal["passage", "query"] | None
+
+
+def validate_task(task: Any) -> EmbeddingTask:
+    """Validate an asymmetric-retrieval task hint.
+
+    Providers that use task semantics (Voyage, TEI/jina) call this at their
+    deepest internal entry point to fail-fast on typos. Providers that don't
+    consume the value (OpenAI) still validate for symmetric error behavior.
+
+    Args:
+        task: The task hint. Expected to be one of: None, "passage", "query".
+
+    Returns:
+        The validated task unchanged.
+
+    Raises:
+        ValueError: If task is not None, "passage", or "query". The error
+            message includes repr(task) so callers can distinguish
+            bool/int/list/whitespace-padded values from the valid literals.
+    """
+    if task not in (None, "passage", "query"):
+        raise ValueError(
+            f"Unknown embedding task {task!r}; expected 'passage', 'query', or None"
+        )
+    # Membership check above proves task is EmbeddingTask, but mypy can't
+    # narrow through a tuple `in` test. Explicit cast documents the invariant.
+    return cast(EmbeddingTask, task)
 
 
 @dataclass
@@ -73,60 +102,79 @@ class EmbeddingProvider(Protocol):
         ...
 
     # Core Embedding Operations
-    async def embed(self, texts: list[str]) -> list[list[float]]:
+    async def embed(self, texts: list[str], task: EmbeddingTask = None) -> list[list[float]]:
         """Generate embeddings for a list of texts.
 
         Args:
             texts: List of text strings to embed
+            task: Optional asymmetric-retrieval hint. "passage" for stored
+                documents, "query" for search queries, None for no hint.
+                Providers that consume the value (Voyage, TEI) use it to
+                adjust the API call; providers that don't (OpenAI) still
+                validate for symmetric error behavior.
 
         Returns:
             List of embedding vectors (one per input text)
 
         Raises:
             EmbeddingError: If embedding generation fails
+            ValueError: If task is not None, "passage", or "query"
         """
         ...
 
-    async def embed_single(self, text: str) -> list[float]:
+    async def embed_single(self, text: str, task: EmbeddingTask = None) -> list[float]:
         """Generate embedding for a single text.
 
         Args:
             text: Text string to embed
+            task: Optional asymmetric-retrieval hint (see embed for details).
 
         Returns:
             Embedding vector
 
         Raises:
             EmbeddingError: If embedding generation fails
+            ValueError: If task is not None, "passage", or "query"
         """
         ...
 
-    async def embed_batch(self, texts: list[str], batch_size: int | None = None) -> list[list[float]]:
+    async def embed_batch(
+        self,
+        texts: list[str],
+        batch_size: int | None = None,
+        task: EmbeddingTask = None,
+    ) -> list[list[float]]:
         """Generate embeddings in batches for optimal performance.
 
         Args:
             texts: List of text strings to embed
             batch_size: Optional batch size override
+            task: Optional asymmetric-retrieval hint (see embed for details).
 
         Returns:
             List of embedding vectors (one per input text)
 
         Raises:
             EmbeddingError: If embedding generation fails
+            ValueError: If task is not None, "passage", or "query"
         """
         ...
 
-    async def embed_streaming(self, texts: list[str]) -> AsyncIterator[list[float]]:
+    async def embed_streaming(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> AsyncIterator[list[float]]:
         """Generate embeddings with streaming results.
 
         Args:
             texts: List of text strings to embed
+            task: Optional asymmetric-retrieval hint (see embed for details).
 
         Yields:
             Embedding vectors one at a time
 
         Raises:
             EmbeddingError: If embedding generation fails
+            ValueError: If task is not None, "passage", or "query"
         """
         ...
 

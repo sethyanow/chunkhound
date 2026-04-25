@@ -1,10 +1,15 @@
 ---
 id: ch-agj
 title: Plumb passage/query task hint through embedding interface
-status: open
+status: active
 type: task
 priority: 1
+owner: Seth Yanow
 ---
+
+
+
+
 
 
 
@@ -51,6 +56,62 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 **Cross-cut behavior (positive confirmation):**
 - DB tables are keyed by `(provider, model, dims)`. Switching provider config from `voyageai` to `tei` writes new embeddings to a separate table; existing voyage embeddings in this repo stay intact and become "dormant" (not deleted, not regenerated). This satisfies "don't disturb" automatically — no code change needed for it.
 
+## SRE Findings (2026-04-25 fresh-eyes review)
+
+**Gaps filled in place** (see updated steps):
+- Step 6 — explicit Voyage threading at lines 287, 290, 361, 295 (was "Thread task into _embed_single_batch → _embed_single_batch_locked" without listing sites)
+- Step 9 — explicit OpenAI threading at lines 595, 641, 661/669/676/686 (4 calls inside `embed_batch` body), 694 (was only the recursion fix at 751)
+- Step 12 — TEIEmbeddingProvider must override `__init__` to accept `dims: int` REQUIRED, override `@property dims` to return `self._dims`. Parent `OpenAIEmbeddingProvider.__init__` does NOT accept `dims`; parent's `dims` @property hardcodes 1536 for non-OpenAI models — would return wrong value for jina-v3 (1024), jina-v5-nano (256), jina-v5-small (512)
+- Step 15 — added `dims` field to `EmbeddingConfig` Pydantic schema (required for tei); `--dims` CLI arg; model-validator now enforces both `base_url` AND `dims` for tei
+- Step 17 — factory also updates `get_supported_providers()` (line 198) and `validate_provider_dependencies()` (line 201); `get_provider_info()` wizard-facing metadata is OUT OF SCOPE
+- All new test files: add `pytestmark = pytest.mark.unit` at module top (matches existing convention — see `tests/unit/test_voyageai_provider.py:29`)
+
+**Informational — no action required in this task**:
+- `EmbeddingConfig` name collision: dataclass at `chunkhound/interfaces/embedding_provider.py:16-30` (used by `OpenAIEmbeddingProvider.config` property) vs Pydantic `BaseSettings` at `chunkhound/core/config/embedding_config.py:72` (user-facing config). Both are legitimate; agent must keep them straight
+- File size: `openai_provider.py` (1450 lines) and `voyageai_provider.py` (725 lines) both exceed CLAUDE.md 500-line threshold. This task adds ~50 lines to each. A follow-up refactor task should be filed (e.g., extract rerank module, extract batching module) — out of scope here
+
+**Granularity concern — user-decidable**:
+22 steps in ONE bones task conflicts with executing-plans' "ONE task per turn" rule. Groups A-F could each be their own sub-task (with ch-agj as a parent epic). User chose the monolithic shape in two plan-writing sessions; ask before restructuring. See decision flagged in Log entry 2026-04-25.
+
+## Key Considerations (failure catalog from adversarial-planning, 2026-04-25)
+
+Failures grouped by component. Mitigations are structural — design prevents the problem, not "add a try/catch."
+
+**`validate_task` validator**
+- Assumption: callers pass `None`, `"passage"`, or `"query"`.
+- Betrayal: callers pass `True` (bool, an `int` subtype), `0`, `"PASSAGE"`, `" passage"`, `["passage"]`.
+- Consequence: typo silently embeds with wrong/no asymmetric hint → silent retrieval-quality degradation, worst kind of bug.
+- Mitigation: error message uses `f"Unknown embedding task {task!r}"` so callers can distinguish list-vs-string-vs-bool. Test parametrization explicitly includes bool/int/list/whitespace-padded values (Steps 5 and 8).
+
+**Validation symmetry across providers**
+- Assumption (initial skeleton): Voyage validates, OpenAI silently accepts because it doesn't consume the value.
+- Betrayal: typo `task="quary"` raises ValueError on Voyage, silently passes on OpenAI → inconsistent fail-fast, hard-to-debug quality drops.
+- Consequence: AI-agent-written code at call sites can drift between providers; users can't rely on "task validation works."
+- Mitigation: **DECISION (2026-04-25): validate at every provider's deepest internal method.** Voyage validates in `_embed_single_batch_locked`. OpenAI validates in `_embed_batch_internal`. TEI (Group D) validates in its `_embed_batch_internal` override. Single shared `validate_task` helper, one invocation per provider class. Consistent behavior, one code path, agent-friendly.
+
+**`handle_token_limit_error` callback signature coupling**
+- Assumption: `handle_token_limit_error(embed_function=...)` invokes `embed_function(batch)` — single positional arg.
+- Betrayal: `batch_utils.py` is updated to pass extra kwargs (e.g., `embed_function(batch, retry_count=N)`) → the lambda `lambda batch: self._embed_batch_internal(batch, task=task)` raises TypeError.
+- Consequence: token-limit fallback breaks loudly (acceptable — fail-fast), but the failure happens deep in a retry path that's hard to test live.
+- Mitigation: code-comment at the lambda site documents the coupling. `handle_token_limit_error`'s signature is locked at `Callable[[list[str]], Awaitable[list[list[float]]]]` per `batch_utils.py:13-84`; if that ever drifts, this lambda must update too.
+
+**Cache identity preservation**
+- Assumption: existing Voyage embeddings (indexed pre-this-change with implicit `input_type="document"`) remain valid for retrieval after this change.
+- Betrayal: a future change adds `task` to the cache fingerprint at `embedding_service.py:413-417`, invalidating all existing user data on next reindex.
+- Consequence: user reindexes their entire repo, burning Voyage credits and an afternoon.
+- Mitigation: structural — cache identity is `(chunk_id, provider, model)`, no task. Group F Step 21 regression test asserts `get_existing_embeddings` is called with exactly those kwargs. **Checkpoint 1 addition**: inline code-comment at Voyage's `_embed_single_batch_locked` mapping site noting `# task affects API call's input_type but NOT cache identity (see ch-agj Step 21 regression test)`.
+
+**Signature ordering convention**
+- Assumption: agents append `task: EmbeddingTask = None` at the end of every signature (after all existing params, e.g., after `batch_size: int | None = None` on `embed_batch`).
+- Betrayal: agent inserts `task` in the middle of the signature, shifting positional indices. Third-party or test-fixture callers using positional args silently land arguments in the wrong slot.
+- Consequence: type errors at boundaries — or worse, silent wrong-arg-passing if types align (e.g., a `str` lands in a `str | None` slot).
+- Mitigation: **CONVENTION (lock this)** — `task` is appended at the end of every signature, never inserted. Tests should always call with `task=` kwarg form, never positional. The Protocol and impls all use the same trailing-arg convention.
+
+**Skipped categories (no real failure mode):**
+- *Encoding boundaries* — `task` is a Python literal `str`, SDKs accept literals, no serialization.
+- *Temporal betrayal* — validator is pure, retry loops capture `task` correctly via closure (function-param scope, not loop-variable scope).
+- *Resource exhaustion* — type aliases are zero-cost; lambda closures bounded by token-split tree depth (< 5 levels).
+
 ## Implementation Steps
 
 ### Group A — Type infrastructure + shared validator
@@ -89,13 +150,19 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 - File: `tests/unit/test_voyageai_provider.py` (extend existing)
 - Tests:
   - `test_embed_passes_input_type_based_on_task` — parametrize `[(None, "document"), ("passage", "document"), ("query", "query")]` with named ids; mock `client.embed` (wrapped via `asyncio.to_thread`); assert `input_type=expected` in call kwargs
-  - `test_embed_raises_value_error_on_unknown_task` — parametrize `["document", "retrieval.passage", "", "Q"]`; assert `ValueError` with `"Unknown embedding task"` substring
+  - `test_embed_raises_value_error_on_unknown_task` — parametrize `["document", "retrieval.passage", "", "Q", "PASSAGE", " passage", True, 0, ["passage"]]`; assert `ValueError` with `"Unknown embedding task"` substring AND that the error message includes `repr(task)` (so `[1, 2]` shows as `[1, 2]`, not `1 2`)
 - Run: expected fail
 
 **Step 6: Implement Voyage task mapping using shared validator**
 - File: `chunkhound/providers/embeddings/voyageai_provider.py`
-- Add `task: EmbeddingTask = None` to `embed`/`embed_single`/`embed_batch`/`embed_streaming`
-- Thread task into `_embed_single_batch` → `_embed_single_batch_locked`
+- Add `task: EmbeddingTask = None` to `embed` (line 269), `embed_single` (line 359), `embed_batch` (line 364), `embed_streaming` (line 394)
+- Add `task: EmbeddingTask = None` to `_embed_single_batch` (line 292) and `_embed_single_batch_locked` (line 297)
+- Thread `task=task` at ALL internal call sites (explicit list — don't miss any):
+  - `embed` body: `_embed_single_batch(sub_batch, task=task)` at line 287 AND `_embed_single_batch(validated_texts, task=task)` at line 290
+  - `embed_single` body: `self.embed([text], task=task)` at line 361
+  - `embed_batch` body: every call to `_embed_single_batch` — read the body first (starts at line 364) and thread `task=task` at each invocation
+  - `embed_streaming` body: thread `task=task` at every call to `embed`/`embed_single` (verify actual call sites)
+  - `_embed_single_batch` body: `self._embed_single_batch_locked(texts, task=task)` at line 295
 - At top of `_embed_single_batch_locked`, call shared `validate_task(task)`
 - Replace hardcoded `input_type="document"` at line 306 with explicit if/elif/else (NOT `dict.get`):
   - `None` or `"passage"` → `"document"` (preserves historical default → no cache invalidation)
@@ -107,20 +174,27 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 
 ### Group C — OpenAI provider
 
-**Step 8: Failing tests for OpenAI accept-and-ignore**
+**Step 8: Failing tests for OpenAI accept + validate + recursion threading**
 - File: `tests/unit/test_openai_provider.py` (new — verify with `ls tests/unit/`)
 - Tests:
-  - `test_embed_accepts_task_arg_without_error` — `task="query"`; no TypeError
-  - `test_embed_does_not_send_task_in_payload` — mock `client.embeddings.create`; assert kwargs do NOT include `task`/`input_type`/`prompt_name`/`extra_body`
-  - `test_recursive_token_limit_fallback_threads_task` — patch `client.embeddings.create` to raise `BadRequestError("maximum context length...tokens")` once then succeed; patch `handle_token_limit_error` to capture the `embed_function`; call captured function and assert eventual `_embed_batch_internal` invocation included `task="passage"`
-- Note: OpenAI provider does NOT validate task — silently accepts any value since it doesn't consume it. Inline comment in test file documents this
+  - `test_embed_accepts_task_arg_without_error` — `task="query"`; no TypeError; mocked client returns embeddings normally
+  - `test_embed_does_not_send_task_in_payload` — mock `client.embeddings.create`; assert kwargs do NOT include `task`/`input_type`/`prompt_name`/`extra_body` (OpenAI rejects unknown fields; we accept the arg but never forward it)
+  - `test_embed_raises_value_error_on_unknown_task` — parametrize `["document", "retrieval.passage", "", "Q", "PASSAGE", " passage", True, 0, ["passage"]]`; assert `ValueError` with `"Unknown embedding task"` substring. Validates symmetric fail-fast across providers (matches Voyage Step 5 test)
+  - `test_recursive_token_limit_fallback_threads_task` — patch `client.embeddings.create` to raise `BadRequestError("maximum context length...tokens")` once then succeed; patch `handle_token_limit_error` to capture the `embed_function`; call captured function and assert eventual `_embed_batch_internal` invocation included `task="passage"` (verifies lambda closure captures task correctly across recursion)
 - Run: expected fail
 
-**Step 9: Implement OpenAI task acceptance + recursion threading**
+**Step 9: Implement OpenAI task acceptance + validation + recursion threading**
 - File: `chunkhound/providers/embeddings/openai_provider.py`
 - Add `task: EmbeddingTask = None` to public `embed` (586), `embed_single` (639), `embed_batch` (644), `embed_streaming` (691), `_embed_batch_internal` (697)
+- At the TOP of `_embed_batch_internal` (line 697, before `await self._ensure_client()`): call `validate_task(task)`. This is the single validation point for OpenAI — fail-fast on typos at the deepest internal entry. Symmetric with Voyage's validation at `_embed_single_batch_locked`. Public methods thread `task` mechanically; only the inner method validates
+- Import: `from chunkhound.interfaces.embedding_provider import EmbeddingTask, validate_task`
 - Body: do NOT include task in `client.embeddings.create(...)` kwargs — actual OpenAI rejects unknown fields
-- Recursion fix at line 751: replace `embed_function=self._embed_batch_internal` with `embed_function=lambda batch: self._embed_batch_internal(batch, task=task)`
+- Thread `task=task` at ALL internal call sites (explicit list — don't miss any):
+  - `embed` body: `self.embed_batch(validated_texts, task=task)` at line 595
+  - `embed_single` body: `self.embed([text], task=task)` at line 641
+  - `embed_batch` body: pass `task=task` to EVERY `_embed_batch_internal(...)` call — lines 661, 669, 676, 686 (4 total)
+  - `embed_streaming` body: `self.embed_single(text, task=task)` at line 694
+- Recursion fix at line 751: replace `embed_function=self._embed_batch_internal` with `embed_function=lambda batch: self._embed_batch_internal(batch, task=task)`. Add a code-comment one line above the lambda: `# Lambda closure captures task across token-limit recursion. handle_token_limit_error's signature (batch_utils.py:13) is Callable[[list[str]], Awaitable[...]] — if that ever changes, this lambda must change too.`
 - Run tests; expected pass
 
 **Step 10: Commit**
@@ -141,8 +215,11 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
   - The existing `_embed_batch_internal` calls `_embed_batch_with_extras(texts, extra_body=None)` (preserves OpenAI behavior)
 - File: `chunkhound/providers/embeddings/tei_provider.py` (new)
 - Class `TEIEmbeddingProvider(OpenAIEmbeddingProvider)`:
+  - Override `__init__`: accept `dims: int` as a REQUIRED keyword arg (not optional — the parent can't infer it for custom models), store as `self._dims`, then call `super().__init__(**other_kwargs)` with remaining kwargs. Parent `OpenAIEmbeddingProvider.__init__` at `openai_provider.py:190-207` does NOT accept `dims` — you must pop/intercept before calling super
+  - Override `@property dims` to return `self._dims`. Parent's `dims` at `openai_provider.py:460-464` returns from `_model_config` dict if model matches (openai only) else hardcoded 1536 — wrong for jina-v3=1024, jina-v5-nano=256, jina-v5-small=512
   - Override `@property name` to return `"tei"` (parent's `name` at `openai_provider.py:431-437` is a `@property`, so `@property` override in subclass takes effect cleanly)
   - No other method overrides yet — shell only
+- Add unit test asserting `TEIEmbeddingProvider(dims=1024, model="jinaai/jina-embeddings-v3", ...).dims == 1024` — verifies dims override actually takes effect (regression guard against the parent's 1536 default leaking through)
 - Add unit test asserting `TEIEmbeddingProvider(...).name == "tei"` and `supports_reranking() is False` when constructed with embedding-only config (no `rerank_format` set) — confirms inherited rerank methods stay dormant
 - Run step 11 tests; expected pass
 - Commit: `refactor(openai): extract _embed_batch_with_extras for shared batch logic (ch-agj)`
@@ -167,10 +244,13 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 **Step 15: Update `EmbeddingConfig` schema to accept `provider="tei"`**
 - File: `chunkhound/core/config/embedding_config.py`
 - Update `provider` field at line 97 from `Literal["openai", "voyageai"]` to `Literal["openai", "voyageai", "tei"]` and update the description at line 98 to list `tei`
-- Audit and update all if/elif chains that hardcode the existing two providers — at lines 206, 307, 319, 344, 367, 456 — read each first, decide whether `"tei"` needs a branch or shares OpenAI's path
-- Update `is_provider_configured`, `get_missing_config`, `get_provider_config` methods so `"tei"` is recognized: TEI requires `model`, `base_url`, and `dims` (no `api_key` requirement — TEI server may or may not require auth)
-- Add a model-validator branch: when `provider == "tei"`, `base_url` MUST be set (raise ValueError otherwise — TEI server URL is non-optional)
-- Update `choices=["openai", "voyageai"]` reference at line 367 to include `"tei"`
+- Add NEW `dims: int | None = Field(default=None, description="Embedding dimensions (REQUIRED for tei, auto-detected for openai/voyageai)")` — needed because TEI serves custom models whose dims cannot be inferred from the model name
+- Audit and update all if/elif chains that hardcode the existing two providers — at lines 206, 307, 319, 344, 367, 456 — read each first, decide whether `"tei"` needs a branch or shares OpenAI's path. Note: the `__repr__` at line 524-539 does NOT branch on provider so needs no change
+- Update `is_provider_configured` (line 312), `get_missing_config` (line 335), `get_provider_config` (line 252) methods so `"tei"` is recognized: TEI requires `model`, `base_url`, and `dims` (no `api_key` requirement — TEI server may or may not require auth)
+- Add a model-validator branch: when `provider == "tei"`, `base_url` MUST be set AND `dims` MUST be set (raise ValueError with specific message for each missing requirement)
+- `get_default_model` at line 296 — no sensible TEI default (user must specify); raise ValueError if `provider == "tei"` and `self.model is None`
+- Update `choices=["openai", "voyageai"]` at line 367 (argparse `--provider`) to include `"tei"`
+- `EmbeddingConfig.add_cli_arguments` at line 362: consider adding `--dims` CLI arg so users can pass `--provider tei --dims 1024 --model jinaai/jina-embeddings-v3 --base-url http://...` (see `extract_cli_overrides` at line 475 for the threading pattern)
 
 **Step 16: Failing tests for factory + registry creating TEIEmbeddingProvider**
 - File: `tests/unit/test_embedding_factory.py` (verify exists with `ls tests/unit/`; if absent, create new; if existing, extend)
@@ -183,12 +263,16 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 
 **Step 17: Add `_create_tei_provider` factory helper + `create_tei_provider` registry function + factory dispatch case**
 - File: `chunkhound/core/config/embedding_factory.py`
-  - Add static method `_create_tei_provider(provider_config: dict[str, Any]) -> TEIEmbeddingProvider` mirroring the structure of `_create_openai_provider` at line 67+ (extract api_key/base_url/model/rerank_*/azure_* from provider_config; instantiate via the registry function)
+  - Add static method `_create_tei_provider(provider_config: dict[str, Any]) -> TEIEmbeddingProvider` mirroring the structure of `_create_openai_provider` at line 67+ (extract api_key/base_url/model/dims/rerank_*/azure_* from provider_config; pass `dims` explicitly; instantiate via the registry function)
   - Import `from chunkhound.embeddings import create_tei_provider`
-  - Add dispatch case: `elif config.provider == "tei": return EmbeddingProviderFactory._create_tei_provider(provider_config)`
+  - Add dispatch case at `create_provider` (line 57-62): `elif config.provider == "tei": return EmbeddingProviderFactory._create_tei_provider(provider_config)`
+  - Update `get_supported_providers()` at line 198 — add `"tei"` to returned list
+  - Update `validate_provider_dependencies()` at line 201 — add `elif provider == "tei"` branch importing `TEIEmbeddingProvider` (mirrors the `elif provider == "voyageai"` branch at lines 219-221)
+  - `get_provider_info()` at line 280+ — adding a TEI branch here is OUT OF SCOPE (setup-wizard concern); leave for a follow-up
 - File: `chunkhound/embeddings.py`
-  - Add `create_tei_provider(api_key=..., base_url, model, dims, ...) -> TEIEmbeddingProvider` factory function mirroring `create_openai_provider` at line 177 (signature parallels OpenAI's; extra: `dims` is required for TEI since no model registry can auto-discover it)
-  - Re-export `TEIEmbeddingProvider` from this module
+  - Add `create_tei_provider(base_url: str, model: str, dims: int, api_key: str | None = None, ...) -> TEIEmbeddingProvider` factory function mirroring `create_openai_provider` at line 177 (signature parallels OpenAI's; `dims` is REQUIRED, `base_url` is REQUIRED, `api_key` optional; pass through rerank_* kwargs)
+  - Re-export `TEIEmbeddingProvider` from this module (add to module-level import, not just TYPE_CHECKING)
+- Also update `EmbeddingConfig.get_provider_config()` at `embedding_config.py:252` — ensure `dims` is threaded into `base_config` dict when `self.provider == "tei"`. Pydantic `EmbeddingConfig` does NOT currently have a `dims` field — you must add it to the schema in Step 15 (`dims: int | None = Field(default=None, ...)`) and include it in `base_config` here so the factory can read it
 - Run tests; expected pass
 - Commit: `feat(tei): wire TEIEmbeddingProvider into config schema, factory, and registry (ch-agj)`
 
@@ -288,3 +372,5 @@ Add an optional asymmetric-retrieval `task` hint to ChunkHound's embedding inter
 
 - [2026-04-24T23:05:40Z] [Seth Yanow] Plan written. 22 steps across 6 groups: type infra+validator, Voyage, OpenAI, TEI/jina provider (subclasses OpenAI, sends extra_body), passage call sites, query call sites, cache regression. Subclassing extracts shared _embed_batch_with_extras to avoid retry-loop duplication. Validated against design-patterns/error-handling/code-style/anti-patterns/type-safety/testing-patterns skills. Cache identity stays (chunk_id, provider, model) — existing Voyage embeddings on this repo will NOT be regenerated. Awaiting user execution; user gated on live runs.
 - [2026-04-24T23:24:18Z] [Seth Yanow] Plan v3 amended: added Step 15 (EmbeddingConfig schema widening for tei), Step 16 (factory + registry tests), Step 17 (factory _create_tei_provider helper + chunkhound/embeddings.py registry function + commit). Renumbered subsequent steps. Anti-patterns expanded with mypy scope discipline, commit splitting (3 commits in Group D), pytest-asyncio mode notice, rerank-default test, name @property verification. Success criteria expanded for schema/registry/name/rerank checks. dims-keyed DB table behavior documented as positive confirmation.
+- [2026-04-25T02:19:42Z] [Seth Yanow] SRE fresh-eyes review (2026-04-25). Skeleton claims all verified against codebase. Filled 5 critical gaps in place: (1) Step 6 Voyage threading explicit at lines 287/290/295/361; (2) Step 9 OpenAI threading explicit at lines 595/641/661/669/676/686/694 — the 4 calls inside embed_batch were missing; (3) Step 12 TEIEmbeddingProvider MUST override __init__ to accept dims (required kwarg) AND override @property dims — parent hardcodes 1536 for non-OpenAI models, wrong for jina-v3=1024/jina-v5-nano=256/jina-v5-small=512; (4) Step 15 add 'dims' field to Pydantic EmbeddingConfig + CLI '--dims' arg + model-validator enforces both base_url AND dims for tei; (5) Step 17 factory also updates get_supported_providers() and validate_provider_dependencies(); get_provider_info wizard metadata explicitly OUT OF SCOPE. Informational: EmbeddingConfig name collision (dataclass vs Pydantic), openai_provider.py 1450 lines / voyageai 725 lines already exceed CLAUDE.md 500-line threshold — follow-up refactor ticket warranted. Granularity concern (22 steps, one task) flagged for user decision.
+- [2026-04-25T02:50:07Z] [Seth Yanow] Adversarial planning (Checkpoint 1: A+B+C). Failure catalog added to Key Considerations. Design decision: validate_task called at the DEEPEST internal method of every provider (Voyage _embed_single_batch_locked, OpenAI _embed_batch_internal, TEI _embed_batch_internal override). Drops the Voyage-validates/OpenAI-silently-accepts asymmetry. One helper, one invocation per provider class, symmetric fail-fast. User framing: AI agents write code here — consistency over cleverness. Three C's lens: Clarity (same pattern everywhere), Cohesion (validator owns contract), Coupling (providers depend on validator only, not each other). Step 8 test plan extended with test_embed_raises_value_error_on_unknown_task (parametrized over bool/int/list/whitespace edge cases); Step 5 Voyage test extended with same set. Step 9 adds validate_task(task) at _embed_batch_internal top + lambda-coupling comment.
