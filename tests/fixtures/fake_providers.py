@@ -22,7 +22,11 @@ import xxhash
 
 from chunkhound.core.models import Chunk, Embedding, File
 from chunkhound.core.models.symbol import EdgeRow, SymbolRow
-from chunkhound.interfaces.embedding_provider import EmbeddingConfig, RerankResult
+from chunkhound.interfaces.embedding_provider import (
+    EmbeddingConfig,
+    EmbeddingTask,
+    RerankResult,
+)
 from chunkhound.interfaces.llm_provider import LLMProvider, LLMResponse
 
 
@@ -308,8 +312,15 @@ class FakeEmbeddingProvider:
 
         return vector
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings for a list of texts."""
+    async def embed(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
+        """Generate embeddings for a list of texts.
+
+        ``task`` is accepted for protocol compatibility (ch-agj) but the
+        fake provider's deterministic vector generation does not vary
+        based on it.
+        """
         if not texts:
             return []
 
@@ -321,13 +332,18 @@ class FakeEmbeddingProvider:
 
         return [self._generate_deterministic_vector(text) for text in texts]
 
-    async def embed_single(self, text: str) -> list[float]:
+    async def embed_single(
+        self, text: str, task: EmbeddingTask = None
+    ) -> list[float]:
         """Generate embedding for a single text."""
-        embeddings = await self.embed([text])
+        embeddings = await self.embed([text], task=task)
         return embeddings[0]
 
     async def embed_batch(
-        self, texts: list[str], batch_size: int | None = None
+        self,
+        texts: list[str],
+        batch_size: int | None = None,
+        task: EmbeddingTask = None,
     ) -> list[list[float]]:
         """Generate embeddings in batches."""
         if not texts:
@@ -338,15 +354,17 @@ class FakeEmbeddingProvider:
 
         all_embeddings = []
         for batch in batches:
-            embeddings = await self.embed(batch)
+            embeddings = await self.embed(batch, task=task)
             all_embeddings.extend(embeddings)
 
         return all_embeddings
 
-    async def embed_streaming(self, texts: list[str]) -> AsyncIterator[list[float]]:
+    async def embed_streaming(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> AsyncIterator[list[float]]:
         """Generate embeddings with streaming results."""
         for text in texts:
-            embedding = await self.embed_single(text)
+            embedding = await self.embed_single(text, task=task)
             yield embedding
 
     async def initialize(self) -> None:
@@ -581,8 +599,14 @@ class ValidatingEmbeddingProvider(FakeEmbeddingProvider):
         match = re.search(r"\((\w+)\)\n", text[:200])
         return match.group(1).lower() if match else None
 
-    async def embed(self, texts: list[str]) -> list[list[float]]:
-        """Generate embeddings while validating chunk size constraints."""
+    async def embed(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
+        """Generate embeddings while validating chunk size constraints.
+
+        ``task`` accepted for protocol compatibility (ch-agj); validation
+        logic does not depend on it.
+        """
         for text in texts:
             self.all_texts.append(text)
             # Measure non-whitespace chars (same as ChunkMetrics.from_content)
