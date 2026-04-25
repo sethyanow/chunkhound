@@ -17,6 +17,11 @@ Things here should still be useful six months from now.
 - Fingerprint is `(chunk_id, provider, model)` only. Does NOT include `task`, `dims`, or content hash.
 - **DB tables are keyed by `(provider, model, dims)`**. Switching providers (e.g., voyageai → tei) writes to a new table; old embeddings stay dormant, not deleted, not regenerated. "Don't disturb existing data" is automatic.
 
+### Embedding `dims` is bounded by the DB, not the provider
+- TEI / OpenAI provider classes accept any positive `int` for dims (Python int is unbounded).
+- LanceDB and DuckDB vector columns are fixed-size at table-creation time. Astronomical dims (e.g., `2**31`) would fail at DB schema creation, NOT at provider construction — the failure mode is a ValueError or panic in the DB layer, far from the cause.
+- Practical embedding dims are typically `≤ 4096`; any model claiming larger should be sanity-checked.
+
 ### Embedding provider anatomy (where retry lives)
 - `VoyageAIEmbeddingProvider._embed_single_batch_locked()` (voyageai_provider.py:~297) — semaphore-protected, retry loop with `asyncio.to_thread(self._client.embed, ...)` (Voyage SDK is sync)
 - `OpenAIEmbeddingProvider._embed_batch_internal()` (openai_provider.py:~697) — async retry loop, handles RateLimitError/BadRequestError/APITimeoutError. Token-limit BadRequestError triggers `handle_token_limit_error` recursive fallback
