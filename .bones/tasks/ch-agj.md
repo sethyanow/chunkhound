@@ -1,11 +1,12 @@
 ---
 id: ch-agj
 title: Plumb passage/query task hint through embedding interface
-status: active
+status: closed
 type: task
 priority: 1
 owner: Seth Yanow
 ---
+
 
 
 

@@ -35,6 +35,24 @@ Things here should still be useful six months from now.
 - `_ensure_client()` creates `AsyncOpenAI` / `AsyncAzureOpenAI` in async context.
 - Creating in `__init__` caused TaskGroup errors on Ubuntu when no event loop is running — leave this alone unless you reproduce the bug.
 
+### Latent semaphore deadlock in `EmbeddingService.process_batch` (ch-agj follow-up)
+- `embedding_service.py:461` creates `asyncio.Semaphore(self._max_concurrent_batches)`. `process_batch` recurses INSIDE its own `async with semaphore:` block at line 540-542 (token-limit batch split).
+- `asyncio.Semaphore` is **not reentrant**. With `max_concurrent_batches=1`, the recursive call waits forever for the permit the outer call holds.
+- Real production default is `8` or provider-recommended, so the bug is normally latent. But any caller setting `max=1` (e.g. diagnostics, rate-limited deployments) hits a hang on the first token-limit split.
+- Tracked as a separate bones task. Adversarial test at `tests/unit/test_ch_agj_adversarial_efgroups.py::TestRecursiveTokenLimitSplitPreservesTaskPassage` documents the workaround (`max_concurrent_batches=2`) with a 10s pytest timeout to surface any future regression fast.
+
+### Protocol-shape changes need a unit-tier `inspect.signature` probe BEFORE call-site edits
+- ch-agj added `task: EmbeddingTask = None` to the `EmbeddingProvider` protocol. Production call sites passed `task="passage"`/`task="query"` as kwarg. Test fixture `FakeEmbeddingProvider.embed` was missing the kwarg.
+- Unit tier didn't catch it (unit tests don't import the fixture). Integration tier caught 31 failures with `TypeError: ... unexpected keyword argument 'task'` — slow feedback (~7 min suite).
+- Established pattern for the next protocol-shape change: add a unit-tier signature probe FIRST.
+  ```python
+  def test_fake_provider_signature_accepts_new_kwarg():
+      sig = inspect.signature(FakeEmbeddingProvider.embed)
+      assert "task" in sig.parameters
+      assert sig.parameters["task"].default is None
+  ```
+- See `tests/unit/test_ch_agj_adversarial_efgroups.py::TestFakeProviderEmbedSignatureAcceptsTask` for the established shape. Runs in ms; catches drift at unit tier.
+
 ### `chunkhound.embeddings` re-exports use PEP 562 `__getattr__` to dodge a cycle
 - Eager `from chunkhound.providers.embeddings.X_provider import XProvider` at module level in `chunkhound/embeddings.py` creates a circular import:
   `chunkhound.embeddings → providers.embeddings.X_provider → chunkhound.providers.__init__ → DuckDBProvider → chunkhound.embeddings (mid-load, EmbeddingManager not yet defined)`
