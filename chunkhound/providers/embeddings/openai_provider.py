@@ -198,7 +198,7 @@ class OpenAIEmbeddingProvider:
         base_url: str | None = None,
         model: str = "text-embedding-3-small",
         rerank_model: str | None = None,
-        rerank_url: str = "/rerank",
+        rerank_url: str | None = "/rerank",
         rerank_format: str = "auto",
         batch_size: int = 100,
         timeout: int = 30,
@@ -733,6 +733,10 @@ class OpenAIEmbeddingProvider:
         Single validation point for OpenAI provider — fail-fast on typos
         before any network I/O. Symmetric with Voyage's
         _embed_single_batch_locked. See ch-agj Key Considerations.
+
+        Delegates the actual API call + retry loop to _embed_batch_with_extras
+        so subclasses (TEI) can attach extra_body without duplicating retry
+        logic.
         """
         # Validate at deepest entry. OpenAI doesn't USE task (no input_type
         # semantics), but validates for symmetric error UX across providers.
@@ -741,15 +745,53 @@ class OpenAIEmbeddingProvider:
         if not self._client:
             raise RuntimeError("OpenAI client not initialized")
 
+        # OpenAI path sends no extras. TEI subclass overrides to compute
+        # extra_body from task.
+        return await self._embed_batch_with_extras(texts, extra_body=None, task=task)
+
+    async def _embed_batch_with_extras(
+        self,
+        texts: list[str],
+        extra_body: dict[str, Any] | None = None,
+        *,
+        task: EmbeddingTask = None,
+    ) -> list[list[float]]:
+        """Run the embeddings API call with retry, optionally attaching
+        provider-specific ``extra_body`` (e.g. TEI ``{"task": "retrieval.X"}``).
+
+        Args:
+            texts: Pre-validated input batch.
+            extra_body: Optional dict forwarded as the OpenAI SDK's
+                ``extra_body`` kwarg. When ``None``, the kwarg is OMITTED
+                from the SDK call (not passed as ``extra_body=None``) to
+                preserve byte-identical request payloads for OpenAI/Azure.
+            task: Asymmetric-retrieval hint forwarded only to the
+                token-limit recursion lambda — keyword-only because callers
+                shouldn't think they're "setting" task here. Validation
+                lives in _embed_batch_internal.
+
+        This method owns the retry loop, response sorting, and usage_stats
+        increments. _embed_batch_internal is a thin wrapper that handles
+        validation and client setup once before delegating here.
+        """
+        assert self._client is not None  # _ensure_client() already ran in caller
+
+        # Build base kwargs once. extra_body is conditional — pass it ONLY
+        # when set, so the OpenAI/Azure path doesn't see extra_body=None
+        # (some compat gateways reject explicit nulls).
+        base_kwargs: dict[str, Any] = {
+            "model": self._get_deployment_model(),
+            "input": texts,
+            "timeout": self._timeout,
+        }
+        if extra_body is not None:
+            base_kwargs["extra_body"] = extra_body
+
         for attempt in range(self._retry_attempts):
             try:
                 logger.debug(f"Generating embeddings for {len(texts)} texts (attempt {attempt + 1})")
 
-                response = await self._client.embeddings.create(
-                    model=self._get_deployment_model(),
-                    input=texts,
-                    timeout=self._timeout,
-                )
+                response = await self._client.embeddings.create(**base_kwargs)
 
                 # Extract embeddings from response, sorted by original input order
                 # OpenAI API does not guarantee response order - each data object
@@ -763,7 +805,8 @@ class OpenAIEmbeddingProvider:
                     missing = [i for i, e in enumerate(embeddings) if e is None]
                     raise RuntimeError(f"OpenAI API returned incomplete embeddings, missing indices: {missing}")
 
-                # Update usage statistics
+                # Update usage statistics — single increment, in this method
+                # only. _embed_batch_internal must NOT also increment.
                 self._usage_stats["requests_made"] += 1
                 self._usage_stats["embeddings_generated"] += len(embeddings)
                 if hasattr(response, "usage") and response.usage:
@@ -795,6 +838,9 @@ class OpenAIEmbeddingProvider:
                         # Callable[[list[str]], Awaitable[...]] — single
                         # positional arg. If that ever changes, this lambda
                         # must change too.
+                        # Recurse through _embed_batch_internal (NOT
+                        # _embed_batch_with_extras) so subclass overrides
+                        # (TEI) get a chance to recompute extra_body.
                         return await handle_token_limit_error(
                             texts=texts,
                             total_tokens=total_tokens,
@@ -834,6 +880,9 @@ class OpenAIEmbeddingProvider:
                         raise
                 else:
                     raise
+
+        # Defensive — loop should always return or raise inside the try/except.
+        raise RuntimeError("OpenAI _embed_batch_with_extras exited retry loop without result")
 
         raise RuntimeError(f"Failed to generate embeddings after {self._retry_attempts} attempts")
 

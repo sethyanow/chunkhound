@@ -217,3 +217,36 @@ class TestRecursiveTokenLimitFallback:
             f"Lambda must capture task='passage' via closure; "
             f"nonlocals={closure_vars.nonlocals}"
         )
+
+
+# ---------------------------------------------------------------------------
+# 5. Refactor regression guards (ch-agj Group D Cycle A)
+# ---------------------------------------------------------------------------
+# These lock in contracts the _embed_batch_with_extras refactor must preserve.
+# Pre-refactor: pass (current behavior). Post-refactor: must still pass — if
+# they fail, the refactor reordered side effects or duplicated state updates.
+
+
+class TestUsageStatsSingleIncrement:
+    async def test_requests_made_increments_exactly_once_per_batch(self) -> None:
+        """_usage_stats['requests_made'] must increment exactly once per
+        embed_batch call. After the refactor, ONLY _embed_batch_with_extras
+        updates usage_stats; _embed_batch_internal must NOT also increment
+        (would double-count).
+        """
+        # Arrange
+        provider = _make_provider()
+        provider._client.embeddings.create = AsyncMock(
+            return_value=_stub_embedding_response(count=1)
+        )
+        before = provider._usage_stats["requests_made"]
+
+        # Act
+        await provider.embed(["hello"])
+
+        # Assert
+        after = provider._usage_stats["requests_made"]
+        assert after - before == 1, (
+            f"requests_made should increment by 1 per embed call; "
+            f"before={before}, after={after}, delta={after - before}"
+        )
