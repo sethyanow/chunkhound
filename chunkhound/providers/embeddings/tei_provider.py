@@ -16,6 +16,9 @@ ch-agj Cycle A: class shell only (this file). Cycle B adds task→extra_body.
 
 from __future__ import annotations
 
+from typing import Any
+
+from chunkhound.interfaces.embedding_provider import EmbeddingTask, validate_task
 from chunkhound.providers.embeddings.openai_provider import OpenAIEmbeddingProvider
 
 
@@ -129,3 +132,51 @@ class TEIEmbeddingProvider(OpenAIEmbeddingProvider):
         non-OpenAI models, which is wrong for every model TEI hosts.
         """
         return self._dims
+
+    async def _embed_batch_internal(
+        self, texts: list[str], task: EmbeddingTask = None
+    ) -> list[list[float]]:
+        """Validate task, map to TEI's ``extra_body`` shape, delegate to parent.
+
+        TEI's OpenAI-compat layer must forward ``extra_body`` to the
+        underlying model's ``encode()`` call. For jina v3 and v5 this maps
+        to ``model.encode(task="retrieval.{passage,query}")``, which selects
+        the asymmetric prompt template. If your TEI deployment silently
+        drops unknown extras, asymmetric retrieval degrades to symmetric —
+        verify with a manual query/passage cosine test on first deploy
+        (see ch-agj Key Considerations).
+        """
+        # Bind validated value back so any future normalization (e.g.
+        # lowercasing) in validate_task propagates to extra_body. Symmetric
+        # with how a strict validator should be used.
+        task = validate_task(task)
+
+        await self._ensure_client()
+        if not self._client:
+            raise RuntimeError("TEI client not initialized")
+
+        extra_body = self._task_to_extra_body(task)
+        return await self._embed_batch_with_extras(
+            texts, extra_body=extra_body, task=task
+        )
+
+    @staticmethod
+    def _task_to_extra_body(task: EmbeddingTask) -> dict[str, Any] | None:
+        """Translate the asymmetric-retrieval hint to TEI's ``extra_body``.
+
+        Returns ``None`` for ``task=None`` so callers can rely on the
+        OpenAI SDK's "omit when None" contract — caller wraps the result
+        in a dict and forwards only when non-None, preventing
+        ``extra_body=None`` from reaching the wire.
+        """
+        if task is None:
+            return None
+        if task == "passage":
+            return {"task": "retrieval.passage"}
+        if task == "query":
+            return {"task": "retrieval.query"}
+        # validate_task() already filtered. If we reach here, the contract
+        # has drifted between the validator and this mapping.
+        raise AssertionError(
+            f"validate_task let through unexpected {task!r} — mapping drift"
+        )
