@@ -286,16 +286,10 @@ class TestRecursiveTokenLimitSplitPreservesTaskPassage:
     via lambda closure inside _embed_batch_internal); this is the
     OUTER recursion in EmbeddingService.process_batch.
 
-    **Pre-existing deadlock note (OUT OF SCOPE for ch-agj)**: production
-    uses ``asyncio.Semaphore(max_concurrent_batches)`` non-reentrantly,
-    and ``process_batch`` recurses INSIDE the ``async with semaphore``
-    block. With ``max_concurrent_batches=1``, the recursive call waits
-    forever for the permit the outer call holds — deadlock. This test
-    uses ``max_concurrent_batches=2`` (room for one outer + one
-    recursive permit) to avoid the deadlock; the bone-detected issue is
-    logged on the ch-agj epic for follow-up. The 10s pytest timeout
-    here surfaces any future regression of this pattern in seconds, not
-    in the default 300s pytest-timeout.
+    Locked at ``max_concurrent_batches=1`` — ch-qw4 fixed the prior
+    semaphore deadlock that this test previously sidestepped with
+    ``max=2``. The 10s pytest timeout here surfaces any regression of
+    that fix in seconds, not in the default 300s pytest-timeout.
     """
 
     @pytest.mark.timeout(10)
@@ -320,12 +314,10 @@ class TestRecursiveTokenLimitSplitPreservesTaskPassage:
         db = MagicMock()
         db.insert_embeddings_batch = MagicMock(return_value=1)
 
-        # max_concurrent_batches=2 sidesteps the pre-existing semaphore
-        # deadlock — see class docstring.
         service = EmbeddingService(
             database_provider=db,
             embedding_provider=provider,
-            max_concurrent_batches=2,
+            max_concurrent_batches=1,
         )
 
         # Act — 2 chunks → 1st call raises → split into 2 calls (each 1 chunk)

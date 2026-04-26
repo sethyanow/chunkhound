@@ -1,7 +1,7 @@
 """Embedding service for ChunkHound - manages embedding generation and caching."""
 
 import asyncio
-from typing import Any
+from typing import Any, Final
 
 from loguru import logger
 from rich.progress import Progress, TaskID
@@ -13,6 +13,20 @@ from chunkhound.interfaces.database_provider import DatabaseProvider
 from chunkhound.interfaces.embedding_provider import EmbeddingProvider
 
 from .base_service import BaseService
+
+
+class _BatchSplitNeeded:
+    """Sentinel: token-limit retry needs a split, performed outside the
+    semaphore to avoid the non-reentrant deadlock fixed in ch-qw4.
+    """
+
+    __slots__ = ()
+
+    def __repr__(self) -> str:
+        return "_BATCH_SPLIT_NEEDED"
+
+
+_BATCH_SPLIT_NEEDED: Final[_BatchSplitNeeded] = _BatchSplitNeeded()
 
 
 class EmbeddingService(BaseService):
@@ -460,115 +474,138 @@ class EmbeddingService(BaseService):
         # Process batches with concurrency control
         semaphore = asyncio.Semaphore(self._max_concurrent_batches)
 
+        async def _attempt_batch(
+            batch: list[tuple[ChunkId, str]],
+            batch_num: int,
+            retry_depth: int,
+            timing: BatchTiming | None,
+        ) -> int | _BatchSplitNeeded:
+            """Single batch attempt: API call + length validation + DB insert.
+
+            Runs entirely inside the caller's ``async with semaphore`` block
+            so that mark_embed_*/mark_db_* markers reflect time-under-lock.
+            On token-limit error with room to split, returns the
+            ``_BATCH_SPLIT_NEEDED`` sentinel so the caller can split and
+            recurse OUTSIDE the lock (ch-qw4).
+            """
+            logger.debug(f"Processing batch {batch_num + 1}/{len(batches)} with {len(batch)} chunks")
+
+            chunk_ids = [chunk_id for chunk_id, _ in batch]
+            texts = [text for _, text in batch]
+
+            if not self._embedding_provider:
+                return 0
+
+            try:
+                if timing:
+                    timing.mark_embed_api_start()
+                embedding_results = await self._embedding_provider.embed(texts, task="passage")
+                if timing:
+                    timing.mark_embed_api_end()
+
+                if len(embedding_results) != len(chunk_ids):
+                    logger.warning(
+                        f"Batch {batch_num}: Expected {len(chunk_ids)} embeddings, got {len(embedding_results)}"
+                    )
+                    return 0
+
+                embeddings_data = []
+                for chunk_id, vector in zip(chunk_ids, embedding_results):
+                    embeddings_data.append(
+                        {
+                            "chunk_id": chunk_id,
+                            "provider": self._embedding_provider.name if self._embedding_provider else "unknown",
+                            "model": self._embedding_provider.model if self._embedding_provider else "unknown",
+                            "dims": len(vector),
+                            "embedding": vector,
+                        }
+                    )
+
+                if timing:
+                    timing.mark_db_insert_start()
+                stored_count = self._db.insert_embeddings_batch(embeddings_data, self._db_batch_size)
+                if timing:
+                    timing.mark_db_insert_end()
+                logger.debug(f"Batch {batch_num + 1} completed: {stored_count} embeddings stored")
+
+                return stored_count
+
+            except Exception as e:
+                error_message = str(e).lower()
+                is_token_limit_error = (
+                    "max allowed tokens" in error_message
+                    or "token limit" in error_message
+                    or "tokens per batch" in error_message
+                )
+
+                if is_token_limit_error and len(batch) > 1 and retry_depth < 3:
+                    logger.warning(
+                        f"Token limit exceeded for batch {batch_num + 1}, splitting and retrying "
+                        f"(depth {retry_depth + 1}/3)"
+                    )
+                    return _BATCH_SPLIT_NEEDED
+
+                # Non-retryable or max retries exceeded — log and swallow.
+                batch_sizes = [len(text) for _, text in batch]
+                max_size = max(batch_sizes) if batch_sizes else 0
+                import os
+                from datetime import datetime
+
+                debug_file = os.getenv("CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_debug.log")
+                timestamp = datetime.now().isoformat()
+                try:
+                    with open(debug_file, "a") as f:
+                        f.write(
+                            f"[{timestamp}] [BATCH-PROCESS] Batch {batch_num + 1}"
+                            f" failed (chunks: {len(batch)},"
+                            f" max_chars: {max_size}): {e}\n"
+                        )
+                        f.flush()
+                except Exception:
+                    pass
+
+                logger.error(
+                    f"[EmbSvc-BatchProcess] Batch {batch_num + 1} failed"
+                    f" (chunks: {len(batch)}, max_chars: {max_size}): {e}"
+                )
+                return 0
+
         async def process_batch(
             batch: list[tuple[ChunkId, str]],
             batch_num: int,
             retry_depth: int = 0,
         ) -> int:
-            """Process a single batch of embeddings."""
-            async with semaphore:
-                # Timing is only created for top-level calls (retry_depth == 0);
-                # retries have timing=None and skip all instrumentation.
-                timing: BatchTiming | None = None
-                if self._metrics_collector and retry_depth == 0:
-                    timing = self._metrics_collector.start_batch(batch_num, len(batch))
-                try:
-                    logger.debug(f"Processing batch {batch_num + 1}/{len(batches)} with {len(batch)} chunks")
+            """Process a single batch of embeddings.
 
-                    # Extract chunk IDs and texts
-                    chunk_ids = [chunk_id for chunk_id, _ in batch]
-                    texts = [text for _, text in batch]
+            ch-qw4: the semaphore wraps a single attempt only. On
+            token-limit retry, the split halves recurse AFTER the lock
+            is released so that recursive permits do not deadlock with
+            the parent (asyncio.Semaphore is non-reentrant).
+            """
+            # Timing is only created for top-level calls (retry_depth == 0);
+            # retries have timing=None and skip all instrumentation.
+            timing: BatchTiming | None = None
+            try:
+                async with semaphore:
+                    if self._metrics_collector and retry_depth == 0:
+                        timing = self._metrics_collector.start_batch(batch_num, len(batch))
+                    outcome = await _attempt_batch(batch, batch_num, retry_depth, timing)
 
-                    # Generate embeddings
-                    if not self._embedding_provider:
-                        return 0
-                    if timing:
-                        timing.mark_embed_api_start()
-                    embedding_results = await self._embedding_provider.embed(texts, task="passage")
-                    if timing:
-                        timing.mark_embed_api_end()
+                # OUTSIDE the semaphore — split recursion happens here so
+                # the parent's permit is released before the children try
+                # to acquire it. This is the ch-qw4 fix.
+                if isinstance(outcome, _BatchSplitNeeded):
+                    mid = len(batch) // 2
+                    batch1 = batch[:mid]
+                    batch2 = batch[mid:]
+                    result1 = await process_batch(batch1, batch_num, retry_depth + 1)
+                    result2 = await process_batch(batch2, batch_num, retry_depth + 1)
+                    return result1 + result2
 
-                    if len(embedding_results) != len(chunk_ids):
-                        logger.warning(
-                            f"Batch {batch_num}: Expected {len(chunk_ids)} embeddings, got {len(embedding_results)}"
-                        )
-                        return 0
-
-                    # Prepare embedding data for database
-                    embeddings_data = []
-                    for chunk_id, vector in zip(chunk_ids, embedding_results):
-                        embeddings_data.append(
-                            {
-                                "chunk_id": chunk_id,
-                                "provider": self._embedding_provider.name if self._embedding_provider else "unknown",
-                                "model": self._embedding_provider.model if self._embedding_provider else "unknown",
-                                "dims": len(vector),
-                                "embedding": vector,
-                            }
-                        )
-
-                    # Store in database with configurable batch size
-                    if timing:
-                        timing.mark_db_insert_start()
-                    stored_count = self._db.insert_embeddings_batch(embeddings_data, self._db_batch_size)
-                    if timing:
-                        timing.mark_db_insert_end()
-                    logger.debug(f"Batch {batch_num + 1} completed: {stored_count} embeddings stored")
-
-                    return stored_count
-
-                except Exception as e:
-                    # Check if this is a token limit error that can be retried
-                    error_message = str(e).lower()
-                    is_token_limit_error = (
-                        "max allowed tokens" in error_message
-                        or "token limit" in error_message
-                        or "tokens per batch" in error_message
-                    )
-
-                    if is_token_limit_error and len(batch) > 1 and retry_depth < 3:
-                        # Split batch in half and retry both parts
-                        logger.warning(
-                            f"Token limit exceeded for batch {batch_num + 1}, splitting and retrying "
-                            f"(depth {retry_depth + 1}/3)"
-                        )
-                        mid = len(batch) // 2
-                        batch1 = batch[:mid]
-                        batch2 = batch[mid:]
-
-                        # Recursively process both halves
-                        result1 = await process_batch(batch1, batch_num, retry_depth + 1)
-                        result2 = await process_batch(batch2, batch_num, retry_depth + 1)
-                        return result1 + result2
-
-                    # Log batch details for non-retryable errors or max retries exceeded
-                    batch_sizes = [len(text) for _, text in batch]
-                    max_size = max(batch_sizes) if batch_sizes else 0
-                    # Debug log to trace execution path
-                    import os
-                    from datetime import datetime
-
-                    debug_file = os.getenv("CHUNKHOUND_DEBUG_FILE", "/tmp/chunkhound_debug.log")
-                    timestamp = datetime.now().isoformat()
-                    try:
-                        with open(debug_file, "a") as f:
-                            f.write(
-                                f"[{timestamp}] [BATCH-PROCESS] Batch {batch_num + 1}"
-                                f" failed (chunks: {len(batch)},"
-                                f" max_chars: {max_size}): {e}\n"
-                            )
-                            f.flush()
-                    except Exception:
-                        pass
-
-                    logger.error(
-                        f"[EmbSvc-BatchProcess] Batch {batch_num + 1} failed"
-                        f" (chunks: {len(batch)}, max_chars: {max_size}): {e}"
-                    )
-                    return 0
-                finally:
-                    if timing and self._metrics_collector:
-                        self._metrics_collector.end_batch(timing)
+                return outcome
+            finally:
+                if timing and self._metrics_collector:
+                    self._metrics_collector.end_batch(timing)
 
         # Create progress task for embedding generation if requested
         embed_task: TaskID | None = None
