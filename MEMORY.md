@@ -35,11 +35,11 @@ Things here should still be useful six months from now.
 - `_ensure_client()` creates `AsyncOpenAI` / `AsyncAzureOpenAI` in async context.
 - Creating in `__init__` caused TaskGroup errors on Ubuntu when no event loop is running — leave this alone unless you reproduce the bug.
 
-### Latent semaphore deadlock in `EmbeddingService.process_batch` (ch-agj follow-up)
-- `embedding_service.py:461` creates `asyncio.Semaphore(self._max_concurrent_batches)`. `process_batch` recurses INSIDE its own `async with semaphore:` block at line 540-542 (token-limit batch split).
-- `asyncio.Semaphore` is **not reentrant**. With `max_concurrent_batches=1`, the recursive call waits forever for the permit the outer call holds.
-- Real production default is `8` or provider-recommended, so the bug is normally latent. But any caller setting `max=1` (e.g. diagnostics, rate-limited deployments) hits a hang on the first token-limit split.
-- Tracked as a separate bones task. Adversarial test at `tests/unit/test_ch_agj_adversarial_efgroups.py::TestRecursiveTokenLimitSplitPreservesTaskPassage` documents the workaround (`max_concurrent_batches=2`) with a 10s pytest timeout to surface any future regression fast.
+### Semaphore deadlock in `EmbeddingService.process_batch` — FIXED in ch-qw4 (2026-04-26)
+- Fixed at commit `f120462`: extracted `_attempt_batch` nested helper that runs entirely under the semaphore and returns either an `int` or the `_BATCH_SPLIT_NEEDED` sentinel. Outer `process_batch` wraps only the single attempt in `async with semaphore:`, releases the permit, then recurses outside the lock.
+- The bug was hold-and-wait, not sizing — no static `max_concurrent_batches` was safe because `asyncio.gather` schedules all initial batches simultaneously (any N parents holding all N permits → N split children deadlock).
+- Test net: 5 tests in `tests/unit/test_ch_qw4_semaphore_deadlock.py` (max=1 + max=N + singular + multi-level + second-run) plus the re-locked `TestRecursiveTokenLimitSplitPreservesTaskPassage` at max=1. All carry `@pytest.mark.timeout(10)` so any regression surfaces in seconds.
+- Sentinel pattern (`_BatchSplitNeeded` singleton + `int | _BatchSplitNeeded` return type) is now the established way in this module to signal "needs follow-up retry outside the lock." Reusable for any future async retry-after-release logic.
 
 ### Protocol-shape changes need a unit-tier `inspect.signature` probe BEFORE call-site edits
 - ch-agj added `task: EmbeddingTask = None` to the `EmbeddingProvider` protocol. Production call sites passed `task="passage"`/`task="query"` as kwarg. Test fixture `FakeEmbeddingProvider.embed` was missing the kwarg.
@@ -106,6 +106,12 @@ Things here should still be useful six months from now.
 
 ### `hatch-vcs` dynamic versioning
 - Version derived from git tags. **Never manually edit version strings.** Use `uv run scripts/update_version.py X.Y.Z`.
+
+### `AsyncMock` side_effects need an internal `await` to surface concurrency bugs
+- An `AsyncMock(side_effect=async_func)` where `async_func` has no `await` runs synchronously to completion. asyncio scheduler never gets a chance to interleave gather tasks.
+- Symptom (ch-qw4 Test 2 RED phase): test exercising the gather-concurrency deadlock passed in 0.26s on the buggy code because all parents ran their full recursion sequentially before the next gather task started — permits were never simultaneously held.
+- Fix: insert `await asyncio.sleep(0)` at the point where you need the event loop to schedule other tasks. For ch-qw4 this was right before raising the token-limit exception, forcing all N parents to acquire their permits before any of them attempted to recurse.
+- General rule: any asyncio test verifying concurrent state interaction must include at least one `await` per side_effect path, or the mock collapses concurrency.
 
 ### DB path footguns (detail in CLAUDE.md)
 - `--db` wants the **directory** (e.g., `--db .chunkhound/db`), not the file path. Passing the full `chunks.db` path silently creates nested `chunks.db/chunks.db`.
