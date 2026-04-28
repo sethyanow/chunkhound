@@ -4,8 +4,10 @@ title: Phase 5 acceptance shakedown bugfixes
 status: open
 type: epic
 priority: 1
-depends_on: [ch-3zc, ch-wma, ch-yss, ch-qxc, ch-7s3, ch-nr0]
+depends_on: [ch-3zc, ch-wma, ch-yss, ch-qxc, ch-7s3, ch-nr0, ch-eoe]
 ---
+
+
 
 
 

@@ -1,12 +1,14 @@
 ---
 id: ch-3zc
 title: 'Bug: get_stats returns 0 for files/chunks due to .to_pandas() executor timeout'
-status: active
+status: closed
 type: bug
 priority: 1
 owner: Seth
 parent: ch-ljh
 ---
+
+
 
 
 
@@ -98,12 +100,12 @@ git add -u && git commit -m "fix(lancedb): use count_rows() in get_stats to avoi
 - [x] Spot-check confirms no caller of `get_stats()` regresses on embeddings removal (verified at serial_database_provider.py:541 and rich_output.py:613 — both use `.get(..., 0)`; no direct `stats["embeddings"]` indexing anywhere)
 - [x] Both regression tests in `tests/integration/test_lancedb_stats.py` pass
 - [x] Existing LanceDB provider tests still pass (95 passed)
-- [ ] Live verification: after fix, MCP `get_stats` on this repo returns real counts (not 0)
+- [x] Live verification: after fix, MCP `get_stats` on this repo returns real counts (not 0) — verified 2026-04-28 by CloudyMouse: returned `{files: 881, chunks: 36338}` on rebuilt index
 - [x] Both counts assigned via `int(table.count_rows())` to normalize return type
 - [x] Per-table try/except preserved with `logger.warning(...)` on failure (graceful degradation, not silent swallow)
 - [x] Adversarial battery added: partial disconnect, idempotence, graceful degradation — all pass
-- [ ] Fixture uses batched inserts (≤5K chunks per batch), not bulk-in-memory — verify peak memory stays bounded (SUPERSEDED: test strategy pivoted from 50K-chunk fixture to 1-chunk + shadow-to-forbid `.to_pandas()`. Batched-insert criterion no longer applies to this test. If you want the 50K-chunk behavior test as a separate, additive verification, file a follow-up.)
-- [ ] `size_mb` semantic change noted (side effect of type cleanup): previously float (e.g., 0.7 for sub-MB DBs), now truncated int (0). Changed to honor the declared `dict[str, int]` contract. User-visible in `rich_output.py:613` which reads this field. Acceptable or revert?
+- [x] ~~Fixture uses batched inserts (≤5K chunks per batch), not bulk-in-memory — verify peak memory stays bounded~~ **SUPERSEDED**: test strategy pivoted from 50K-chunk fixture to 1-chunk + shadow-to-forbid `.to_pandas()`. Batched-insert criterion no longer applies to this test. (50K-chunk behavior test would be a separate additive verification — file a follow-up if wanted.)
+- [x] `size_mb` semantic change noted (side effect of type cleanup): previously float (e.g., 0.7 for sub-MB DBs), now truncated int (0). Changed to honor the declared `dict[str, int]` contract. User-visible in `rich_output.py:613` which reads this field. **Decision (2026-04-28, Seth): accept the int truncation — closes the contract.**
 
 ## Anti-Patterns
 - NO `.to_pandas()` to count rows — O(table size) materialization
@@ -163,3 +165,4 @@ git add -u && git commit -m "fix(lancedb): use count_rows() in get_stats to avoi
 - [2026-04-20T21:13:25Z] [Seth] SRE review: All 10 categories applied. Claims verified against code (line ranges, .to_pandas() calls, .count_rows() precedent, DuckDB non-affected). Added: empty-DB regression test (Step 1b/Test B), caller-safety check (Step 3b: serial_database_provider.py:541 + rich_output.py:613 both use .get(...,0)), success criteria for embeddings removal + caller safety + empty-case. Flagged non-blocking: interface parity w/ DuckDB after option A, count_rows() performance notes, fixture construction cost guidance.
 - [2026-04-20T21:15:15Z] [Seth] Adversarial planning: 5 failure modes cataloged across 3 components. New criteria: batched fixture inserts (5K/batch), int() cast on count_rows(), preserved per-table try/except with logger.warning. Skipped encoding + race (serialized executor). Interaction between is-not-None switch and LanceDB Table __bool__ noted.
 - [2026-04-20T21:27:48Z] [Seth] Adversarial stress test: 3 patterns applied (partial disconnect, idempotence, graceful degradation); all GREEN. Three-Question framework traced _executor_symbol_stats (parallel function) — logged symmetry gap on ch-ljh (out of scope).
+- [2026-04-28T21:23:06Z] [Seth Yanow] Live verification by CloudyMouse on rebuilt 881-file/36338-chunk index: get_stats returned real counts (not 0). size_mb int truncation accepted per Seth. All success criteria checked. Closing.
